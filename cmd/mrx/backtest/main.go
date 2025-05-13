@@ -21,4 +21,5 @@ func main() {
 
 	logger.Info(fmt.Sprintf("mrx %s", version))
 	defer logger.Info("done")
+
 }

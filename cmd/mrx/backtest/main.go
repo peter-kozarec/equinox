@@ -1,6 +1,11 @@
 package main
 
-import "go.uber.org/zap"
+import (
+	"fmt"
+	"go.uber.org/zap"
+)
+
+const version = "v0.1.0"
 
 func main() {
 	logger, err := zap.NewDevelopment()
@@ -14,4 +19,6 @@ func main() {
 		}
 	}(logger)
 
+	logger.Info(fmt.Sprintf("mrx %s", version))
+	defer logger.Info("done")
 }

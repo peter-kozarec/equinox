@@ -3,6 +3,7 @@ module peter-kozarec/equinox
 go 1.24.3
 
 require (
+	github.com/govalues/decimal v0.1.36
 	github.com/marcboeker/go-duckdb v1.8.5
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
@@ -15,7 +16,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/flatbuffers v25.1.24+incompatible // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/govalues/decimal v0.1.36 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect

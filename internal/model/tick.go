@@ -10,10 +10,10 @@ type Tick struct {
 	BidVolume float64
 }
 
-func (t *Tick) AskDecimal() (decimal.Decimal, error) {
-	return decimal.NewFromFloat64(t.Ask)
+func (tick *Tick) AskDecimal() (decimal.Decimal, error) {
+	return decimal.NewFromFloat64(tick.Ask)
 }
 
-func (t *Tick) BidDecimal() (decimal.Decimal, error) {
-	return decimal.NewFromFloat64(t.Bid)
+func (tick *Tick) BidDecimal() (decimal.Decimal, error) {
+	return decimal.NewFromFloat64(tick.Bid)
 }

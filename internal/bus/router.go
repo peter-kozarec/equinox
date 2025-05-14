@@ -23,6 +23,7 @@ type Router struct {
 
 	// Handlers
 	TickHandler TickEventHandler
+	BarHandler  BarEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -111,6 +112,12 @@ func (router *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for tick event")
 		}
 		return router.TickHandler(tick)
+	case BarEvent:
+		bar, ok := ev.data.(*model.Bar)
+		if !ok {
+			return errors.New("invalid type assertion for bar event")
+		}
+		return router.BarHandler(bar)
 	default:
 		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
 	}

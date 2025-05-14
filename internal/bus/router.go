@@ -22,7 +22,7 @@ type Router struct {
 	events chan event
 
 	// Handlers
-	tickHandler TickEventHandler
+	TickHandler TickEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -35,16 +35,9 @@ type Router struct {
 
 func NewRouter(logger *zap.Logger, eventCapacity int) *Router {
 	return &Router{
-		logger:        logger,
-		done:          make(chan error),
-		events:        make(chan event, eventCapacity),
-		tickHandler:   nil,
-		runTime:       0,
-		postCount:     0,
-		postFails:     0,
-		dispatchCount: 0,
-		dispatchFails: 0,
-		loopCycles:    0,
+		logger: logger,
+		done:   make(chan error),
+		events: make(chan event, eventCapacity),
 	}
 }
 
@@ -59,21 +52,14 @@ func (router *Router) Post(id EventId, data interface{}) error {
 	}
 }
 
-func (router *Router) Subscribe(id EventId, handler interface{}) error {
-	switch id {
-	case TickEvent:
-		tickHandler, ok := handler.(TickEventHandler)
-		if !ok {
-			return errors.New("invalid type assertion for tick event handler")
-		}
-		router.tickHandler = tickHandler
-	default:
-		return errors.New(fmt.Sprintf("unsupported event id: %v", id))
-	}
-	return nil
-}
+func (router *Router) Exec(ctx context.Context, executorLoop func(context.Context) error) {
 
-func (router *Router) Run(ctx context.Context, executorLoop func(context.Context) error) {
+	router.runTime = 0
+	router.dispatchCount = 0
+	router.dispatchFails = 0
+	router.postCount = 0
+	router.postFails = 0
+	router.loopCycles = 0
 
 	start := time.Now()
 	defer func() {
@@ -107,6 +93,16 @@ func (router *Router) Done() <-chan error {
 	return router.done
 }
 
+func (router *Router) PrintStatistics() {
+	router.logger.Info("router statistics",
+		zap.Duration("run_time", router.runTime),
+		zap.Int64("dispatch_count", router.dispatchCount),
+		zap.Int64("dispatch_fails", router.dispatchFails),
+		zap.Int64("post_count", router.postCount),
+		zap.Int64("post_fails", router.postFails),
+		zap.Int64("loop_cycles", router.loopCycles))
+}
+
 func (router *Router) dispatch(ev event) error {
 	switch ev.id {
 	case TickEvent:
@@ -114,7 +110,7 @@ func (router *Router) dispatch(ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for tick event")
 		}
-		return router.tickHandler(tick)
+		return router.TickHandler(tick)
 	default:
 		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
 	}

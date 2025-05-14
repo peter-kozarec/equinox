@@ -22,8 +22,10 @@ type Router struct {
 	events chan event
 
 	// Handlers
-	TickHandler TickEventHandler
-	BarHandler  BarEventHandler
+	TickHandler    TickEventHandler
+	BarHandler     BarEventHandler
+	EquityHandler  EquityEventHandler
+	BalanceHandler BalanceEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -118,6 +120,18 @@ func (router *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for bar event")
 		}
 		return router.BarHandler(bar)
+	case EquityEvent:
+		eq, ok := ev.data.(*model.Equity)
+		if !ok {
+			return errors.New("invalid type assertion for equity event")
+		}
+		return router.EquityHandler(eq)
+	case BalanceEvent:
+		bal, ok := ev.data.(*model.Balance)
+		if !ok {
+			return errors.New("invalid type assertion for balance event")
+		}
+		return router.BalanceHandler(bal)
 	default:
 		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
 	}

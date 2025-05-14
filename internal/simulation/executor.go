@@ -9,21 +9,23 @@ import (
 )
 
 type Executor struct {
+	logger    *zap.Logger
 	simulator *Simulator
 	reader    *mapper.Reader[model.Tick]
-	logger    *zap.Logger
-	from      int64
-	to        int64
-	idx       int64
-	tick      model.Tick
-	lastErr   error
+
+	from int64
+	to   int64
+	idx  int64
+
+	tick    model.Tick
+	lastErr error
 }
 
-func NewExecutor(simulator *Simulator, reader *mapper.Reader[model.Tick], logger *zap.Logger, from, to time.Time) *Executor {
+func NewExecutor(logger *zap.Logger, simulator *Simulator, reader *mapper.Reader[model.Tick], from, to time.Time) *Executor {
 	return &Executor{
+		logger:    logger,
 		simulator: simulator,
 		reader:    reader,
-		logger:    logger,
 		from:      from.UnixNano(),
 		to:        to.UnixNano(),
 	}

@@ -22,10 +22,13 @@ type Router struct {
 	events chan event
 
 	// Handlers
-	TickHandler    TickEventHandler
-	BarHandler     BarEventHandler
-	EquityHandler  EquityEventHandler
-	BalanceHandler BalanceEventHandler
+	TickHandler               TickEventHandler
+	BarHandler                BarEventHandler
+	EquityHandler             EquityEventHandler
+	BalanceHandler            BalanceEventHandler
+	PositionOpenedHandler     PositionOpenedEventHandler
+	PositionClosedHandler     PositionClosedEventHandler
+	PositionPnLUpdatedHandler PositionPnLUpdatedEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -133,6 +136,24 @@ func (router *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for balance event")
 		}
 		return router.BalanceHandler(bal)
+	case PositionOpenedEvent:
+		pos, ok := ev.data.(*model.Position)
+		if !ok {
+			return errors.New("invalid type assertion for position opened event")
+		}
+		return router.PositionOpenedHandler(pos)
+	case PositionClosedEvent:
+		pos, ok := ev.data.(*model.Position)
+		if !ok {
+			return errors.New("invalid type assertion for position closed event")
+		}
+		return router.PositionClosedHandler(pos)
+	case PositionPnLUpdatedEvent:
+		pos, ok := ev.data.(*model.Position)
+		if !ok {
+			return errors.New("invalid type assertion for position pnl updated event")
+		}
+		return router.PositionPnLUpdatedHandler(pos)
 	default:
 		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
 	}

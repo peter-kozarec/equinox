@@ -23,7 +23,7 @@ func NewReader(dataSourceName string) *Reader {
 func (r *Reader) Connect() error {
 	db, err := sql.Open("duckdb", r.dataSourceName)
 	if err != nil {
-		return fmt.Errorf("sql.Open: %v", err)
+		return fmt.Errorf("sql.CmdOpen: %v", err)
 	}
 	r.db = db
 	return nil

@@ -6,7 +6,7 @@ import (
 	"peter-kozarec/equinox/internal/model"
 )
 
-type MonitorFlags uint8
+type MonitorFlags uint16
 
 const (
 	None         MonitorFlags = 0

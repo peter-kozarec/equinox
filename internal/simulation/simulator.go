@@ -44,6 +44,11 @@ func NewSimulator(logger *zap.Logger, router *bus.Router) *Simulator {
 	return simulator
 }
 
+func (simulator *Simulator) OnOrder(order *model.Order) error {
+	simulator.openOrders = append(simulator.openOrders, *order)
+	return nil
+}
+
 func (simulator *Simulator) OnTick(tick *model.Tick) error {
 
 	// Set simulation time from processed tick

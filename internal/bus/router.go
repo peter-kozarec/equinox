@@ -29,6 +29,7 @@ type Router struct {
 	PositionOpenedHandler     PositionOpenedEventHandler
 	PositionClosedHandler     PositionClosedEventHandler
 	PositionPnLUpdatedHandler PositionPnLUpdatedEventHandler
+	OrderHandler              OrderEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -154,6 +155,12 @@ func (router *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for position pnl updated event")
 		}
 		return router.PositionPnLUpdatedHandler(pos)
+	case OrderEvent:
+		order, ok := ev.data.(*model.Order)
+		if !ok {
+			return errors.New("invalid type assertion for order event")
+		}
+		return router.OrderHandler(order)
 	default:
 		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
 	}

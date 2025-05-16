@@ -37,7 +37,7 @@ func main() {
 	defer m.Close()
 
 	// Create
-	monitor := middleware.NewMonitor(logger, middleware.MonitorBars|middleware.MonitorPositionsOpened|middleware.MonitorPositionsClosed)
+	monitor := middleware.NewMonitor(logger, MonitorFlags)
 	telemetry := middleware.NewTelemetry(logger)
 
 	router := bus.NewRouter(logger, RouterEventCapacity)
@@ -51,6 +51,10 @@ func main() {
 	router.BarHandler = telemetry.WithBar(monitor.WithBar(strategy.OnBar))
 	router.BalanceHandler = telemetry.WithBalance(monitor.WithBalance(strategy.OnBalance))
 	router.EquityHandler = telemetry.WithEquity(monitor.WithEquity(strategy.OnEquity))
+	router.PositionOpenedHandler = telemetry.WithPositionOpened(monitor.WithPositionOpened(strategy.OnPositionOpened))
+	router.PositionClosedHandler = telemetry.WithPositionClosed(monitor.WithPositionClosed(strategy.OnPositionClosed))
+	router.PositionPnLUpdatedHandler = telemetry.WithPositionPnLUpdated(monitor.WithPositionPnLUpdated(strategy.OnPositionPnlUpdated))
+	router.OrderHandler = telemetry.WithOrder(monitor.WithOrder(simulator.OnOrder))
 
 	// Execute the simulation
 	go router.Exec(ctx, executor.Feed)

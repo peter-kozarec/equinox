@@ -33,3 +33,15 @@ func (strategy *Strategy) OnBalance(balance *model.Balance) error {
 func (strategy *Strategy) OnEquity(equity *model.Equity) error {
 	return nil
 }
+
+func (strategy *Strategy) OnPositionOpened(position *model.Position) error {
+	return nil
+}
+
+func (strategy *Strategy) OnPositionClosed(position *model.Position) error {
+	return nil
+}
+
+func (strategy *Strategy) OnPositionPnlUpdated(position *model.Position) error {
+	return nil
+}

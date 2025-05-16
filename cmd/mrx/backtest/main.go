@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	logger, err := zap.NewProduction()
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
@@ -37,7 +37,7 @@ func main() {
 	defer m.Close()
 
 	// Create
-	monitor := middleware.NewMonitor(logger)
+	monitor := middleware.NewMonitor(logger, middleware.MonitorBars|middleware.MonitorPositionsOpened|middleware.MonitorPositionsClosed)
 	telemetry := middleware.NewTelemetry(logger)
 
 	router := bus.NewRouter(logger, RouterEventCapacity)

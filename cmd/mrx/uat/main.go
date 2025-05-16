@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
@@ -19,8 +18,8 @@ func main() {
 		_ = logger.Sync()
 	}(logger)
 
-	logger.Info(fmt.Sprintf("mrx %s", mrx.Version))
-	defer logger.Info("done")
+	logger.Info("MRX started", zap.String("environment", "uat"), zap.String("version", mrx.Version))
+	defer logger.Info("MRX finished")
 
 	_, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()

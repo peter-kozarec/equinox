@@ -82,7 +82,7 @@ func (telemetry *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEv
 }
 
 func (telemetry *Telemetry) PrintStatistics() {
-	telemetry.logger.Info("telemetry statistics",
+	telemetry.logger.Info("event statistics",
 		zap.Int64("tick_events", telemetry.tickEventCounter),
 		zap.Int64("bar_events", telemetry.barEventCounter),
 		zap.Int64("balance_events", telemetry.balanceEventCounter),

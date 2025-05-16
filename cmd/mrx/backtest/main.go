@@ -31,11 +31,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
-	m := mapper.NewReader[model.Tick](TickDataSource)
-	if err := m.Open(); err != nil {
+	reader := mapper.NewReader[model.Tick](TickDataSource)
+	if err := reader.Open(); err != nil {
 		logger.Fatal("error opening tick data reader", zap.Error(err))
 	}
-	defer m.Close()
+	defer reader.Close()
 
 	// Create
 	monitor := middleware.NewMonitor(logger, MonitorFlags)
@@ -45,7 +45,7 @@ func main() {
 
 	strategy := advisor.NewStrategy(logger, router)
 	simulator := simulation.NewSimulator(logger, router)
-	executor := simulation.NewExecutor(logger, simulator, m, SimulationStart, SimulationEnd)
+	executor := simulation.NewExecutor(logger, simulator, reader, SimulationStart, SimulationEnd)
 
 	// Initialize
 	router.TickHandler = telemetry.WithTick(monitor.WithTick(strategy.OnTick))

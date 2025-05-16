@@ -25,3 +25,11 @@ func (strategy *Strategy) OnBar(bar *model.Bar) error {
 func (strategy *Strategy) OnTick(tick *model.Tick) error {
 	return nil
 }
+
+func (strategy *Strategy) OnBalance(balance *model.Balance) error {
+	return nil
+}
+
+func (strategy *Strategy) OnEquity(equity *model.Equity) error {
+	return nil
+}

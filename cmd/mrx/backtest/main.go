@@ -38,18 +38,24 @@ func main() {
 
 	// Create
 	audit := middleware.NewAudit(logger)
+	telemetry := middleware.NewTelemetry(logger)
+
 	router := bus.NewRouter(logger, RouterEventCapacity)
+
 	strategy := advisor.NewStrategy(logger, router)
 	simulator := simulation.NewSimulator(logger, router)
 	executor := simulation.NewExecutor(logger, simulator, m, SimulationStart, SimulationEnd)
 
 	// Initialize
-	router.TickHandler = audit.WithTick(strategy.OnTick)
-	router.BarHandler = audit.WithBar(strategy.OnBar)
+	router.TickHandler = telemetry.WithTick(audit.WithTick(strategy.OnTick))
+	router.BarHandler = telemetry.WithBar(audit.WithBar(strategy.OnBar))
+	router.BalanceHandler = telemetry.WithBalance(audit.WithBalance(strategy.OnBalance))
+	router.EquityHandler = telemetry.WithEquity(audit.WithEquity(strategy.OnEquity))
 
 	// Execute the simulation
 	go router.Exec(ctx, executor.Feed)
 	defer router.PrintStatistics()
+	defer telemetry.PrintStatistics()
 
 	// Wait for the simulation to complete
 	if err := <-router.Done(); err != nil {

@@ -33,7 +33,7 @@ type Router struct {
 	postFails     int64
 	dispatchCount int64
 	dispatchFails int64
-	loopCycles    int64
+	cycles        int64
 }
 
 func NewRouter(logger *zap.Logger, eventCapacity int) *Router {
@@ -62,7 +62,7 @@ func (router *Router) Exec(ctx context.Context, executorLoop func(context.Contex
 	router.dispatchFails = 0
 	router.postCount = 0
 	router.postFails = 0
-	router.loopCycles = 0
+	router.cycles = 0
 
 	start := time.Now()
 	defer func() {
@@ -83,7 +83,7 @@ func (router *Router) Exec(ctx context.Context, executorLoop func(context.Contex
 					zap.Any("event", ev))
 			}
 		default:
-			router.loopCycles++
+			router.cycles++
 			if err := executorLoop(ctx); err != nil {
 				router.done <- err
 				return
@@ -99,11 +99,12 @@ func (router *Router) Done() <-chan error {
 func (router *Router) PrintStatistics() {
 	router.logger.Info("router statistics",
 		zap.Duration("run_time", router.runTime),
-		zap.Int64("dispatch_count", router.dispatchCount),
-		zap.Int64("dispatch_fails", router.dispatchFails),
 		zap.Int64("post_count", router.postCount),
 		zap.Int64("post_fails", router.postFails),
-		zap.Int64("loop_cycles", router.loopCycles))
+		zap.Int64("dispatch_count", router.dispatchCount),
+		zap.Int64("dispatch_fails", router.dispatchFails),
+		zap.Int64("throughput", router.postCount/int64(router.runTime.Seconds())),
+		zap.Int64("cycles", router.cycles))
 }
 
 func (router *Router) dispatch(ev event) error {

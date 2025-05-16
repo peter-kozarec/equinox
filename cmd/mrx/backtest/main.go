@@ -22,7 +22,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		_ = logger.Sync()
+	}(logger)
 
 	logger.Info(fmt.Sprintf("mrx %s", mrx.Version))
 	defer logger.Info("done")

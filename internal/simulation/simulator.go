@@ -250,6 +250,13 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) error {
 			closePrice = tick.Ask
 		}
 
+		// Calculate PnL
+		if position.Size > 0 {
+			position.PnL = closePrice - position.OpenPrice
+		} else if position.Size < 0 {
+			position.PnL = position.OpenPrice - closePrice
+		}
+
 		switch position.State {
 		case model.PendingOpen:
 			position.State = model.Opened
@@ -267,13 +274,6 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) error {
 				return fmt.Errorf("error posting position closed event: %w", err)
 			}
 		default:
-		}
-
-		// Calculate PnL
-		if position.Size > 0 {
-			position.PnL = closePrice - position.OpenPrice
-		} else if position.Size < 0 {
-			position.PnL = position.OpenPrice - closePrice
 		}
 
 		if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {

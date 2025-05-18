@@ -11,7 +11,6 @@ import (
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/data/mapper"
 	"peter-kozarec/equinox/internal/middleware"
-	"peter-kozarec/equinox/internal/model"
 	"peter-kozarec/equinox/internal/simulation"
 	"syscall"
 )
@@ -31,7 +30,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
-	reader := mapper.NewReader[model.Tick](TickDataSource)
+	reader := mapper.NewReader[mapper.BinaryTick](TickDataSource)
 	if err := reader.Open(); err != nil {
 		logger.Fatal("error opening tick data reader", zap.Error(err))
 	}

@@ -23,8 +23,8 @@ func NewAggregator(interval time.Duration, bus *bus.Router) *Aggregator {
 func (aggregator *Aggregator) OnTick(tick *model.Tick) error {
 	ts := time.Unix(0, tick.TimeStamp)
 	barTS := ts.Truncate(aggregator.interval).UnixNano()
-	price := (tick.Bid + tick.Ask) / 2
-	volume := tick.BidVolume + tick.AskVolume
+	price := tick.Mean()
+	volume := tick.Volume()
 
 	// Gap detection — flush and reset
 	if aggregator.currentBar != nil && barTS != aggregator.currentBar.TimeStamp {
@@ -45,10 +45,10 @@ func (aggregator *Aggregator) OnTick(tick *model.Tick) error {
 			Period:    aggregator.interval,
 		}
 	} else {
-		if price > aggregator.currentBar.High {
+		if price.Gt(aggregator.currentBar.High) {
 			aggregator.currentBar.High = price
 		}
-		if price < aggregator.currentBar.Low {
+		if price.Lt(aggregator.currentBar.Low) {
 			aggregator.currentBar.Low = price
 		}
 		aggregator.currentBar.Close = price

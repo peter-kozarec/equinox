@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 	"time"
 )
 
@@ -126,13 +127,13 @@ func (router *Router) dispatch(ev event) error {
 		}
 		return router.BarHandler(bar)
 	case EquityEvent:
-		eq, ok := ev.data.(*model.Equity)
+		eq, ok := ev.data.(*utility.Fixed)
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
 		return router.EquityHandler(eq)
 	case BalanceEvent:
-		bal, ok := ev.data.(*model.Balance)
+		bal, ok := ev.data.(*utility.Fixed)
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
 		}

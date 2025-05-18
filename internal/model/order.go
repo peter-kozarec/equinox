@@ -1,5 +1,7 @@
 package model
 
+import "peter-kozarec/equinox/internal/utility"
+
 type OrderType int
 type Command int
 
@@ -19,8 +21,8 @@ type Order struct {
 	Command    Command
 	OrderType  OrderType
 	PositionId PositionId
-	Price      Price
-	Size       Size
-	StopLoss   Price
-	TakeProfit Price
+	Price      utility.Fixed
+	Size       utility.Fixed
+	StopLoss   utility.Fixed
+	TakeProfit utility.Fixed
 }

@@ -4,6 +4,7 @@ import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 )
 
 type MonitorFlags uint16
@@ -51,7 +52,7 @@ func (monitor *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler
 }
 
 func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *model.Equity) error {
+	return func(equity *utility.Fixed) error {
 		if monitor.flags&MonitorEquity != 0 {
 			monitor.logger.Info("event", zap.Any("equity", equity))
 		}
@@ -60,7 +61,7 @@ func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEve
 }
 
 func (monitor *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *model.Balance) error {
+	return func(balance *utility.Fixed) error {
 		if monitor.flags&MonitorBalance != 0 {
 			monitor.logger.Info("event", zap.Any("balance", balance))
 		}

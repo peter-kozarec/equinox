@@ -1,15 +1,16 @@
 package model
 
 import (
+	"peter-kozarec/equinox/internal/utility"
 	"time"
 )
 
 type Bar struct {
 	Period    time.Duration
 	TimeStamp int64
-	Open      Price
-	High      Price
-	Low       Price
-	Close     Price
-	Volume    Price
+	Open      utility.Fixed
+	High      utility.Fixed
+	Low       utility.Fixed
+	Close     utility.Fixed
+	Volume    int32
 }

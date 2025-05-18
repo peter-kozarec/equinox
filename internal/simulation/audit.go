@@ -3,19 +3,20 @@ package simulation
 import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 	"time"
 )
 
 type AccountSnapshot struct {
-	Balance model.Balance
-	Equity  model.Equity
+	Balance utility.Fixed
+	Equity  utility.Fixed
 	Time    time.Time
 }
 
 type Audit struct {
 	logger *zap.Logger
 
-	closedPositions  []model.Position
+	closedPositions  []*model.Position
 	accountSnapshots []AccountSnapshot
 }
 
@@ -25,11 +26,11 @@ func NewAudit(logger *zap.Logger) *Audit {
 	}
 }
 
-func (audit *Audit) ClosePosition(position model.Position) {
+func (audit *Audit) PositionClosed(position *model.Position) {
 	audit.closedPositions = append(audit.closedPositions, position)
 }
 
-func (audit *Audit) SnapshotAccountState(balance model.Balance, equity model.Equity, t time.Time) {
+func (audit *Audit) SnapshotAccount(balance utility.Fixed, equity utility.Fixed, t time.Time) {
 
 	if len(audit.accountSnapshots) != 0 {
 		lastSnapshotTime := audit.accountSnapshots[len(audit.accountSnapshots)-1].Time

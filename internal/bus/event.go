@@ -1,6 +1,9 @@
 package bus
 
-import "peter-kozarec/equinox/internal/model"
+import (
+	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
+)
 
 type EventId uint8
 
@@ -17,8 +20,8 @@ const (
 
 type TickEventHandler func(*model.Tick) error
 type BarEventHandler func(*model.Bar) error
-type EquityEventHandler func(*model.Equity) error
-type BalanceEventHandler func(*model.Balance) error
+type EquityEventHandler func(*utility.Fixed) error
+type BalanceEventHandler func(*utility.Fixed) error
 type PositionOpenedEventHandler func(*model.Position) error
 type PositionClosedEventHandler func(*model.Position) error
 type PositionPnLUpdatedEventHandler func(*model.Position) error

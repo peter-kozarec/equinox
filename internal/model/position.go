@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/govalues/decimal"
+	"peter-kozarec/equinox/internal/utility"
 	"time"
 )
 
@@ -16,16 +16,24 @@ const (
 )
 
 type Position struct {
-	Id          PositionId // Unique identifier
+	Id          PositionId
 	State       State
-	GrossProfit decimal.Decimal // PnL before costs
-	NetProfit   decimal.Decimal // PnL after slippage, commission, swaps
-	PnL         Price           // PnL in micro pips
-	OpenPrice   Price
-	ClosePrice  Price
+	GrossProfit utility.Fixed
+	NetProfit   utility.Fixed
+	PipPnL      utility.Fixed
+	OpenPrice   utility.Fixed
+	ClosePrice  utility.Fixed
 	OpenTime    time.Time
 	CloseTime   time.Time
-	Size        Size // Positive = long, Negative = short
-	StopLoss    Price
-	TakeProfit  Price
+	Size        utility.Fixed
+	StopLoss    utility.Fixed
+	TakeProfit  utility.Fixed
+}
+
+func (position *Position) IsLong() bool {
+	return position.StopLoss.Value > 0
+}
+
+func (position *Position) IsShort() bool {
+	return position.StopLoss.Value < 0
 }

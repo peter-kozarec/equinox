@@ -4,6 +4,7 @@ import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 )
 
 type Telemetry struct {
@@ -40,14 +41,14 @@ func (telemetry *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHan
 }
 
 func (telemetry *Telemetry) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *model.Balance) error {
+	return func(balance *utility.Fixed) error {
 		telemetry.balanceEventCounter++
 		return handler(balance)
 	}
 }
 
 func (telemetry *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *model.Equity) error {
+	return func(equity *utility.Fixed) error {
 		telemetry.equityEventCounter++
 		return handler(equity)
 	}

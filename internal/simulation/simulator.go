@@ -2,10 +2,10 @@ package simulation
 
 import (
 	"fmt"
-	"github.com/govalues/decimal"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 	"time"
 )
 
@@ -15,154 +15,127 @@ type Simulator struct {
 	aggregator *Aggregator
 	audit      *Audit
 
-	equity  model.Equity
-	balance model.Balance
+	equity  utility.Fixed
+	balance utility.Fixed
 
-	SimulationTime time.Time
+	simulationTime time.Time
 
 	positionIdCounter model.PositionId
-	openPositions     []model.Position
-	openOrders        []model.Order
+	openPositions     []*model.Position
+	openOrders        []*model.Order
 }
 
 func NewSimulator(logger *zap.Logger, router *bus.Router) *Simulator {
-	simulator := &Simulator{
+	return &Simulator{
 		logger:     logger,
 		router:     router,
 		aggregator: NewAggregator(BarPeriod, router),
 		audit:      NewAudit(logger),
+		equity:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
+		balance:    utility.NewFixed(StartingBalance, StartingBalancePrecision),
 	}
-
-	balance, err := decimal.NewFromFloat64(StartingBalance)
-	if err != nil {
-		panic(err)
-	}
-
-	simulator.balance = model.Balance(balance)
-	simulator.equity = model.Equity(balance)
-
-	return simulator
 }
 
 func (simulator *Simulator) OnOrder(order *model.Order) error {
-	simulator.openOrders = append(simulator.openOrders, *order)
+	simulator.openOrders = append(simulator.openOrders, order)
 	return nil
 }
 
 func (simulator *Simulator) OnTick(tick *model.Tick) error {
 
 	// Set simulation time from processed tick
-	simulator.SimulationTime = time.Unix(0, tick.TimeStamp)
+	simulator.simulationTime = time.Unix(0, tick.TimeStamp)
 
 	// Store balance and equity before processing the tick
 	lastBalance := simulator.balance
 	lastEquity := simulator.equity
 
-	// Check open positions
-	if err := simulator.checkPositions(tick); err != nil {
-		return fmt.Errorf("error checking positions: %w", err)
-	}
+	simulator.checkPositions(tick)
+	simulator.checkOrders(tick)
+	simulator.processPendingChanges(tick)
 
-	// Check open orders
-	if err := simulator.checkOrders(tick); err != nil {
-		return fmt.Errorf("error checking orders: %w", err)
-	}
-
-	// Process pending changes
-	if err := simulator.processPendingChanges(tick); err != nil {
-		return fmt.Errorf("error processing pending changes: %w", err)
-	}
+	simulator.audit.SnapshotAccount(simulator.balance, simulator.equity, simulator.simulationTime)
 
 	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != simulator.balance {
 		if err := simulator.router.Post(bus.BalanceEvent, &simulator.balance); err != nil {
-			return fmt.Errorf("post balance event: %w", err)
+			simulator.logger.Error("unable to post balance event", zap.Error(err))
 		}
 	}
 	// Post equity event if the current equity changed after the tick was processed
 	if lastEquity != simulator.equity {
 		if err := simulator.router.Post(bus.EquityEvent, &simulator.equity); err != nil {
-			return fmt.Errorf("post equity event: %w", err)
+			simulator.logger.Error("unable to post equity event", zap.Error(err))
 		}
 	}
 
-	// Snapshot the balance and equity
-	simulator.audit.SnapshotAccountState(simulator.balance, simulator.equity, simulator.SimulationTime)
-
-	// Post the tick
 	if err := simulator.router.Post(bus.TickEvent, tick); err != nil {
-		return fmt.Errorf("post tick event: %w", err)
+		simulator.logger.Error("unable to post tick event", zap.Error(err))
 	}
 
-	// Aggregate into bars
 	if err := simulator.aggregator.OnTick(tick); err != nil {
-		return fmt.Errorf("error aggregating ticks: %w", err)
+		simulator.logger.Warn("unable to aggregate ticks", zap.Error(err))
 	}
 
 	return nil
 }
 
-func (simulator *Simulator) checkPositions(tick *model.Tick) error {
+func (simulator *Simulator) checkPositions(tick *model.Tick) {
 
 	for idx := range simulator.openPositions {
-		position := &simulator.openPositions[idx]
+		position := simulator.openPositions[idx]
 
 		if simulator.shouldClosePosition(position, tick) {
 			position.State = model.PendingClose
 		}
 	}
-
-	return nil
 }
 
-func (simulator *Simulator) checkOrders(tick *model.Tick) error {
+func (simulator *Simulator) checkOrders(tick *model.Tick) {
 
-	tmpOpenOrders := make([]model.Order, 0, len(simulator.openOrders))
-	defer func() {
-		simulator.openOrders = tmpOpenOrders
-	}()
+	tmpOpenOrders := make([]*model.Order, 0, len(simulator.openOrders))
 
 	for idx := range simulator.openOrders {
-		order := &simulator.openOrders[idx]
+		order := simulator.openOrders[idx]
 
 		switch order.Command {
 		case model.CmdOpen:
 			switch order.OrderType {
 			case model.Market:
 				if err := simulator.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					return fmt.Errorf("error executing open order: %w", err)
+					simulator.logger.Warn("unable to execute open order", zap.Error(err))
 				}
 			case model.Limit:
 				if !simulator.shouldOpenPosition(order.Price, order.Size, tick) {
-					tmpOpenOrders = append(tmpOpenOrders, *order)
+					tmpOpenOrders = append(tmpOpenOrders, order)
 					continue
 				}
 				if err := simulator.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					return fmt.Errorf("error executing open order: %w", err)
+					simulator.logger.Warn("unable to execute open order", zap.Error(err))
 				}
 			}
 		case model.CmdClose:
 			if err := simulator.executeCloseOrder(order.PositionId); err != nil {
-				return fmt.Errorf("unable to close position: %w", err)
+				simulator.logger.Warn("unable to execute close order", zap.Error(err))
 			}
 		case model.CmdModify:
 			if err := simulator.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit); err != nil {
-				return fmt.Errorf("unable to modify position: %w", err)
+				simulator.logger.Warn("unable to modify open position", zap.Error(err))
 			}
 		case model.CmdRemove:
 			continue
 		default:
-			return fmt.Errorf("unknown order command: %d", order.Command)
+			simulator.logger.Warn("unknown command", zap.Any("cmd", order.Command))
 		}
 	}
 
-	return nil
+	simulator.openOrders = tmpOpenOrders
 }
 
 func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 
 	for idx := range simulator.openPositions {
-		position := &simulator.openPositions[idx]
+		position := simulator.openPositions[idx]
 
 		if position.Id == id {
 			position.State = model.PendingClose
@@ -172,10 +145,10 @@ func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) executeOpenOrder(size model.Size, stopLoss, takeProfit model.Price) error {
+func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit utility.Fixed) error {
 
 	simulator.positionIdCounter++
-	simulator.openPositions = append(simulator.openPositions, model.Position{
+	simulator.openPositions = append(simulator.openPositions, &model.Position{
 		Id:         simulator.positionIdCounter,
 		State:      model.PendingOpen,
 		Size:       size,
@@ -185,10 +158,10 @@ func (simulator *Simulator) executeOpenOrder(size model.Size, stopLoss, takeProf
 	return nil
 }
 
-func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit model.Price) error {
+func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit utility.Fixed) error {
 
 	for idx := range simulator.openPositions {
-		position := &simulator.openPositions[idx]
+		position := simulator.openPositions[idx]
 
 		if position.Id == id {
 			position.StopLoss = stopLoss
@@ -199,16 +172,16 @@ func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takePr
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) shouldOpenPosition(price model.Price, size model.Size, tick *model.Tick) bool {
+func (simulator *Simulator) shouldOpenPosition(price, size utility.Fixed, tick *model.Tick) bool {
 
-	if size > 0 {
+	if size.Value > 0 {
 		// Long, check if price reached Ask
-		if price >= tick.Ask {
+		if price.Gt(tick.Ask) {
 			return true
 		}
-	} else if size < 0 {
+	} else if size.Value < 0 {
 		// Short, check if price reached Bid
-		if price <= tick.Bid {
+		if price.Lt(tick.Bid) {
 			return true
 		}
 	}
@@ -217,69 +190,68 @@ func (simulator *Simulator) shouldOpenPosition(price model.Price, size model.Siz
 
 func (simulator *Simulator) shouldClosePosition(position *model.Position, tick *model.Tick) bool {
 
-	if position.Size > 0 {
+	if position.IsLong() {
 		// Long, check if take profit or stop loss has been reached
-		if (position.TakeProfit != 0 && position.TakeProfit >= tick.Bid) ||
-			(position.StopLoss != 0 && position.StopLoss <= tick.Bid) {
+		if (position.TakeProfit.Value != 0 && position.TakeProfit.Gte(tick.Bid)) ||
+			(position.StopLoss.Value != 0 && position.StopLoss.Lte(tick.Bid)) {
 			return true
 		}
-	} else if position.Size < 0 {
+	} else if position.IsShort() {
 		// Short, check if take profit or stop loss has been reached
-		if (position.TakeProfit != 0 && position.TakeProfit <= tick.Ask) ||
-			(position.StopLoss != 0 && position.StopLoss >= tick.Ask) {
+		if (position.TakeProfit.Value != 0 && position.TakeProfit.Lte(tick.Ask)) ||
+			(position.StopLoss.Value != 0 && position.StopLoss.Gte(tick.Ask)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (simulator *Simulator) processPendingChanges(tick *model.Tick) error {
+func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 
-	tmpOpenPositions := make([]model.Position, 0, len(simulator.openPositions))
-	defer func() {
-		simulator.openPositions = tmpOpenPositions
-	}()
+	tmpOpenPositions := make([]*model.Position, 0, len(simulator.openPositions))
 
 	for idx := range simulator.openPositions {
-		position := &simulator.openPositions[idx]
+		position := simulator.openPositions[idx]
 
 		openPrice := tick.Ask
 		closePrice := tick.Bid
-		if position.Size < 0 {
+		if position.Size.Value < 0 {
 			openPrice = tick.Bid
 			closePrice = tick.Ask
 		}
 
-		// Calculate PnL
-		if position.Size > 0 {
-			position.PnL = closePrice - position.OpenPrice
-		} else if position.Size < 0 {
-			position.PnL = position.OpenPrice - closePrice
+		// Calculate PipPnL
+		if position.IsLong() {
+			position.PipPnL = closePrice.Sub(position.OpenPrice)
+		} else if position.IsShort() {
+			position.PipPnL = position.OpenPrice.Sub(closePrice)
 		}
 
 		switch position.State {
 		case model.PendingOpen:
+			tmpOpenPositions = append(tmpOpenPositions, position)
 			position.State = model.Opened
 			position.OpenPrice = openPrice
 			position.OpenTime = time.Unix(0, tick.TimeStamp)
 			if err := simulator.router.Post(bus.PositionOpenedEvent, position); err != nil {
-				return fmt.Errorf("error posting position opened event: %w", err)
+				simulator.logger.Warn("unable to post position opened event", zap.Error(err))
 			}
 		case model.PendingClose:
 			position.State = model.Closed
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
-			simulator.audit.ClosePosition(*position)
+			simulator.audit.PositionClosed(position)
 			if err := simulator.router.Post(bus.PositionClosedEvent, position); err != nil {
-				return fmt.Errorf("error posting position closed event: %w", err)
+				simulator.logger.Warn("unable to post position closed event", zap.Error(err))
 			}
 		default:
+			tmpOpenPositions = append(tmpOpenPositions, position)
 		}
 
 		if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
-			return fmt.Errorf("error posting position pnl updated event: %w", err)
+			simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
 		}
 	}
 
-	return nil
+	simulator.openPositions = tmpOpenPositions
 }

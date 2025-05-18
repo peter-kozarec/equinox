@@ -4,6 +4,7 @@ import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 )
 
 type Strategy struct {
@@ -26,11 +27,11 @@ func (strategy *Strategy) OnTick(tick *model.Tick) error {
 	return nil
 }
 
-func (strategy *Strategy) OnBalance(balance *model.Balance) error {
+func (strategy *Strategy) OnBalance(balance *utility.Fixed) error {
 	return nil
 }
 
-func (strategy *Strategy) OnEquity(equity *model.Equity) error {
+func (strategy *Strategy) OnEquity(equity *utility.Fixed) error {
 	return nil
 }
 

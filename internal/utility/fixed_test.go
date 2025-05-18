@@ -90,3 +90,77 @@ func Test_FixedString(t *testing.T) {
 		t.Errorf("String failed: got %s, want %s", a.String(), expected)
 	}
 }
+
+func Benchmark_FixedAdd(b *testing.B) {
+	a := NewFixed(12345678, 4) // 1234.5678
+	c := NewFixed(8765432, 4)  // 876.5432
+	for i := 0; i < b.N; i++ {
+		_ = a.Add(c)
+	}
+}
+
+func Benchmark_FixedSub(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	c := NewFixed(8765432, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.Sub(c)
+	}
+}
+
+func Benchmark_FixedMul(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	c := NewFixed(10000, 2) // 100.00
+	for i := 0; i < b.N; i++ {
+		_ = a.Mul(c)
+	}
+}
+
+func Benchmark_FixedDiv(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	c := NewFixed(10000, 2)
+	for i := 0; i < b.N; i++ {
+		_ = a.Div(c)
+	}
+}
+
+func Benchmark_FixedMulInt(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.MulInt(3)
+	}
+}
+
+func Benchmark_FixedDivInt(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.DivInt(3)
+	}
+}
+
+func Benchmark_FixedAddInt(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.AddInt(100)
+	}
+}
+
+func Benchmark_FixedSubInt(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.SubInt(100)
+	}
+}
+
+func Benchmark_FixedFloat64(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.Float64()
+	}
+}
+
+func Benchmark_FixedString(b *testing.B) {
+	a := NewFixed(12345678, 4)
+	for i := 0; i < b.N; i++ {
+		_ = a.String()
+	}
+}

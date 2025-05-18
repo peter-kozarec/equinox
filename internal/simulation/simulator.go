@@ -13,7 +13,6 @@ type Simulator struct {
 	logger     *zap.Logger
 	router     *bus.Router
 	aggregator *Aggregator
-	audit      *Audit
 
 	equity  utility.Fixed
 	balance utility.Fixed
@@ -23,16 +22,24 @@ type Simulator struct {
 	positionIdCounter model.PositionId
 	openPositions     []*model.Position
 	openOrders        []*model.Order
+
+	slippage    utility.Fixed
+	commissions utility.Fixed
+	lotValue    utility.Fixed
+	pipSize     utility.Fixed
 }
 
 func NewSimulator(logger *zap.Logger, router *bus.Router) *Simulator {
 	return &Simulator{
-		logger:     logger,
-		router:     router,
-		aggregator: NewAggregator(BarPeriod, router),
-		audit:      NewAudit(logger),
-		equity:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
-		balance:    utility.NewFixed(StartingBalance, StartingBalancePrecision),
+		logger:      logger,
+		router:      router,
+		aggregator:  NewAggregator(BarPeriod, router),
+		equity:      utility.NewFixed(StartingBalance, StartingBalancePrecision),
+		balance:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
+		slippage:    utility.NewFixed(Slippage, SlippagePrecision),
+		commissions: utility.NewFixed(Commission, CommissionPrecision),
+		lotValue:    utility.NewFixed(LotValue, LotValuePrecision),
+		pipSize:     utility.NewFixed(PipSize, PipSizePrecision),
 	}
 }
 
@@ -53,8 +60,6 @@ func (simulator *Simulator) OnTick(tick *model.Tick) error {
 	simulator.checkPositions(tick)
 	simulator.checkOrders(tick)
 	simulator.processPendingChanges(tick)
-
-	simulator.audit.SnapshotAccount(simulator.balance, simulator.equity, simulator.simulationTime)
 
 	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != simulator.balance {
@@ -220,12 +225,8 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 			closePrice = tick.Ask
 		}
 
-		// Calculate PipPnL
-		if position.IsLong() {
-			position.PipPnL = closePrice.Sub(position.OpenPrice)
-		} else if position.IsShort() {
-			position.PipPnL = position.OpenPrice.Sub(closePrice)
-		}
+		simulator.calcPositionProfits(position, closePrice)
+		simulator.equity = simulator.equity.Add(position.NetProfit)
 
 		switch position.State {
 		case model.PendingOpen:
@@ -240,18 +241,30 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 			position.State = model.Closed
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
-			simulator.audit.PositionClosed(position)
+			simulator.balance = simulator.balance.Add(position.NetProfit)
 			if err := simulator.router.Post(bus.PositionClosedEvent, position); err != nil {
 				simulator.logger.Warn("unable to post position closed event", zap.Error(err))
 			}
 		default:
 			tmpOpenPositions = append(tmpOpenPositions, position)
-		}
-
-		if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
-			simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
+			if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
+				simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
+			}
 		}
 	}
 
 	simulator.openPositions = tmpOpenPositions
+}
+
+func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice utility.Fixed) {
+
+	if position.IsLong() {
+		position.PipPnL = closePrice.Sub(position.OpenPrice)
+	} else if position.IsShort() {
+		position.PipPnL = position.OpenPrice.Sub(closePrice)
+	}
+
+	position.PipPnL = position.PipPnL.Sub(simulator.slippage.MulInt(2))
+	position.GrossProfit = position.PipPnL.Div(simulator.pipSize).Mul(position.Size.Abs()).Mul(simulator.lotValue).Mul(simulator.pipSize)
+	position.NetProfit = position.GrossProfit.Sub(simulator.commissions.MulInt(2))
 }

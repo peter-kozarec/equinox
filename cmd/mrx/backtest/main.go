@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	logger, err := zap.NewDevelopment()
+	logger, err := zap.NewProduction()
 	if err != nil {
 		panic(err)
 	}
@@ -37,6 +37,7 @@ func main() {
 	defer reader.Close()
 
 	// Create
+	audit := middleware.NewAudit(logger)
 	monitor := middleware.NewMonitor(logger, MonitorFlags)
 	telemetry := middleware.NewTelemetry(logger)
 
@@ -46,18 +47,19 @@ func main() {
 	simulator := simulation.NewSimulator(logger, router)
 	executor := simulation.NewExecutor(logger, simulator, reader, SimulationStart, SimulationEnd)
 
-	// Initialize
-	router.TickHandler = telemetry.WithTick(monitor.WithTick(strategy.OnTick))
-	router.BarHandler = telemetry.WithBar(monitor.WithBar(strategy.OnBar))
-	router.BalanceHandler = telemetry.WithBalance(monitor.WithBalance(strategy.OnBalance))
-	router.EquityHandler = telemetry.WithEquity(monitor.WithEquity(strategy.OnEquity))
-	router.PositionOpenedHandler = telemetry.WithPositionOpened(monitor.WithPositionOpened(strategy.OnPositionOpened))
-	router.PositionClosedHandler = telemetry.WithPositionClosed(monitor.WithPositionClosed(strategy.OnPositionClosed))
-	router.PositionPnLUpdatedHandler = telemetry.WithPositionPnLUpdated(monitor.WithPositionPnLUpdated(strategy.OnPositionPnlUpdated))
-	router.OrderHandler = telemetry.WithOrder(monitor.WithOrder(simulator.OnOrder))
+	// Initialize middleware
+	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
+	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
+	router.BalanceHandler = middleware.Chain(audit.WithBalance, monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
+	router.PositionClosedHandler = middleware.Chain(audit.WithPositionClosed, monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
+	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(simulator.OnOrder)
 
 	// Execute the simulation
 	go router.Exec(ctx, executor.Feed)
+
 	defer router.PrintStatistics()
 	defer telemetry.PrintStatistics()
 

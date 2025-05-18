@@ -36,6 +36,13 @@ func (fixed Fixed) normalizeTo(exp int32) int64 {
 	return fixed.Value / pow10[-diff]
 }
 
+func (fixed Fixed) Abs() Fixed {
+	if fixed.Value > 0 {
+		return fixed
+	}
+	return fixed.MulInt(-1)
+}
+
 func (fixed Fixed) Add(o Fixed) Fixed {
 	exp := max(fixed.Precision, o.Precision)
 	return Fixed{
@@ -53,9 +60,8 @@ func (fixed Fixed) Sub(o Fixed) Fixed {
 }
 
 func (fixed Fixed) Mul(o Fixed) Fixed {
-	result := fixed.Value * o.Value
 	return Fixed{
-		Value:     result,
+		Value:     fixed.Value * o.Value,
 		Precision: fixed.Precision + o.Precision,
 	}
 }

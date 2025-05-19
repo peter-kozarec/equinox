@@ -43,3 +43,7 @@ func (audit *Audit) SnapshotAccount(balance, equity utility.Fixed, t time.Time) 
 func (audit *Audit) AddClosedPosition(position model.Position) {
 	audit.closedPositions = append(audit.closedPositions, position)
 }
+
+func (audit *Audit) GenerateReport() Report {
+	return Report{}
+}

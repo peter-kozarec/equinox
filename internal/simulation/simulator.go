@@ -30,12 +30,12 @@ type Simulator struct {
 	pipSize     utility.Fixed
 }
 
-func NewSimulator(logger *zap.Logger, router *bus.Router) *Simulator {
+func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit) *Simulator {
 	return &Simulator{
 		logger:      logger,
 		router:      router,
 		aggregator:  NewAggregator(BarPeriod, router),
-		audit:       NewAudit(logger, AccountSnapshotInterval),
+		audit:       audit,
 		equity:      utility.NewFixed(StartingBalance, StartingBalancePrecision),
 		balance:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
 		slippage:    utility.NewFixed(Slippage, SlippagePrecision),

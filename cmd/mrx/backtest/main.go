@@ -13,6 +13,7 @@ import (
 	"peter-kozarec/equinox/internal/middleware"
 	"peter-kozarec/equinox/internal/simulation"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -42,8 +43,9 @@ func main() {
 
 	router := bus.NewRouter(logger, RouterEventCapacity)
 
+	audit := simulation.NewAudit(logger, time.Hour)
 	strategy := advisor.NewStrategy(logger, router)
-	simulator := simulation.NewSimulator(logger, router)
+	simulator := simulation.NewSimulator(logger, router, audit)
 	executor := simulation.NewExecutor(logger, simulator, reader, SimulationStart, SimulationEnd)
 
 	// Initialize middleware
@@ -68,4 +70,7 @@ func main() {
 			logger.Error("error during simulation", zap.Error(err))
 		}
 	}
+
+	report := audit.GenerateReport()
+	report.Print(logger)
 }

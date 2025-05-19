@@ -19,6 +19,5 @@ const (
 
 	InstrumentPrecision = 5
 
-	AccountSnapshotInterval = time.Minute
-	BarPeriod               = time.Minute
+	BarPeriod = time.Minute
 )

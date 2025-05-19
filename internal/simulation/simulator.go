@@ -13,6 +13,7 @@ type Simulator struct {
 	logger     *zap.Logger
 	router     *bus.Router
 	aggregator *Aggregator
+	audit      *Audit
 
 	equity  utility.Fixed
 	balance utility.Fixed
@@ -34,6 +35,7 @@ func NewSimulator(logger *zap.Logger, router *bus.Router) *Simulator {
 		logger:      logger,
 		router:      router,
 		aggregator:  NewAggregator(BarPeriod, router),
+		audit:       NewAudit(logger, AccountSnapshotInterval),
 		equity:      utility.NewFixed(StartingBalance, StartingBalancePrecision),
 		balance:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
 		slippage:    utility.NewFixed(Slippage, SlippagePrecision),
@@ -73,6 +75,8 @@ func (simulator *Simulator) OnTick(tick *model.Tick) error {
 			simulator.logger.Error("unable to post equity event", zap.Error(err))
 		}
 	}
+
+	simulator.audit.SnapshotAccount(simulator.balance, simulator.equity, simulator.simulationTime)
 
 	if err := simulator.router.Post(bus.TickEvent, tick); err != nil {
 		simulator.logger.Error("unable to post tick event", zap.Error(err))
@@ -242,6 +246,7 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
 			simulator.balance = simulator.balance.Add(position.NetProfit)
+			simulator.audit.AddClosedPosition(*position)
 			if err := simulator.router.Post(bus.PositionClosedEvent, position); err != nil {
 				simulator.logger.Warn("unable to post position closed event", zap.Error(err))
 			}

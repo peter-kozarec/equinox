@@ -37,7 +37,6 @@ func main() {
 	defer reader.Close()
 
 	// Create
-	audit := middleware.NewAudit(logger)
 	monitor := middleware.NewMonitor(logger, MonitorFlags)
 	telemetry := middleware.NewTelemetry(logger)
 
@@ -50,10 +49,10 @@ func main() {
 	// Initialize middleware
 	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
 	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
-	router.BalanceHandler = middleware.Chain(audit.WithBalance, monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
-	router.PositionClosedHandler = middleware.Chain(audit.WithPositionClosed, monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(simulator.OnOrder)
 

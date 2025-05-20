@@ -3,6 +3,7 @@ package simulation
 import (
 	"context"
 	"go.uber.org/zap"
+	"peter-kozarec/equinox/internal/cfg"
 	"peter-kozarec/equinox/internal/data/mapper"
 	"peter-kozarec/equinox/internal/model"
 	"time"
@@ -49,7 +50,7 @@ func (e *Executor) Feed(_ context.Context) error {
 		return mapper.EOF
 	}
 
-	e.binaryTick.ToModelTick(InstrumentPrecision, &e.tick)
+	e.binaryTick.ToModelTick(cfg.InstrumentPrecision, &e.tick)
 
 	// Feed ticks to simulation
 	if e.lastErr = e.simulator.OnTick(&e.tick); e.lastErr != nil {

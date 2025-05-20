@@ -1,6 +1,8 @@
 package model
 
-import "peter-kozarec/equinox/internal/utility"
+import (
+	"peter-kozarec/equinox/internal/utility"
+)
 
 type OrderType int
 type Command int

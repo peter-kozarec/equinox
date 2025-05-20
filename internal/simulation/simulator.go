@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
+	"peter-kozarec/equinox/internal/cfg"
 	"peter-kozarec/equinox/internal/model"
 	"peter-kozarec/equinox/internal/utility"
 	"time"
@@ -19,6 +20,7 @@ type Simulator struct {
 	balance utility.Fixed
 
 	simulationTime time.Time
+	lastTick       model.Tick
 
 	positionIdCounter model.PositionId
 	openPositions     []*model.Position
@@ -34,14 +36,14 @@ func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit) *Simulat
 	return &Simulator{
 		logger:      logger,
 		router:      router,
-		aggregator:  NewAggregator(BarPeriod, router),
+		aggregator:  NewAggregator(cfg.BarPeriod, router),
 		audit:       audit,
-		equity:      utility.NewFixed(StartingBalance, StartingBalancePrecision),
-		balance:     utility.NewFixed(StartingBalance, StartingBalancePrecision),
-		slippage:    utility.NewFixed(Slippage, SlippagePrecision),
-		commissions: utility.NewFixed(Commission, CommissionPrecision),
-		lotValue:    utility.NewFixed(LotValue, LotValuePrecision),
-		pipSize:     utility.NewFixed(PipSize, PipSizePrecision),
+		equity:      cfg.StartBalance,
+		balance:     cfg.StartBalance,
+		slippage:    cfg.PipSlippage,
+		commissions: cfg.CommissionPerLot,
+		lotValue:    cfg.LotValue,
+		pipSize:     cfg.PipSize,
 	}
 }
 
@@ -54,6 +56,7 @@ func (simulator *Simulator) OnTick(tick *model.Tick) error {
 
 	// Set simulation time from processed tick
 	simulator.simulationTime = time.Unix(0, tick.TimeStamp)
+	simulator.lastTick = *tick
 
 	// Store balance and equity before processing the tick
 	lastBalance := simulator.balance
@@ -87,6 +90,31 @@ func (simulator *Simulator) OnTick(tick *model.Tick) error {
 	}
 
 	return nil
+}
+
+func (simulator *Simulator) CloseAllOpenPositions() {
+
+	simulator.equity = simulator.balance
+
+	for idx := range simulator.openPositions {
+		position := simulator.openPositions[idx]
+
+		closePrice := simulator.lastTick.Bid
+		if position.IsShort() {
+			closePrice = simulator.lastTick.Ask
+		}
+
+		simulator.calcPositionProfits(position, closePrice)
+		simulator.equity = simulator.equity.Add(position.NetProfit)
+
+		position.State = model.Closed
+		position.ClosePrice = closePrice
+		position.CloseTime = time.Unix(0, simulator.lastTick.TimeStamp)
+		simulator.audit.AddClosedPosition(*position)
+	}
+
+	simulator.balance = simulator.equity
+	simulator.audit.addSnapshot(simulator.balance, simulator.equity, simulator.simulationTime)
 }
 
 func (simulator *Simulator) checkPositions(tick *model.Tick) {
@@ -183,12 +211,12 @@ func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takePr
 
 func (simulator *Simulator) shouldOpenPosition(price, size utility.Fixed, tick *model.Tick) bool {
 
-	if size.Value > 0 {
+	if size.Gt(utility.ZeroFixed) {
 		// Long, check if price reached Ask
 		if price.Gt(tick.Ask) {
 			return true
 		}
-	} else if size.Value < 0 {
+	} else if size.Lt(utility.ZeroFixed) {
 		// Short, check if price reached Bid
 		if price.Lt(tick.Bid) {
 			return true
@@ -201,14 +229,14 @@ func (simulator *Simulator) shouldClosePosition(position *model.Position, tick *
 
 	if position.IsLong() {
 		// Long, check if take profit or stop loss has been reached
-		if (position.TakeProfit.Value != 0 && position.TakeProfit.Gte(tick.Bid)) ||
-			(position.StopLoss.Value != 0 && position.StopLoss.Lte(tick.Bid)) {
+		if (!position.TakeProfit.IsZero() && position.TakeProfit.Gte(tick.Bid)) ||
+			(!position.StopLoss.IsZero() && position.StopLoss.Lte(tick.Bid)) {
 			return true
 		}
 	} else if position.IsShort() {
 		// Short, check if take profit or stop loss has been reached
-		if (position.TakeProfit.Value != 0 && position.TakeProfit.Lte(tick.Ask)) ||
-			(position.StopLoss.Value != 0 && position.StopLoss.Gte(tick.Ask)) {
+		if (position.TakeProfit.IsZero() && position.TakeProfit.Lte(tick.Ask)) ||
+			(position.StopLoss.IsZero() && position.StopLoss.Gte(tick.Ask)) {
 			return true
 		}
 	}
@@ -224,7 +252,7 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 
 		openPrice := tick.Ask
 		closePrice := tick.Bid
-		if position.Size.Value < 0 {
+		if position.IsShort() {
 			openPrice = tick.Bid
 			closePrice = tick.Ask
 		}
@@ -269,7 +297,7 @@ func (simulator *Simulator) calcPositionProfits(position *model.Position, closeP
 		position.PipPnL = position.OpenPrice.Sub(closePrice)
 	}
 
-	position.PipPnL = position.PipPnL.Sub(simulator.slippage.MulInt(2))
+	position.PipPnL = position.PipPnL.Sub(simulator.slippage.MulInt64(2))
 	position.GrossProfit = position.PipPnL.Div(simulator.pipSize).Mul(position.Size.Abs()).Mul(simulator.lotValue).Mul(simulator.pipSize)
-	position.NetProfit = position.GrossProfit.Sub(simulator.commissions.MulInt(2))
+	position.NetProfit = position.GrossProfit.Sub(simulator.commissions.MulInt64(2).Mul(position.Size))
 }

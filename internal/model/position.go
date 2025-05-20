@@ -31,9 +31,9 @@ type Position struct {
 }
 
 func (position *Position) IsLong() bool {
-	return position.StopLoss.Value > 0
+	return position.Size.Gt(utility.ZeroFixed)
 }
 
 func (position *Position) IsShort() bool {
-	return position.StopLoss.Value < 0
+	return position.Size.Lt(utility.ZeroFixed)
 }

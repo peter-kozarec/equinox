@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"fmt"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/utility"
 	"time"
@@ -9,8 +10,9 @@ import (
 type Report struct {
 	StartDate            time.Time
 	EndDate              time.Time
-	GrossProfit          utility.Fixed
-	NetProfit            utility.Fixed
+	InitialEquity        utility.Fixed
+	FinalEquity          utility.Fixed
+	TotalProfit          utility.Fixed
 	AnnualizedReturn     utility.Fixed
 	MaxDrawdown          utility.Fixed
 	TotalTrades          int
@@ -22,19 +24,19 @@ type Report struct {
 	AverageWin           utility.Fixed
 	AverageLoss          utility.Fixed
 	RiskRewardRatio      utility.Fixed
-	AverageTradeDuration utility.Fixed
+	AverageTradeDuration time.Duration
 	RecoveryFactor       utility.Fixed
 	SharpeRatio          utility.Fixed
 	SortinoRatio         utility.Fixed
-	CalmarRatio          utility.Fixed
 	AnnualizedVolatility utility.Fixed
 }
 
 func (report Report) Print(logger *zap.Logger) {
 	logger.Info("performance report",
-		zap.String("gross_profit", report.GrossProfit.String()),
-		zap.String("net_profit", report.NetProfit.String()),
-		zap.String("annualized_return", report.AnnualizedReturn.String()),
+		zap.String("initial_equity", report.InitialEquity.String()),
+		zap.String("final_equity", report.FinalEquity.String()),
+		zap.String("total_profit", report.TotalProfit.String()),
+		zap.String("annualized_return", fmt.Sprintf("%s%%", report.AnnualizedReturn.String())),
 		zap.String("max_drawdown", report.MaxDrawdown.String()),
 		zap.String("recovery_factor", report.RecoveryFactor.String()),
 	)
@@ -55,7 +57,6 @@ func (report Report) Print(logger *zap.Logger) {
 	logger.Info("risk metrics",
 		zap.String("sharpe_ratio", report.SharpeRatio.String()),
 		zap.String("sortino_ratio", report.SortinoRatio.String()),
-		zap.String("calmar_ratio", report.CalmarRatio.String()),
-		zap.String("annualized_volatility", report.AnnualizedVolatility.String()),
+		zap.String("annualized_volatility", fmt.Sprintf("%s%%", report.AnnualizedVolatility.String())),
 	)
 }

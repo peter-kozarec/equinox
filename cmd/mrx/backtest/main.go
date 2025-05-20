@@ -71,6 +71,7 @@ func main() {
 		}
 	}
 
+	simulator.CloseAllOpenPositions()
 	report := audit.GenerateReport()
 	report.Print(logger)
 }

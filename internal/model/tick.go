@@ -1,6 +1,11 @@
 package model
 
-import "peter-kozarec/equinox/internal/utility"
+import (
+	"github.com/govalues/decimal"
+	"peter-kozarec/equinox/internal/utility"
+)
+
+var decimalTwo, _ = decimal.New(2, 0)
 
 type Tick struct {
 	TimeStamp int64 // Unix NanoSeconds
@@ -10,7 +15,7 @@ type Tick struct {
 	BidVolume int32
 }
 
-func (tick Tick) Mean() utility.Fixed {
+func (tick Tick) Average() utility.Fixed {
 	return tick.Ask.Add(tick.Bid).DivInt(2)
 }
 

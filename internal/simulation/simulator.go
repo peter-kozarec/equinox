@@ -47,6 +47,15 @@ func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit) *Simulat
 	}
 }
 
+func (simulator *Simulator) PrintDetails() {
+	simulator.logger.Info("simulation details",
+		zap.String("slippage", simulator.slippage.String()),
+		zap.String("commissions", simulator.commissions.String()),
+		zap.String("lot_value", simulator.lotValue.String()),
+		zap.String("pip_size", simulator.pipSize.String()),
+		zap.String("aggregator_interval", simulator.aggregator.interval.String()))
+}
+
 func (simulator *Simulator) OnOrder(order *model.Order) error {
 	simulator.openOrders = append(simulator.openOrders, order)
 	return nil
@@ -211,16 +220,13 @@ func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takePr
 
 func (simulator *Simulator) shouldOpenPosition(price, size utility.Fixed, tick *model.Tick) bool {
 
-	if size.Gt(utility.ZeroFixed) {
-		// Long, check if price reached Ask
-		if price.Gt(tick.Ask) {
-			return true
-		}
-	} else if size.Lt(utility.ZeroFixed) {
-		// Short, check if price reached Bid
-		if price.Lt(tick.Bid) {
-			return true
-		}
+	// For long limit: trigger when Ask <= limit price
+	if size.Gt(utility.ZeroFixed) && tick.Ask.Lte(price) {
+		return true
+	}
+	// For short limit: trigger when Bid >= limit price
+	if size.Lt(utility.ZeroFixed) && tick.Bid.Gte(price) {
+		return true
 	}
 	return false
 }
@@ -235,8 +241,8 @@ func (simulator *Simulator) shouldClosePosition(position *model.Position, tick *
 		}
 	} else if position.IsShort() {
 		// Short, check if take profit or stop loss has been reached
-		if (position.TakeProfit.IsZero() && position.TakeProfit.Lte(tick.Ask)) ||
-			(position.StopLoss.IsZero() && position.StopLoss.Gte(tick.Ask)) {
+		if (!position.TakeProfit.IsZero() && position.TakeProfit.Lte(tick.Ask)) ||
+			(!position.StopLoss.IsZero() && position.StopLoss.Gte(tick.Ask)) {
 			return true
 		}
 	}
@@ -246,6 +252,7 @@ func (simulator *Simulator) shouldClosePosition(position *model.Position, tick *
 func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 
 	tmpOpenPositions := make([]*model.Position, 0, len(simulator.openPositions))
+	simulator.equity = simulator.balance
 
 	for idx := range simulator.openPositions {
 		position := simulator.openPositions[idx]
@@ -256,9 +263,6 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 			openPrice = tick.Bid
 			closePrice = tick.Ask
 		}
-
-		simulator.calcPositionProfits(position, closePrice)
-		simulator.equity = simulator.equity.Add(position.NetProfit)
 
 		switch position.State {
 		case model.PendingOpen:
@@ -280,6 +284,8 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 			}
 		default:
 			tmpOpenPositions = append(tmpOpenPositions, position)
+			simulator.calcPositionProfits(position, closePrice)
+			simulator.equity = simulator.equity.Add(position.NetProfit)
 			if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
 				simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
 			}
@@ -290,14 +296,21 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 }
 
 func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice utility.Fixed) {
-
+	var pipPnL utility.Fixed
 	if position.IsLong() {
-		position.PipPnL = closePrice.Sub(position.OpenPrice)
-	} else if position.IsShort() {
-		position.PipPnL = position.OpenPrice.Sub(closePrice)
+		pipPnL = closePrice.Sub(position.OpenPrice)
+	} else {
+		pipPnL = position.OpenPrice.Sub(closePrice)
 	}
 
-	position.PipPnL = position.PipPnL.Sub(simulator.slippage.MulInt64(2))
-	position.GrossProfit = position.PipPnL.Div(simulator.pipSize).Mul(position.Size.Abs()).Mul(simulator.lotValue).Mul(simulator.pipSize)
-	position.NetProfit = position.GrossProfit.Sub(simulator.commissions.MulInt64(2).Mul(position.Size))
+	pipPnL = pipPnL.Sub(simulator.slippage.MulInt64(2)) // round-trip slippage
+	position.PipPnL = pipPnL
+
+	// Clean profit calculation: USD = pipPnL / pipSize × lot size × $10
+	pips := pipPnL.Div(simulator.pipSize)
+	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.lotValue)
+
+	// Commission: per lot × 2 × size
+	commission := simulator.commissions.MulInt64(2).Mul(position.Size.Abs())
+	position.NetProfit = position.GrossProfit.Sub(commission)
 }

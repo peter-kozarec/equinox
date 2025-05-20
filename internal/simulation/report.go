@@ -37,7 +37,7 @@ func (report Report) Print(logger *zap.Logger) {
 		zap.String("final_equity", report.FinalEquity.String()),
 		zap.String("total_profit", fmt.Sprintf("%s%%", report.TotalProfit.String())),
 		zap.String("annualized_return", fmt.Sprintf("%s%%", report.AnnualizedReturn.String())),
-		zap.String("max_drawdown", report.MaxDrawdown.String()),
+		zap.String("max_drawdown", fmt.Sprintf("%s%%", report.MaxDrawdown.String())),
 		zap.String("recovery_factor", report.RecoveryFactor.String()),
 	)
 
@@ -45,7 +45,7 @@ func (report Report) Print(logger *zap.Logger) {
 		zap.Int("total_trades", report.TotalTrades),
 		zap.Int("winning_trades", report.WinningTrades),
 		zap.Int("losing_trades", report.LosingTrades),
-		zap.String("win_rate", report.WinRate.String()),
+		zap.String("win_rate", fmt.Sprintf("%s%%", report.WinRate.String())),
 		zap.String("expectancy", report.Expectancy.String()),
 		zap.String("profit_factor", report.ProfitFactor.String()),
 		zap.String("average_win", report.AverageWin.String()),

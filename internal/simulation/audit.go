@@ -106,21 +106,21 @@ func (audit *Audit) GenerateReport() Report {
 	if report.LosingTrades > 0 {
 		report.AverageLoss = totalLoss.DivInt(report.LosingTrades)
 	}
-	if report.TotalTrades > 0 {
-		report.Expectancy = totalProfit.Sub(totalLoss).DivInt(report.TotalTrades)
-	}
 	if totalLoss.Gt(utility.ZeroFixed) {
 		report.ProfitFactor = totalProfit.Div(totalLoss)
 	}
 	if report.AverageLoss.Gt(utility.ZeroFixed) {
-		report.RiskRewardRatio = report.AverageLoss.Div(report.AverageLoss)
+		report.RiskRewardRatio = report.AverageWin.Div(report.AverageLoss)
 	}
 	if report.TotalTrades > 0 {
+		report.Expectancy = totalProfit.Sub(totalLoss).DivInt(report.TotalTrades)
 		report.AverageTradeDuration = totalDuration / time.Duration(report.TotalTrades)
+		report.WinRate = utility.MustNewFixed(int64(report.WinningTrades), 0).DivInt(report.TotalTrades).MulInt(100).Rescale(2)
 	}
 	if report.MaxDrawdown.Gt(utility.ZeroFixed) {
-		report.RecoveryFactor = totalProfit.Sub(totalLoss).Div(report.MaxDrawdown)
+		report.RecoveryFactor = report.TotalProfit.Div(report.MaxDrawdown)
 	}
+	report.MaxDrawdown = report.MaxDrawdown.MulInt(100).Rescale(2)
 
 	// --- Risk Metrics: Volatility, Sharpe, Sortino ---
 	dailyReturns := audit.dailyReturns()

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var LotValue = utility.MustNewFixed(100000, 0)
+var LotValue = utility.MustNewFixed(10, 0)
 var PipSize = utility.MustNewFixed(1, 4)
 var CommissionPerLot = utility.MustNewFixed(3, 0)
 var PipSlippage = utility.MustNewFixed(10, 5)

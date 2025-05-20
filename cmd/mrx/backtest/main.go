@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
@@ -19,9 +20,11 @@ import (
 
 func main() {
 	logger := dbg.NewLogger()
-	defer func(logger *zap.Logger) {
-		_ = logger.Sync()
-	}(logger)
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			fmt.Println("Failed to sync logger:", err)
+		}
+	}()
 
 	logger.Info("MRX started", zap.String("environment", "backtest"), zap.String("version", mrx.Version))
 	defer logger.Info("MRX finished")
@@ -59,6 +62,7 @@ func main() {
 	// Execute the simulation
 	go router.Exec(ctx, executor.Feed)
 
+	defer simulator.PrintDetails()
 	defer router.PrintStatistics()
 	defer telemetry.PrintStatistics()
 

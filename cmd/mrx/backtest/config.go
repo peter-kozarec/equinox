@@ -6,10 +6,10 @@ import (
 )
 
 var SimulationStart = time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)
-var SimulationEnd = time.Date(2020, 12, 31, 0, 0, 0, 0, time.UTC)
+var SimulationEnd = time.Date(2018, 12, 31, 0, 0, 0, 0, time.UTC)
 
 const (
-	RouterEventCapacity = 100
+	RouterEventCapacity = 1000
 	TickDataSource      = "data/eurusd_ticks_2018-2025_v2.bin"
-	MonitorFlags        = middleware.MonitorBars
+	MonitorFlags        = middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened
 )

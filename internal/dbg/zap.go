@@ -6,13 +6,15 @@ import (
 )
 
 func NewLogger() *zap.Logger {
-	cfg := zap.NewProductionConfig()
+	cfg := zap.NewDevelopmentConfig()
+
 	cfg.EncoderConfig.TimeKey = "ts"
 	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
-	// Do not include caller
 	cfg.DisableCaller = true
 
-	logger, _ := cfg.Build()
+	logger, err := cfg.Build()
+	if err != nil {
+		panic(err)
+	}
 	return logger
 }

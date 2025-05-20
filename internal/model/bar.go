@@ -18,7 +18,7 @@ type Bar struct {
 
 func (bar *Bar) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("period", bar.Period.String())
-	enc.AddInt64("time_stamp", bar.TimeStamp)
+	enc.AddString("time_stamp", time.Unix(0, bar.TimeStamp).String())
 	enc.AddString("open", bar.Open.String())
 	enc.AddString("high", bar.High.String())
 	enc.AddString("low", bar.Low.String())

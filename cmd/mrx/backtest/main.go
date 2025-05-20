@@ -10,6 +10,7 @@ import (
 	"peter-kozarec/equinox/cmd/mrx/advisor"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/data/mapper"
+	"peter-kozarec/equinox/internal/dbg"
 	"peter-kozarec/equinox/internal/middleware"
 	"peter-kozarec/equinox/internal/simulation"
 	"syscall"
@@ -17,10 +18,7 @@ import (
 )
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
+	logger := dbg.NewLogger()
 	defer func(logger *zap.Logger) {
 		_ = logger.Sync()
 	}(logger)

@@ -35,7 +35,7 @@ func (report Report) Print(logger *zap.Logger) {
 	logger.Info("performance report",
 		zap.String("initial_equity", report.InitialEquity.String()),
 		zap.String("final_equity", report.FinalEquity.String()),
-		zap.String("total_profit", report.TotalProfit.String()),
+		zap.String("total_profit", fmt.Sprintf("%s%%", report.TotalProfit.String())),
 		zap.String("annualized_return", fmt.Sprintf("%s%%", report.AnnualizedReturn.String())),
 		zap.String("max_drawdown", report.MaxDrawdown.String()),
 		zap.String("recovery_factor", report.RecoveryFactor.String()),

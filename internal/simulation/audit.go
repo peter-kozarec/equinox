@@ -54,11 +54,13 @@ func (audit *Audit) GenerateReport() Report {
 	report.EndDate = audit.accountSnapshots[len(audit.accountSnapshots)-1].t
 
 	// --- Return Metrics ---
-	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).SubInt64(1)
-	if auditedDays > 0 {
+	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).SubInt(1).MulInt(100).Rescale(2)
+	if auditedDays > 0 && report.InitialEquity.Gt(utility.ZeroFixed) && report.FinalEquity.Gt(utility.ZeroFixed) {
 		ratio := report.FinalEquity.Div(report.InitialEquity)
 		exponent := year.DivInt(auditedDays)
 		report.AnnualizedReturn = ratio.Pow(exponent).SubInt64(1).MulInt64(100).Rescale(2)
+	} else {
+		report.AnnualizedReturn = utility.ZeroFixed // or some error/NaN marker
 	}
 
 	// --- Max Drawdown ---

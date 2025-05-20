@@ -2,6 +2,7 @@ package utility
 
 import (
 	"github.com/govalues/decimal"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -12,6 +13,11 @@ var (
 
 type Fixed struct {
 	d decimal.Decimal
+}
+
+func (f Fixed) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("decimal", f.d.String())
+	return nil
 }
 
 // internal helper

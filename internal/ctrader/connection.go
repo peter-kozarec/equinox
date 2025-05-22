@@ -3,6 +3,7 @@ package ctrader
 import (
 	"context"
 	"encoding/binary"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
@@ -26,7 +27,9 @@ var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
 }
 
 type connection struct {
-	conn      net.Conn
+	conn   net.Conn
+	logger *zap.Logger
+
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
@@ -38,11 +41,12 @@ type connection struct {
 	subscribers   map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage
 }
 
-func newConnection(conn net.Conn) *connection {
+func newConnection(conn net.Conn, logger *zap.Logger) *connection {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &connection{
 		conn:        conn,
+		logger:      logger,
 		ctx:         ctx,
 		ctxCancel:   cancel,
 		writeChan:   make(chan openapi.ProtoMessage),
@@ -87,6 +91,8 @@ func (c *connection) read() {
 				continue
 			}
 
+			c.logger.Debug("read", zap.String("msg", msg.String()))
+
 			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
 			_, isStream := streamMessageTypes[payloadType]
 
@@ -117,6 +123,7 @@ func (c *connection) write() {
 			if !ok {
 				continue
 			}
+			c.logger.Debug("write", zap.String("msg", msg.String()))
 
 			data, err := proto.Marshal(&msg)
 			if err != nil {

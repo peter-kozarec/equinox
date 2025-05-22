@@ -4,16 +4,18 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"go.uber.org/zap"
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"time"
 )
 
 type Client struct {
-	conn *connection
+	conn   *connection
+	logger *zap.Logger
 }
 
-func dial(host, port string) (*Client, error) {
+func dial(logger *zap.Logger, host, port string) (*Client, error) {
 	tcpConn, err := net.DialTimeout("tcp", host+":"+port, time.Second*5)
 	if err != nil {
 		return nil, err
@@ -27,20 +29,21 @@ func dial(host, port string) (*Client, error) {
 		return nil, err
 	}
 
-	conn := newConnection(tlsConn)
+	conn := newConnection(tlsConn, logger)
 	conn.start()
 
 	return &Client{
-		conn: conn,
+		conn:   conn,
+		logger: logger,
 	}, nil
 }
 
-func DialLive() (*Client, error) {
-	return dial("live.ctraderapi.com", "5035")
+func DialLive(logger *zap.Logger) (*Client, error) {
+	return dial(logger, "live.ctraderapi.com", "5035")
 }
 
-func DialDemo() (*Client, error) {
-	return dial("demo.ctraderapi.com", "5035")
+func DialDemo(logger *zap.Logger) (*Client, error) {
+	return dial(logger, "demo.ctraderapi.com", "5035")
 }
 
 func (client *Client) Close() {
@@ -96,7 +99,6 @@ func (client *Client) KeepAlive(interval time.Duration) {
 				msg := openapi.ProtoMessage{
 					PayloadType: &payloadType,
 				}
-
 				client.conn.writeChan <- msg
 			}
 		}

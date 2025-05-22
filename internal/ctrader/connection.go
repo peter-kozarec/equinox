@@ -55,7 +55,6 @@ func newConnection(conn net.Conn) *connection {
 func (c *connection) start() {
 	go c.read()
 	go c.write()
-	go c.dispatch()
 }
 
 func (c *connection) stop() {
@@ -88,10 +87,22 @@ func (c *connection) read() {
 				continue
 			}
 
-			select {
-			case c.msgQueue <- msg:
-			case <-c.ctx.Done():
-				return
+			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
+			_, isStream := streamMessageTypes[payloadType]
+
+			if isStream {
+				c.subscribersMu.RLock()
+				for _, ch := range c.subscribers[payloadType] {
+					select {
+					case ch <- msg:
+					default:
+					}
+				}
+				c.subscribersMu.RUnlock()
+			} else if msg.ClientMsgId != nil {
+				if ch, ok := c.pending.LoadAndDelete(*msg.ClientMsgId); ok {
+					ch.(chan openapi.ProtoMessage) <- msg
+				}
 			}
 		}
 	}
@@ -117,37 +128,6 @@ func (c *connection) write() {
 
 			if _, err = c.conn.Write(full); err != nil {
 				continue
-			}
-		}
-	}
-}
-
-func (c *connection) dispatch() {
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case msg, ok := <-c.msgQueue:
-			if !ok {
-				continue
-			}
-
-			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
-			_, isStream := streamMessageTypes[payloadType]
-
-			if isStream {
-				c.subscribersMu.RLock()
-				for _, ch := range c.subscribers[payloadType] {
-					select {
-					case ch <- msg:
-					default:
-					}
-				}
-				c.subscribersMu.RUnlock()
-			} else if msg.ClientMsgId != nil {
-				if ch, ok := c.pending.LoadAndDelete(*msg.ClientMsgId); ok {
-					ch.(chan openapi.ProtoMessage) <- msg
-				}
 			}
 		}
 	}

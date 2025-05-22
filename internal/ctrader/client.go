@@ -13,14 +13,14 @@ type Client struct {
 	conn *connection
 }
 
-func DialLive() (*Client, error) {
-	tcpConn, err := net.DialTimeout("tcp", "live.ctraderapi.com:5035", time.Second*5)
+func dial(host, port string) (*Client, error) {
+	tcpConn, err := net.DialTimeout("tcp", host+":"+port, time.Second*5)
 	if err != nil {
 		return nil, err
 	}
 
 	tlsConn := tls.Client(tcpConn, &tls.Config{
-		ServerName: "live.ctraderapi.com",
+		ServerName: host,
 	})
 
 	if err := tlsConn.Handshake(); err != nil {
@@ -35,26 +35,12 @@ func DialLive() (*Client, error) {
 	}, nil
 }
 
+func DialLive() (*Client, error) {
+	return dial("live.ctraderapi.com", "5035")
+}
+
 func DialDemo() (*Client, error) {
-	tcpConn, err := net.DialTimeout("tcp", "demo.ctraderapi.com:5035", time.Second*5)
-	if err != nil {
-		return nil, err
-	}
-
-	tlsConn := tls.Client(tcpConn, &tls.Config{
-		ServerName: "demo.ctraderapi.com",
-	})
-
-	if err := tlsConn.Handshake(); err != nil {
-		return nil, err
-	}
-
-	conn := newConnection(tlsConn)
-	conn.start()
-
-	return &Client{
-		conn: conn,
-	}, nil
+	return dial("demo.ctraderapi.com", "5035")
 }
 
 func (client *Client) Close() {

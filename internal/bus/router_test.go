@@ -33,7 +33,7 @@ func Test_RouterPostAndDispatch(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	go router.Exec(ctx, exec)
+	go router.ExecLoop(ctx, exec)
 
 	select {
 	case <-router.Done():
@@ -63,7 +63,7 @@ func Test_RouterDoneContextCancel(t *testing.T) {
 	router := NewRouter(logger, 10)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go router.Exec(ctx, func(ctx context.Context) error {
+	go router.ExecLoop(ctx, func(ctx context.Context) error {
 		time.Sleep(10 * time.Millisecond)
 		return nil
 	})
@@ -98,7 +98,7 @@ func Benchmark_RouterDispatch(b *testing.B) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go router.Exec(ctx, func(ctx context.Context) error {
+	go router.ExecLoop(ctx, func(ctx context.Context) error {
 		time.Sleep(time.Microsecond)
 		return nil
 	})

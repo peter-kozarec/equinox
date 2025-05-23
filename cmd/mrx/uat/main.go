@@ -2,23 +2,23 @@ package main
 
 import (
 	"context"
+	"errors"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
 	"peter-kozarec/equinox/cmd/mrx"
+	"peter-kozarec/equinox/cmd/mrx/advisor"
+	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/ctrader"
+	"peter-kozarec/equinox/internal/dbg"
+	"peter-kozarec/equinox/internal/middleware"
 	"syscall"
 	"time"
 )
 
 func main() {
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	defer func(logger *zap.Logger) {
-		_ = logger.Sync()
-	}(logger)
+	logger := dbg.NewProdLogger()
+	defer logger.Sync()
 
 	logger.Info("MRX started", zap.String("environment", "uat"), zap.String("version", mrx.Version))
 	defer logger.Info("MRX finished")
@@ -26,6 +26,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
+	router := bus.NewRouter(logger, RouterEventCapacity)
 	c, err := ctrader.DialDemo(logger)
 	if err != nil {
 		logger.Fatal("unable to connect to demo device", zap.Error(err))
@@ -33,29 +34,33 @@ func main() {
 	defer logger.Info("connection closed")
 	defer c.Close()
 
-	logger.Info("connected")
-	c.KeepAlive(time.Second * 30)
+	monitor := middleware.NewMonitor(logger, MonitorFlags)
+	telemetry := middleware.NewTelemetry(logger)
+	strategy := advisor.NewStrategy(logger, router)
 
-	if err := c.AuthorizeApplication(ctx, os.Getenv("CtAppId"), os.Getenv("CtAppSecret")); err != nil {
-		logger.Fatal("unable to authorize application", zap.Error(err))
-	}
-	logger.Info("application authorized")
+	// Initialize middleware
+	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
+	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
+	router.OrderHandler = nil
 
-	accounts, err := c.GetAccountList(ctx, os.Getenv("CtAccessToken"))
-	if err != nil {
-		logger.Fatal("unable to get account list", zap.Error(err))
+	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
+		logger.Fatal("unable to authenticate", zap.Error(err))
 	}
-	if len(accounts) == 0 {
-		logger.Fatal("no accounts found")
+	if err := ctrader.Subscribe(ctx, c, int64(accountId), "EURUSD", time.Minute, router); err != nil {
+		logger.Fatal("unable to subscribe", zap.Error(err))
 	}
-	logger.Info("accounts found", zap.Int("accounts", len(accounts)))
 
-	if err := c.AuthorizeAccount(ctx, int64(*accounts[0].CtidTraderAccountId), os.Getenv("CtAccessToken")); err != nil {
-		logger.Fatal("unable to authorize account", zap.Error(err))
-	}
-	logger.Info("account authorized")
+	go router.Exec(ctx, time.Millisecond)
 
-	select {
-	case <-ctx.Done():
+	defer router.PrintStatistics()
+	defer telemetry.PrintStatistics()
+
+	if err := <-router.Done(); err != nil && !errors.Is(err, context.Canceled) {
+		logger.Fatal("something unexpected happened", zap.Error(err))
 	}
 }

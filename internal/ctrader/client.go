@@ -3,10 +3,13 @@ package ctrader
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"go.uber.org/zap"
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
+	"peter-kozarec/equinox/internal/model"
+	"strings"
 	"time"
 )
 
@@ -32,10 +35,13 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 	conn := newConnection(tlsConn, logger)
 	conn.start()
 
-	return &Client{
+	client := &Client{
 		conn:   conn,
 		logger: logger,
-	}, nil
+	}
+
+	client.keepAlive(time.Second * 30)
+	return client, nil
 }
 
 func DialLive(logger *zap.Logger) (*Client, error) {
@@ -74,6 +80,45 @@ func (client *Client) GetAccountList(ctx context.Context, accessToken string) ([
 	return resp.GetCtidTraderAccount(), nil
 }
 
+func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.Symbol, error) {
+
+	req := &openapi.ProtoOASymbolsListReq{CtidTraderAccountId: &accountId}
+	resp := &openapi.ProtoOASymbolsListRes{}
+
+	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
+		return model.Symbol{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
+	}
+
+	var symbolInfo model.Symbol
+
+	for _, s := range resp.GetSymbol() {
+		if strings.ToUpper(s.GetSymbolName()) == strings.ToUpper(symbol) {
+			symbolInfo.Id = s.GetSymbolId()
+			break
+		}
+	}
+
+	if symbolInfo.Id == 0 {
+		return model.Symbol{}, fmt.Errorf("unable to retrieve symbol")
+	}
+
+	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbolInfo.Id}}
+	symbolResp := &openapi.ProtoOASymbolByIdRes{}
+
+	if err := sendReceive(ctx, client.conn, symbolReq, symbolResp); err != nil {
+		return model.Symbol{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
+	}
+
+	for _, s := range symbolResp.GetSymbol() {
+		if s.GetSymbolId() == symbolInfo.Id {
+			symbolInfo.Digits = s.GetDigits()
+			return symbolInfo, nil
+		}
+	}
+
+	return model.Symbol{}, errors.New("symbol not found")
+}
+
 func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, accessToken string) error {
 
 	req := &openapi.ProtoOAAccountAuthReq{CtidTraderAccountId: &accountId, AccessToken: &accessToken}
@@ -86,7 +131,32 @@ func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, acc
 	return nil
 }
 
-func (client *Client) KeepAlive(interval time.Duration) {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.Symbol, period time.Duration, cb func(*openapi.ProtoMessage)) error {
+
+	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbol.Id}}
+	spotsResp := &openapi.ProtoOASubscribeSpotsRes{}
+
+	if err := sendReceive(ctx, client.conn, spotsReq, spotsResp); err != nil {
+		return fmt.Errorf("unable to perform subscribe spots request: %w", err)
+	}
+
+	periodMinutes := openapi.ProtoOATrendbarPeriod(int32(period.Minutes()))
+	barsReq := &openapi.ProtoOASubscribeLiveTrendbarReq{CtidTraderAccountId: &accountId, Period: &periodMinutes, SymbolId: &symbol.Id}
+	barsResp := &openapi.ProtoOASubscribeLiveTrendbarRes{}
+
+	if err := sendReceive(ctx, client.conn, barsReq, barsResp); err != nil {
+		return fmt.Errorf("unable to perform subscribe live bars request: %w", err)
+	}
+
+	_, err := subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_SPOT_EVENT, cb)
+	if err != nil {
+		client.logger.Warn("unable to subscribe", zap.Error(err))
+	}
+
+	return nil
+}
+
+func (client *Client) keepAlive(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for {
@@ -103,4 +173,5 @@ func (client *Client) KeepAlive(interval time.Duration) {
 			}
 		}
 	}()
+
 }

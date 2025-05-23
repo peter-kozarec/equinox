@@ -42,7 +42,7 @@ func TestSimulator_OpenAndClosePosition(t *testing.T) {
 	router.EquityHandler = func(e *utility.Fixed) error { return nil }
 	router.BarHandler = func(bar *model.Bar) error { return nil }
 
-	go router.Exec(ctx, func(ctx context.Context) error {
+	go router.ExecLoop(ctx, func(ctx context.Context) error {
 		return nil
 	})
 

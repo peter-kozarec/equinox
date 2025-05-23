@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	logger := dbg.NewLogger()
+	logger := dbg.NewDevLogger()
 	defer func() {
 		if err := logger.Sync(); err != nil {
 			fmt.Println("Failed to sync logger:", err)
@@ -60,7 +60,7 @@ func main() {
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(simulator.OnOrder)
 
 	// Execute the simulation
-	go router.Exec(ctx, executor.Feed)
+	go router.ExecLoop(ctx, executor.Feed)
 
 	defer simulator.PrintDetails()
 	defer router.PrintStatistics()

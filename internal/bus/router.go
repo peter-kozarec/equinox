@@ -34,11 +34,11 @@ type Router struct {
 
 	// Statistics
 	runTime       time.Duration
-	postCount     int64
-	postFails     int64
-	dispatchCount int64
-	dispatchFails int64
-	cycles        int64
+	postCount     uint64
+	postFails     uint64
+	dispatchCount uint64
+	dispatchFails uint64
+	cycles        uint64
 }
 
 func NewRouter(logger *zap.Logger, eventCapacity int) *Router {
@@ -60,7 +60,41 @@ func (router *Router) Post(id EventId, data interface{}) error {
 	}
 }
 
-func (router *Router) Exec(ctx context.Context, executorLoop func(context.Context) error) {
+func (router *Router) Exec(ctx context.Context, cycle time.Duration) {
+
+	router.runTime = 0
+	router.dispatchCount = 0
+	router.dispatchFails = 0
+	router.postCount = 0
+	router.postFails = 0
+	router.cycles = 0
+
+	start := time.Now()
+	defer func() {
+		router.runTime += time.Since(start)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			router.done <- ctx.Err()
+			return
+		case ev := <-router.events:
+			router.dispatchCount++
+			if err := router.dispatch(ev); err != nil {
+				router.dispatchFails++
+				router.logger.Warn("dispatch failed",
+					zap.Error(err),
+					zap.Any("event", ev))
+			}
+		default:
+			router.cycles++
+			time.Sleep(cycle)
+		}
+	}
+}
+
+func (router *Router) ExecLoop(ctx context.Context, executorLoop func(context.Context) error) {
 
 	router.runTime = 0
 	router.dispatchCount = 0
@@ -104,12 +138,12 @@ func (router *Router) Done() <-chan error {
 func (router *Router) PrintStatistics() {
 	router.logger.Info("router statistics",
 		zap.Duration("run_time", router.runTime),
-		zap.Int64("post_count", router.postCount),
-		zap.Int64("post_fails", router.postFails),
-		zap.Int64("dispatch_count", router.dispatchCount),
-		zap.Int64("dispatch_fails", router.dispatchFails),
-		zap.Int64("throughput", router.postCount/int64(router.runTime.Seconds())),
-		zap.Int64("cycles", router.cycles))
+		zap.Uint64("post_count", router.postCount),
+		zap.Uint64("post_fails", router.postFails),
+		zap.Uint64("dispatch_count", router.dispatchCount),
+		zap.Uint64("dispatch_fails", router.dispatchFails),
+		zap.Uint64("throughput", router.postCount/uint64(router.runTime.Seconds())),
+		zap.Uint64("cycles", router.cycles))
 }
 
 func (router *Router) dispatch(ev event) error {

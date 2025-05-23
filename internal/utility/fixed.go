@@ -32,6 +32,10 @@ func NewFixedFromInt(value int64, precision int) Fixed {
 	return Fixed{must(decimal.New(value, precision))}
 }
 
+func NewFixedFromUInt(value uint64, precision int32) Fixed {
+	return Fixed{must(decimal.New(int64(value), int(precision)))}
+}
+
 func MustNewFixed(value int64, precision int) Fixed {
 	return Fixed{decimal.MustNew(value, precision)}
 }

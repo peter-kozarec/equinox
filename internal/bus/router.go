@@ -67,7 +67,6 @@ func (router *Router) Exec(ctx context.Context, cycle time.Duration) {
 	router.dispatchFails = 0
 	router.postCount = 0
 	router.postFails = 0
-	router.cycles = 0
 
 	start := time.Now()
 	defer func() {
@@ -87,9 +86,8 @@ func (router *Router) Exec(ctx context.Context, cycle time.Duration) {
 					zap.Error(err),
 					zap.Any("event", ev))
 			}
-		default:
+		case <-time.After(cycle): // optional heartbeat
 			router.cycles++
-			time.Sleep(cycle)
 		}
 	}
 }

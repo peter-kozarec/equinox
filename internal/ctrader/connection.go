@@ -138,8 +138,6 @@ func (c *connection) write() {
 			if _, err = c.conn.Write(full); err != nil {
 				continue
 			}
-		default:
-			// No messages to write this tick
 		}
 	}
 }

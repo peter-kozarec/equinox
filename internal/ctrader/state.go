@@ -124,8 +124,8 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 				if err := state.router.Post(bus.PositionClosedEvent, internalPosition); err != nil {
 					state.logger.Warn("unable to post position closed event", zap.Error(err))
-					return
 				}
+				return
 			}
 		}
 		state.logger.Warn("position not found", zap.Int64("id", position.GetPositionId()))

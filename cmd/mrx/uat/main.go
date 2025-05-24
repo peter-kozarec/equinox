@@ -12,11 +12,14 @@ import (
 	"peter-kozarec/equinox/internal/ctrader"
 	"peter-kozarec/equinox/internal/dbg"
 	"peter-kozarec/equinox/internal/middleware"
+	"runtime"
 	"syscall"
 	"time"
 )
 
 func main() {
+	runtime.Gosched()
+
 	logger := dbg.NewProdLogger()
 	defer logger.Sync()
 

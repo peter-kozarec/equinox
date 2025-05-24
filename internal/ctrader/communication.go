@@ -8,6 +8,46 @@ import (
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 )
 
+func send[InType proto.Message](
+	ctx context.Context,
+	conn *connection,
+	in InType) error {
+
+	payloadType, err := mapPayload(in)
+	if err != nil {
+		return fmt.Errorf("cannot map payload: %w", err)
+	}
+
+	payloadBase, err := proto.Marshal(in)
+	if err != nil {
+		return fmt.Errorf("cannot marshal payload: %w", err)
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("cannot create uuid: %w", err)
+	}
+
+	msgID := id.String()
+	reqType := uint32(payloadType)
+
+	msg := openapi.ProtoMessage{
+		ClientMsgId: &msgID,
+		PayloadType: &reqType,
+		Payload:     payloadBase,
+	}
+
+	// Send message or abort on context cancel
+	select {
+	case conn.writeChan <- msg:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-conn.ctx.Done():
+		return conn.ctx.Err()
+	}
+	return nil
+}
+
 func sendReceive[InType proto.Message, OutType proto.Message](
 	ctx context.Context,
 	conn *connection,

@@ -41,22 +41,23 @@ func main() {
 	telemetry := middleware.NewTelemetry(logger)
 	strategy := advisor.NewStrategy(logger, router)
 
-	// Initialize middleware
-	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
-	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
-	router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
-	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
-	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
-	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
-	router.OrderHandler = nil
-
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		logger.Fatal("unable to authenticate", zap.Error(err))
 	}
-	if err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router); err != nil {
+	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router)
+	if err != nil {
 		logger.Fatal("unable to initialize trading session", zap.Error(err))
 	}
+
+	// Initialize middleware
+	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
+	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
+	//router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
+	//router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
+	//router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
+	router.OrderHandler = orderHandler
 
 	go router.Exec(ctx, time.Millisecond)
 

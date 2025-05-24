@@ -183,6 +183,63 @@ func (client *Client) GetOpenPositions(ctx context.Context, accountId int64) ([]
 	return resp.GetPosition(), nil
 }
 
+func (client *Client) ClosePosition(ctx context.Context, accountId, positionId int64, size utility.Fixed) error {
+
+	vol := size.Abs().MulInt(100).Int64()
+
+	req := &openapi.ProtoOAClosePositionReq{
+		CtidTraderAccountId: &accountId,
+		PositionId:          &positionId,
+		Volume:              &vol,
+	}
+
+	return send(ctx, client.conn, req)
+}
+
+func (client *Client) OpenPosition(
+	ctx context.Context,
+	accountId int64,
+	symbolInfo model.Symbol,
+	openPrice, size, stopLoss, takeProfit utility.Fixed,
+	orderType model.OrderType) error {
+
+	sl := stopLoss.Float64()
+	tp := takeProfit.Float64()
+
+	var limitPrice *float64 = nil
+	var ot openapi.ProtoOAOrderType
+	switch orderType {
+	case model.Market:
+		ot = openapi.ProtoOAOrderType_MARKET
+	case model.Limit:
+		ot = openapi.ProtoOAOrderType_LIMIT
+		price := openPrice.Float64()
+		limitPrice = &price
+	}
+
+	var ts openapi.ProtoOATradeSide
+	if size.Gt(utility.ZeroFixed) {
+		ts = openapi.ProtoOATradeSide_BUY
+	} else {
+		ts = openapi.ProtoOATradeSide_SELL
+	}
+
+	vol := size.Abs().MulInt(100).Int64()
+
+	req := &openapi.ProtoOANewOrderReq{
+		CtidTraderAccountId: &accountId,
+		SymbolId:            &symbolInfo.Id,
+		StopLoss:            &sl,
+		TakeProfit:          &tp,
+		TradeSide:           &ts,
+		OrderType:           &ot,
+		Volume:              &vol,
+		LimitPrice:          limitPrice,
+	}
+
+	return send(ctx, client.conn, req)
+}
+
 func (client *Client) keepAlive(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {

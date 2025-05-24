@@ -74,3 +74,19 @@ func (f Fixed) Pow(o Fixed) Fixed { return Fixed{must(f.d.Pow(o.d))} }
 func (f Fixed) Sqrt() Fixed       { return Fixed{must(f.d.Sqrt())} }
 
 func (f Fixed) Rescale(scale int) Fixed { return Fixed{f.d.Rescale(scale)} }
+
+func (f Fixed) Float64() float64 {
+	v, ok := f.d.Float64()
+	if !ok {
+		panic("unable to compute float64")
+	}
+	return v
+}
+
+func (f Fixed) Int64() int64 {
+	v, _, ok := f.d.Int64(0)
+	if !ok {
+		panic("unable to compute int64")
+	}
+	return v
+}

@@ -140,7 +140,7 @@ func (router *Router) PrintStatistics() {
 		zap.Uint64("post_fails", router.postFails),
 		zap.Uint64("dispatch_count", router.dispatchCount),
 		zap.Uint64("dispatch_fails", router.dispatchFails),
-		zap.Uint64("throughput", router.postCount/uint64(router.runTime.Seconds())),
+		zap.Float64("throughput", float64(router.postCount)/router.runTime.Seconds()),
 		zap.Uint64("cycles", router.cycles))
 }
 

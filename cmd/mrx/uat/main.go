@@ -51,7 +51,7 @@ func main() {
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		logger.Fatal("unable to authenticate", zap.Error(err))
 	}
-	if err := ctrader.Subscribe(ctx, c, int64(accountId), "EURUSD", time.Minute, router); err != nil {
+	if err := ctrader.Subscribe(ctx, c, int64(accountId), "BTCUSD", time.Minute, router); err != nil {
 		logger.Fatal("unable to subscribe", zap.Error(err))
 	}
 

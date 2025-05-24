@@ -8,7 +8,6 @@ import (
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"sync"
-	"time"
 )
 
 var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
@@ -41,11 +40,9 @@ type connection struct {
 	pending       sync.Map // map[uint64]chan openapi.ProtoMessage
 	subscribersMu sync.RWMutex
 	subscribers   map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage
-
-	rateLimit int // Writes per second
 }
 
-func newConnection(conn net.Conn, logger *zap.Logger, rateLimit int) *connection {
+func newConnection(conn net.Conn, logger *zap.Logger) *connection {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &connection{
@@ -56,7 +53,6 @@ func newConnection(conn net.Conn, logger *zap.Logger, rateLimit int) *connection
 		writeChan:   make(chan openapi.ProtoMessage),
 		msgQueue:    make(chan openapi.ProtoMessage, 1024),
 		subscribers: make(map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage),
-		rateLimit:   rateLimit,
 	}
 	return c
 }
@@ -121,35 +117,29 @@ func (c *connection) read() {
 
 func (c *connection) write() {
 
-	ticker := time.NewTicker(time.Second / time.Duration(c.rateLimit))
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
-		case <-ticker.C:
-			select {
-			case msg, ok := <-c.writeChan:
-				if !ok {
-					continue
-				}
-				c.logger.Debug("write", zap.String("msg", msg.String()))
-
-				data, err := proto.Marshal(&msg)
-				if err != nil {
-					continue
-				}
-
-				full := append(make([]byte, 4), data...)
-				binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
-
-				if _, err = c.conn.Write(full); err != nil {
-					continue
-				}
-			default:
-				// No messages to write this tick
+		case msg, ok := <-c.writeChan:
+			if !ok {
+				continue
 			}
+			c.logger.Debug("write", zap.String("msg", msg.String()))
+
+			data, err := proto.Marshal(&msg)
+			if err != nil {
+				continue
+			}
+
+			full := append(make([]byte, 4), data...)
+			binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
+
+			if _, err = c.conn.Write(full); err != nil {
+				continue
+			}
+		default:
+			// No messages to write this tick
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"peter-kozarec/equinox/internal/model"
+	"peter-kozarec/equinox/internal/utility"
 	"strings"
 	"time"
 )
@@ -32,7 +33,7 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 		return nil, err
 	}
 
-	conn := newConnection(tlsConn, logger, 50)
+	conn := newConnection(tlsConn, logger)
 	conn.start()
 
 	client := &Client{
@@ -129,6 +130,18 @@ func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, acc
 	}
 
 	return nil
+}
+
+func (client *Client) GetBalance(ctx context.Context, accountId int64) (utility.Fixed, error) {
+
+	traderReq := &openapi.ProtoOATraderReq{CtidTraderAccountId: &accountId}
+	traderResp := &openapi.ProtoOATraderRes{}
+
+	if err := sendReceive(ctx, client.conn, traderReq, traderResp); err != nil {
+		return utility.Fixed{}, fmt.Errorf("unable to perform trader request: %w", err)
+	}
+
+	return utility.NewFixedFromInt(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
 func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.Symbol, period time.Duration, cb func(*openapi.ProtoMessage)) error {

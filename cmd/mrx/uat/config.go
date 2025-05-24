@@ -13,6 +13,5 @@ var accessToken = os.Getenv("CtAccessToken")
 
 const (
 	RouterEventCapacity = 1000
-	MonitorFlags        = middleware.MonitorPositionsOpened |
-		middleware.MonitorPositionsClosed | middleware.MonitorBars | middleware.MonitorOrders | middleware.MonitorTicks
+	MonitorFlags        = middleware.MonitorPositionsOpened | middleware.MonitorPositionsClosed | middleware.MonitorBars | middleware.MonitorOrders
 )

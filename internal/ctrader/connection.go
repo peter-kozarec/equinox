@@ -24,7 +24,9 @@ var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
 	openapi.ProtoOAPayloadType_PROTO_OA_MARGIN_CALL_UPDATE_EVENT:         {},
 	openapi.ProtoOAPayloadType_PROTO_OA_MARGIN_CALL_TRIGGER_EVENT:        {},
 	openapi.ProtoOAPayloadType_PROTO_OA_V1_PNL_CHANGE_EVENT:              {},
-	openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES:                        {}, // Not a stream type, but this lets the request time out
+
+	// Not a stream types, but this lets the request time out
+	openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES: {},
 }
 
 type connection struct {

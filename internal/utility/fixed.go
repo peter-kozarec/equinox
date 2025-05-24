@@ -82,11 +82,3 @@ func (f Fixed) Float64() float64 {
 	}
 	return v
 }
-
-func (f Fixed) Int64() int64 {
-	v, _, ok := f.d.Int64(0)
-	if !ok {
-		panic("unable to compute int64")
-	}
-	return v
-}

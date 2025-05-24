@@ -12,14 +12,11 @@ import (
 	"peter-kozarec/equinox/internal/ctrader"
 	"peter-kozarec/equinox/internal/dbg"
 	"peter-kozarec/equinox/internal/middleware"
-	"runtime"
 	"syscall"
 	"time"
 )
 
 func main() {
-	runtime.Gosched()
-
 	logger := dbg.NewProdLogger()
 	defer logger.Sync()
 
@@ -57,7 +54,7 @@ func main() {
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
 	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
 	//router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
-	router.OrderHandler = orderHandler
+	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(orderHandler)
 
 	go router.Exec(ctx, time.Millisecond)
 

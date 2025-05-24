@@ -93,7 +93,7 @@ func InitTradeSession(
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 
-			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.Size, order.TakeProfit, order.OrderType); err != nil {
+			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.OrderType); err != nil {
 				return fmt.Errorf("unable to open position: %w", err)
 			}
 		}

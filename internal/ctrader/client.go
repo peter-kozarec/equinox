@@ -185,7 +185,7 @@ func (client *Client) GetOpenPositions(ctx context.Context, accountId int64) ([]
 
 func (client *Client) ClosePosition(ctx context.Context, accountId, positionId int64, size utility.Fixed) error {
 
-	vol := size.Abs().MulInt(100).Int64()
+	vol := int64(size.Abs().MulInt(100).Float64())
 
 	req := &openapi.ProtoOAClosePositionReq{
 		CtidTraderAccountId: &accountId,
@@ -203,10 +203,8 @@ func (client *Client) OpenPosition(
 	openPrice, size, stopLoss, takeProfit utility.Fixed,
 	orderType model.OrderType) error {
 
-	sl := stopLoss.Float64()
-	tp := takeProfit.Float64()
+	var limitPrice, sl, tp *float64 = nil, nil, nil
 
-	var limitPrice *float64 = nil
 	var ot openapi.ProtoOAOrderType
 	switch orderType {
 	case model.Market:
@@ -224,13 +222,22 @@ func (client *Client) OpenPosition(
 		ts = openapi.ProtoOATradeSide_SELL
 	}
 
-	vol := size.Abs().MulInt(100).Int64()
+	vol := int64(size.Abs().MulInt(100).Float64())
+
+	if !stopLoss.IsZero() {
+		slF := stopLoss.Float64()
+		sl = &slF
+	}
+	if !takeProfit.IsZero() {
+		tpF := takeProfit.Float64()
+		tp = &tpF
+	}
 
 	req := &openapi.ProtoOANewOrderReq{
 		CtidTraderAccountId: &accountId,
 		SymbolId:            &symbolInfo.Id,
-		StopLoss:            &sl,
-		TakeProfit:          &tp,
+		StopLoss:            sl,
+		TakeProfit:          tp,
 		TradeSide:           &ts,
 		OrderType:           &ot,
 		Volume:              &vol,
@@ -268,6 +275,15 @@ func (client *Client) addErrRespHandler() {
 		if err != nil {
 			client.logger.Warn("unable to unmarshal error response", zap.Error(err))
 		}
-		client.logger.Warn("error", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
+		client.logger.Warn("something went wrong", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
+	})
+
+	_, _ = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_ORDER_ERROR_EVENT, func(message *openapi.ProtoMessage) {
+		var v openapi.ProtoOAOrderErrorEvent
+		err := proto.Unmarshal(message.GetPayload(), &v)
+		if err != nil {
+			client.logger.Warn("unable to unmarshal order error response", zap.Error(err))
+		}
+		client.logger.Warn("unable to process order event", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
 	})
 }

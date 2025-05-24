@@ -7,7 +7,11 @@ import (
 )
 
 type State int
-type PositionId uint64
+type PositionId int64
+
+func (pId PositionId) Int64() int64 {
+	return int64(pId)
+}
 
 const (
 	Opened State = iota

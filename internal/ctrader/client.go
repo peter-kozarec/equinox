@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"peter-kozarec/equinox/internal/model"
@@ -41,6 +42,7 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 		logger: logger,
 	}
 
+	client.addErrRespHandler()
 	client.keepAlive(time.Second * 30)
 	return client, nil
 }
@@ -112,7 +114,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 
 	for _, s := range symbolResp.GetSymbol() {
 		if s.GetSymbolId() == symbolInfo.Id {
-			symbolInfo.Digits = s.GetDigits()
+			symbolInfo.Digits = int(s.GetDigits())
 			return symbolInfo, nil
 		}
 	}
@@ -169,6 +171,18 @@ func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbo
 	return nil
 }
 
+func (client *Client) GetOpenPositions(ctx context.Context, accountId int64) ([]*openapi.ProtoOAPosition, error) {
+
+	req := &openapi.ProtoOAReconcileReq{CtidTraderAccountId: &accountId}
+	resp := &openapi.ProtoOAReconcileRes{}
+
+	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
+		return nil, fmt.Errorf("unable to perform reconcile request: %w", err)
+	}
+
+	return resp.GetPosition(), nil
+}
+
 func (client *Client) keepAlive(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
@@ -187,4 +201,16 @@ func (client *Client) keepAlive(interval time.Duration) {
 		}
 	}()
 
+}
+
+func (client *Client) addErrRespHandler() {
+
+	_, _ = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES, func(message *openapi.ProtoMessage) {
+		var v openapi.ProtoOAErrorRes
+		err := proto.Unmarshal(message.GetPayload(), &v)
+		if err != nil {
+			client.logger.Warn("unable to unmarshal error response", zap.Error(err))
+		}
+		client.logger.Warn("error", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
+	})
 }

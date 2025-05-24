@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-func Authenticate(ctx context.Context, client *Client, accountId int64, accessToken, appId, appSecret string) error {
+func Authenticate(
+	ctx context.Context,
+	client *Client,
+	accountId int64,
+	accessToken, appId, appSecret string) error {
 
 	authAppCtx, authAppCancel := context.WithTimeout(ctx, time.Second*5)
 	defer authAppCancel()
@@ -30,29 +34,51 @@ func Authenticate(ctx context.Context, client *Client, accountId int64, accessTo
 	return nil
 }
 
-func Subscribe(ctx context.Context, client *Client, accountId int64, symbol string, period time.Duration, router *bus.Router) error {
-
-	_, err := subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES, createErrorResponseCallback(client.logger))
-	if err != nil {
-		return fmt.Errorf("unable to subscribe to error responses: %w", err)
-	}
+func InitTradeSession(
+	ctx context.Context,
+	client *Client,
+	accountId int64,
+	symbol string,
+	period time.Duration,
+	router *bus.Router) error {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
 	defer symbolInfoCancel()
 
+	// Get info about symbol
 	symbolInfo, err := client.GetSymbolInfo(symbolInfoContext, accountId, symbol)
 	if err != nil {
 		return fmt.Errorf("unable to get %s symbol info: %w", symbol, err)
 	}
-	client.logger.Info("symbol info retrieved", zap.String("symbol", symbol), zap.Int64("id", symbolInfo.Id), zap.Int32("digits", symbolInfo.Digits))
+	symbolInfo.Digits = 5
+	client.logger.Info("symbol info retrieved", zap.String("symbol", symbol), zap.Int64("id", symbolInfo.Id), zap.Int("digits", symbolInfo.Digits))
+
+	// Create internal state
+	state := NewState(router, client.logger, symbolInfo, period)
+
+	loadPosContext, loadPosCancel := context.WithTimeout(ctx, time.Second)
+	defer loadPosCancel()
+
+	if err := state.LoadOpenPositions(loadPosContext, client, accountId); err != nil {
+		return fmt.Errorf("unable to load open positions: %w", err)
+	}
+	client.logger.Info("open positions loaded")
 
 	spotsContext, spotsCancel := context.WithTimeout(ctx, time.Second)
 	defer spotsCancel()
 
-	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, period, createSpotsCallback(router, client.logger, period)); err != nil {
+	// Subscribe to spot events
+	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, period, state.OnSpotsEvent); err != nil {
 		return fmt.Errorf("unable to subscribe to spot changes for %s: %w", symbol, err)
 	}
 	client.logger.Info("subscribed to spot events")
+
+	// Subscribe to execution events
+	_, err = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_EXECUTION_EVENT, state.OnExecutionEvent)
+	if err != nil {
+		return fmt.Errorf("unable to subscribe to execution events: %w", err)
+	}
+	client.logger.Info("subscribed to execution events")
 
 	return nil
 }

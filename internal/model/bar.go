@@ -13,7 +13,7 @@ type Bar struct {
 	High      utility.Fixed
 	Low       utility.Fixed
 	Close     utility.Fixed
-	Volume    int32
+	Volume    int64
 }
 
 func (bar *Bar) MarshalLogObject(enc zapcore.ObjectEncoder) error {
@@ -23,6 +23,6 @@ func (bar *Bar) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("high", bar.High.String())
 	enc.AddString("low", bar.Low.String())
 	enc.AddString("close", bar.Close.String())
-	enc.AddInt32("volume", bar.Volume)
+	enc.AddInt64("volume", bar.Volume)
 	return nil
 }

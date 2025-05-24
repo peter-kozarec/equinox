@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	logger := dbg.NewDevLogger()
+	logger := dbg.NewProdLogger()
 	defer logger.Sync()
 
 	logger.Info("MRX started", zap.String("environment", "uat"), zap.String("version", mrx.Version))
@@ -51,8 +51,8 @@ func main() {
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		logger.Fatal("unable to authenticate", zap.Error(err))
 	}
-	if err := ctrader.Subscribe(ctx, c, int64(accountId), "BTCUSD", time.Minute, router); err != nil {
-		logger.Fatal("unable to subscribe", zap.Error(err))
+	if err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router); err != nil {
+		logger.Fatal("unable to initialize trading session", zap.Error(err))
 	}
 
 	go router.Exec(ctx, time.Millisecond)

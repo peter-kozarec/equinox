@@ -8,6 +8,7 @@ import (
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"sync"
+	"time"
 )
 
 var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
@@ -24,6 +25,7 @@ var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
 	openapi.ProtoOAPayloadType_PROTO_OA_MARGIN_CALL_UPDATE_EVENT:         {},
 	openapi.ProtoOAPayloadType_PROTO_OA_MARGIN_CALL_TRIGGER_EVENT:        {},
 	openapi.ProtoOAPayloadType_PROTO_OA_V1_PNL_CHANGE_EVENT:              {},
+	openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES:                        {}, // Not a stream type, but this lets the request time out
 }
 
 type connection struct {
@@ -39,9 +41,11 @@ type connection struct {
 	pending       sync.Map // map[uint64]chan openapi.ProtoMessage
 	subscribersMu sync.RWMutex
 	subscribers   map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage
+
+	rateLimit int // Writes per second
 }
 
-func newConnection(conn net.Conn, logger *zap.Logger) *connection {
+func newConnection(conn net.Conn, logger *zap.Logger, rateLimit int) *connection {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &connection{
@@ -52,6 +56,7 @@ func newConnection(conn net.Conn, logger *zap.Logger) *connection {
 		writeChan:   make(chan openapi.ProtoMessage),
 		msgQueue:    make(chan openapi.ProtoMessage, 1024),
 		subscribers: make(map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage),
+		rateLimit:   rateLimit,
 	}
 	return c
 }
@@ -115,26 +120,35 @@ func (c *connection) read() {
 }
 
 func (c *connection) write() {
+
+	ticker := time.NewTicker(time.Second / time.Duration(c.rateLimit))
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
-		case msg, ok := <-c.writeChan:
-			if !ok {
-				continue
-			}
-			c.logger.Debug("write", zap.String("msg", msg.String()))
+		case <-ticker.C:
+			select {
+			case msg, ok := <-c.writeChan:
+				if !ok {
+					continue
+				}
+				c.logger.Debug("write", zap.String("msg", msg.String()))
 
-			data, err := proto.Marshal(&msg)
-			if err != nil {
-				continue
-			}
+				data, err := proto.Marshal(&msg)
+				if err != nil {
+					continue
+				}
 
-			full := append(make([]byte, 4), data...)
-			binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
+				full := append(make([]byte, 4), data...)
+				binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
 
-			if _, err = c.conn.Write(full); err != nil {
-				continue
+				if _, err = c.conn.Write(full); err != nil {
+					continue
+				}
+			default:
+				// No messages to write this tick
 			}
 		}
 	}

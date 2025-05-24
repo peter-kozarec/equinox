@@ -88,6 +88,8 @@ func mapPayload(message proto.Message) (openapi.ProtoOAPayloadType, error) {
 		return openapi.ProtoOAPayloadType_PROTO_OA_DEAL_OFFSET_LIST_REQ, nil
 	case *openapi.ProtoOAGetPositionUnrealizedPnLReq:
 		return openapi.ProtoOAPayloadType_PROTO_OA_GET_POSITION_UNREALIZED_PNL_REQ, nil
+	case *openapi.ProtoOAv1PnLChangeSubscribeReq:
+		return openapi.ProtoOAPayloadType_PROTO_OA_V1_PNL_CHANGE_SUBSCRIBE_REQ, nil
 	default:
 		return 0, errors.New("unknown proto type")
 	}

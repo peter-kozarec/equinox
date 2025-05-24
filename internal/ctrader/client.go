@@ -32,7 +32,7 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 		return nil, err
 	}
 
-	conn := newConnection(tlsConn, logger)
+	conn := newConnection(tlsConn, logger, 50)
 	conn.start()
 
 	client := &Client{

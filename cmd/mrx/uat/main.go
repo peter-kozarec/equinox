@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	logger := dbg.NewProdLogger()
+	logger := dbg.NewDevLogger()
 	defer logger.Sync()
 
 	logger.Info("MRX started", zap.String("environment", "uat"), zap.String("version", mrx.Version))

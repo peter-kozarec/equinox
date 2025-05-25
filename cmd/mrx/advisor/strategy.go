@@ -25,13 +25,13 @@ func NewStrategy(logger *zap.Logger, router *bus.Router) *Strategy {
 
 func (s *Strategy) OnBar(bar *model.Bar) error {
 	s.barHistory = append(s.barHistory, bar)
-	//if len(s.barHistory) > 60 {
-	//	s.barHistory = s.barHistory[1:]
-	//}
-	//
-	//if len(s.barHistory) < 60 {
-	//	return nil
-	//}
+	if len(s.barHistory) > 60 {
+		s.barHistory = s.barHistory[1:]
+	}
+
+	if len(s.barHistory) < 60 {
+		return nil
+	}
 
 	// Calculate mean and standard deviation of Close prices
 	var (
@@ -49,10 +49,10 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 		diff := c.Sub(mean)
 		variance = variance.Add(diff.Mul(diff))
 	}
-	//stdDev := variance.DivInt(len(closes)).Sqrt()
-
+	stdDev := variance.DivInt(len(closes)).Sqrt()
+	price := bar.Close
 	// Entry: price << mean - 2×stdDev
-	if !s.inPosition { //&& price.Lt(mean.Sub(stdDev.MulInt(2))) {
+	if !s.inPosition && price.Lt(mean.Sub(stdDev.MulInt(2))) {
 		order := model.Order{
 			Command:   model.CmdOpen,
 			OrderType: model.Market,
@@ -64,7 +64,7 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 	}
 
 	// Exit: price >= mean
-	if s.inPosition { //&& price.Gte(mean) {
+	if s.inPosition && price.Gte(mean) {
 		order := model.Order{
 			Command:    model.CmdClose,
 			OrderType:  model.Market,

@@ -49,11 +49,11 @@ func main() {
 	// Initialize middleware
 	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(strategy.OnTick)
 	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(strategy.OnBar)
-	//router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
-	//router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(strategy.OnBalance)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(strategy.OnEquity)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(strategy.OnPositionOpened)
 	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(strategy.OnPositionClosed)
-	//router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(orderHandler)
 
 	go router.Exec(ctx, time.Millisecond)

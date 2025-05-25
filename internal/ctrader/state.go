@@ -9,6 +9,7 @@ import (
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"peter-kozarec/equinox/internal/model"
 	"peter-kozarec/equinox/internal/utility"
+	"sync"
 	"time"
 )
 
@@ -16,21 +17,27 @@ type State struct {
 	router *bus.Router
 	logger *zap.Logger
 
-	symbolInfo model.Symbol
+	symbolInfo model.SymbolInfo
 	barPeriod  time.Duration
 
 	lastTick model.Tick
 	lastBar  model.Bar
 
 	openPositions []model.Position
+
+	balanceMu   sync.Mutex
+	postBalance bool
+	balance     utility.Fixed
+	equity      utility.Fixed
 }
 
-func NewState(router *bus.Router, logger *zap.Logger, symbolInfo model.Symbol, barPeriod time.Duration) *State {
+func NewState(router *bus.Router, logger *zap.Logger, symbolInfo model.SymbolInfo, barPeriod time.Duration) *State {
 	return &State{
-		router:     router,
-		logger:     logger,
-		symbolInfo: symbolInfo,
-		barPeriod:  barPeriod,
+		router:      router,
+		logger:      logger,
+		symbolInfo:  symbolInfo,
+		barPeriod:   barPeriod,
+		postBalance: true, // Post balance on first poll, then only when position is closed
 	}
 }
 
@@ -68,7 +75,10 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 		state.lastTick = internalTick
 	}
 
-	// TODO: Calculate open positions PnL
+	// Calculate PnL for open positions
+	state.calcPnL()
+	// Calculate equity from unrealized PnL
+	state.calcEquity()
 
 	if len(v.GetTrendbar()) == 0 {
 		return
@@ -120,11 +130,24 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 				internalPosition.State = model.Closed
 				internalPosition.CloseTime = time.UnixMilli(int64(*position.TradeData.CloseTimestamp))
-				internalPosition.ClosePrice = state.lastTick.Average() // Just approximation
+
+				// This is just approximation - not real closing price
+				if internalPosition.IsLong() {
+					internalPosition.ClosePrice = state.lastTick.Bid
+				} else if internalPosition.IsShort() {
+					internalPosition.ClosePrice = state.lastTick.Ask
+				}
+
+				// Remove the closed position
+				state.openPositions = append(state.openPositions[:idx], state.openPositions[idx+1:]...)
 
 				if err := state.router.Post(bus.PositionClosedEvent, internalPosition); err != nil {
 					state.logger.Warn("unable to post position closed event", zap.Error(err))
 				}
+
+				state.balanceMu.Lock()
+				state.postBalance = true
+				state.balanceMu.Unlock()
 				return
 			}
 		}
@@ -142,6 +165,10 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		internalPosition.TakeProfit = utility.NewFixedFromFloat64(position.GetTakeProfit())
 		internalPosition.Size = utility.NewFixedFromInt(position.TradeData.GetVolume(), 2)
 
+		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
+			internalPosition.Size = internalPosition.Size.MulInt(-1)
+		}
+
 		state.openPositions = append(state.openPositions, internalPosition)
 
 		if err := state.router.Post(bus.PositionOpenedEvent, &internalPosition); err != nil {
@@ -149,7 +176,6 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 			return
 		}
 	}
-
 }
 
 func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accountId int64) error {
@@ -171,8 +197,115 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 		internalPosition.TakeProfit = utility.NewFixedFromFloat64(position.GetTakeProfit())
 		internalPosition.Size = utility.NewFixedFromInt(position.TradeData.GetVolume(), 2)
 
+		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
+			internalPosition.Size = internalPosition.Size.MulInt(-1)
+		}
+
 		state.openPositions = append(state.openPositions, internalPosition)
 	}
 
 	return nil
+}
+
+func (state *State) LoadBalance(ctx context.Context, client *Client, accountId int64) error {
+
+	balance, err := client.GetBalance(ctx, accountId)
+	if err != nil {
+		return fmt.Errorf("unable to retrieve balance: %w", err)
+	}
+
+	state.balance = balance
+	state.equity = balance
+	return nil
+}
+
+func (state *State) StartBalancePolling(parentCtx context.Context, client *Client, accountId int64, pollInterval time.Duration) {
+
+	ticker := time.NewTicker(pollInterval)
+
+	go func() {
+		defer ticker.Stop()
+
+	outer:
+		for {
+			select {
+			case <-parentCtx.Done():
+				break outer
+			case <-ticker.C:
+				balanceContext, balanceCancel := context.WithTimeout(parentCtx, pollInterval-(time.Millisecond*50))
+				balance, err := client.GetBalance(balanceContext, accountId)
+				if err != nil {
+					state.logger.Warn("unable to poll balance", zap.Error(err))
+				} else {
+					state.setBalance(balance)
+				}
+				balanceCancel()
+			}
+		}
+
+		state.logger.Debug("balance polling stopped", zap.Error(parentCtx.Err()))
+	}()
+}
+
+func (state *State) calcPnL() {
+
+	for idx := range state.openPositions {
+		position := &state.openPositions[idx]
+
+		oldProfit := position.NetProfit
+
+		// This is without commissions
+		if position.IsLong() {
+			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.symbolInfo.LotSize).Mul(position.Size.Abs())
+		} else if position.IsShort() {
+			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.symbolInfo.LotSize).Mul(position.Size.Abs())
+		}
+
+		// ToDo: Calc gross profit as well
+
+		// Only post event if profit changed
+		if !oldProfit.Eq(position.NetProfit) {
+			if err := state.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
+				state.logger.Warn("unable to post position updated event", zap.Error(err))
+			}
+		}
+	}
+}
+
+func (state *State) calcEquity() {
+
+	// Reset equity
+	oldEquity := state.equity
+	state.getBalance(&state.equity)
+
+	// Add unrealized PnL to equity
+	for idx := range state.openPositions {
+		position := &state.openPositions[idx]
+
+		state.equity = state.equity.Add(position.NetProfit)
+	}
+
+	if !oldEquity.Eq(state.equity) {
+		if err := state.router.Post(bus.EquityEvent, &state.equity); err != nil {
+			state.logger.Warn("unable to post equity event", zap.Error(err))
+		}
+	}
+}
+
+func (state *State) setBalance(newBalance utility.Fixed) {
+	state.balanceMu.Lock()
+	state.balance = newBalance
+	if state.postBalance {
+		state.postBalance = false
+		if err := state.router.Post(bus.BalanceEvent, &state.balance); err != nil {
+			state.logger.Warn("unable to post balance event", zap.Error(err))
+		}
+	}
+	state.balanceMu.Unlock()
+}
+
+func (state *State) getBalance(balance *utility.Fixed) {
+	state.balanceMu.Lock()
+	*balance = state.balance
+	state.balanceMu.Unlock()
 }

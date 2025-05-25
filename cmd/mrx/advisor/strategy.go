@@ -51,8 +51,6 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 	}
 	//stdDev := variance.DivInt(len(closes)).Sqrt()
 
-	price := bar.Close
-
 	// Entry: price << mean - 2×stdDev
 	if !s.inPosition { //&& price.Lt(mean.Sub(stdDev.MulInt(2))) {
 		order := model.Order{
@@ -62,7 +60,6 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 		}
 		_ = s.router.Post(bus.OrderEvent, &order)
 		s.inPosition = true
-		s.logger.Info("Mean reversion long entry", zap.String("price", price.String()), zap.String("mean", mean.String()))
 		return nil
 	}
 
@@ -76,7 +73,6 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 		}
 		_ = s.router.Post(bus.OrderEvent, &order)
 		s.inPosition = false
-		s.logger.Info("Mean reversion exit", zap.String("price", price.String()), zap.String("mean", mean.String()))
 	}
 
 	return nil

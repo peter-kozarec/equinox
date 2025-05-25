@@ -52,23 +52,39 @@ func InitTradeSession(
 		return nil, fmt.Errorf("unable to get %s symbol info: %w", symbol, err)
 	}
 	symbolInfo.Digits = 5
-	client.logger.Info("symbol info retrieved", zap.String("symbol", symbol), zap.Int64("id", symbolInfo.Id), zap.Int("digits", symbolInfo.Digits))
+	client.logger.Info("symbol info",
+		zap.String("symbol", symbol),
+		zap.Int64("id", symbolInfo.Id),
+		zap.Int("digits", symbolInfo.Digits),
+		zap.String("lot_size", symbolInfo.LotSize.String()),
+		zap.String("denomination_unit", symbolInfo.DenominationUnit))
 
 	// Create internal state
 	state := NewState(router, client.logger, symbolInfo, period)
 
+	// Load balance
+	balanceContext, balanceCancel := context.WithTimeout(ctx, time.Second)
+	defer balanceCancel()
+	if err := state.LoadBalance(balanceContext, client, accountId); err != nil {
+		return nil, fmt.Errorf("unable to load balance: %w", err)
+	}
+	client.logger.Info("account info", zap.String("balance", state.balance.String()))
+
+	// Load open positions
 	loadPosContext, loadPosCancel := context.WithTimeout(ctx, time.Second)
 	defer loadPosCancel()
-
 	if err := state.LoadOpenPositions(loadPosContext, client, accountId); err != nil {
 		return nil, fmt.Errorf("unable to load open positions: %w", err)
 	}
-	client.logger.Info("open positions loaded")
-
-	spotsContext, spotsCancel := context.WithTimeout(ctx, time.Second)
-	defer spotsCancel()
+	if len(state.openPositions) > 0 {
+		client.logger.Info("opened positions present", zap.Int("count", len(state.openPositions)))
+	} else {
+		client.logger.Info("no opened positions are present")
+	}
 
 	// Subscribe to spot events
+	spotsContext, spotsCancel := context.WithTimeout(ctx, time.Second)
+	defer spotsCancel()
 	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, period, state.OnSpotsEvent); err != nil {
 		return nil, fmt.Errorf("unable to subscribe to spot changes for %s: %w", symbol, err)
 	}
@@ -81,6 +97,11 @@ func InitTradeSession(
 	}
 	client.logger.Info("subscribed to execution events")
 
+	// Start balance polling
+	state.StartBalancePolling(ctx, client, accountId, time.Millisecond*500)
+	client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Millisecond*500))
+
+	// Return callback for making orders
 	return func(order *model.Order) error {
 		if order.Command == model.CmdClose {
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)

@@ -83,16 +83,16 @@ func (client *Client) GetAccountList(ctx context.Context, accessToken string) ([
 	return resp.GetCtidTraderAccount(), nil
 }
 
-func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.Symbol, error) {
+func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.SymbolInfo, error) {
 
 	req := &openapi.ProtoOASymbolsListReq{CtidTraderAccountId: &accountId}
 	resp := &openapi.ProtoOASymbolsListRes{}
 
 	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
-		return model.Symbol{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
+		return model.SymbolInfo{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
 	}
 
-	var symbolInfo model.Symbol
+	var symbolInfo model.SymbolInfo
 
 	for _, s := range resp.GetSymbol() {
 		if strings.ToUpper(s.GetSymbolName()) == strings.ToUpper(symbol) {
@@ -102,24 +102,26 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	}
 
 	if symbolInfo.Id == 0 {
-		return model.Symbol{}, fmt.Errorf("unable to retrieve symbol")
+		return model.SymbolInfo{}, fmt.Errorf("unable to retrieve symbol")
 	}
 
 	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbolInfo.Id}}
 	symbolResp := &openapi.ProtoOASymbolByIdRes{}
 
 	if err := sendReceive(ctx, client.conn, symbolReq, symbolResp); err != nil {
-		return model.Symbol{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
+		return model.SymbolInfo{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
 	}
 
 	for _, s := range symbolResp.GetSymbol() {
 		if s.GetSymbolId() == symbolInfo.Id {
 			symbolInfo.Digits = int(s.GetDigits())
+			symbolInfo.LotSize = utility.NewFixedFromInt(s.GetLotSize(), 2) // Lot Size is in cents
+			symbolInfo.DenominationUnit = s.GetMeasurementUnits()
 			return symbolInfo, nil
 		}
 	}
 
-	return model.Symbol{}, errors.New("symbol not found")
+	return model.SymbolInfo{}, errors.New("symbol not found")
 }
 
 func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, accessToken string) error {
@@ -146,7 +148,7 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (utility.
 	return utility.NewFixedFromInt(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
-func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.Symbol, period time.Duration, cb func(*openapi.ProtoMessage)) error {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.SymbolInfo, period time.Duration, cb func(*openapi.ProtoMessage)) error {
 
 	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbol.Id}}
 	spotsResp := &openapi.ProtoOASubscribeSpotsRes{}
@@ -199,7 +201,7 @@ func (client *Client) ClosePosition(ctx context.Context, accountId, positionId i
 func (client *Client) OpenPosition(
 	ctx context.Context,
 	accountId int64,
-	symbolInfo model.Symbol,
+	symbolInfo model.SymbolInfo,
 	openPrice, size, stopLoss, takeProfit utility.Fixed,
 	orderType model.OrderType) error {
 

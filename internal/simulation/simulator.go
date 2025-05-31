@@ -235,14 +235,14 @@ func (simulator *Simulator) shouldClosePosition(position *model.Position, tick *
 
 	if position.IsLong() {
 		// Long, check if take profit or stop loss has been reached
-		if (!position.TakeProfit.IsZero() && position.TakeProfit.Gte(tick.Bid)) ||
-			(!position.StopLoss.IsZero() && position.StopLoss.Lte(tick.Bid)) {
+		if (!position.TakeProfit.IsZero() && tick.Bid.Gte(position.TakeProfit)) ||
+			(!position.StopLoss.IsZero() && tick.Bid.Lte(position.StopLoss)) {
 			return true
 		}
 	} else if position.IsShort() {
 		// Short, check if take profit or stop loss has been reached
-		if (!position.TakeProfit.IsZero() && position.TakeProfit.Lte(tick.Ask)) ||
-			(!position.StopLoss.IsZero() && position.StopLoss.Gte(tick.Ask)) {
+		if (!position.TakeProfit.IsZero() && tick.Ask.Lte(position.TakeProfit)) ||
+			(!position.StopLoss.IsZero() && tick.Ask.Gte(position.StopLoss)) {
 			return true
 		}
 	}

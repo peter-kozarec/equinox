@@ -38,7 +38,6 @@ type Router struct {
 	postFails     uint64
 	dispatchCount uint64
 	dispatchFails uint64
-	cycles        uint64
 }
 
 func NewRouter(logger *zap.Logger, eventCapacity int) *Router {
@@ -60,7 +59,7 @@ func (router *Router) Post(id EventId, data interface{}) error {
 	}
 }
 
-func (router *Router) Exec(ctx context.Context, cycle time.Duration) {
+func (router *Router) Exec(ctx context.Context) {
 
 	router.runTime = 0
 	router.dispatchCount = 0
@@ -86,8 +85,6 @@ func (router *Router) Exec(ctx context.Context, cycle time.Duration) {
 					zap.Error(err),
 					zap.Any("event", ev))
 			}
-		case <-time.After(cycle): // optional heartbeat
-			router.cycles++
 		}
 	}
 }
@@ -99,7 +96,6 @@ func (router *Router) ExecLoop(ctx context.Context, executorLoop func(context.Co
 	router.dispatchFails = 0
 	router.postCount = 0
 	router.postFails = 0
-	router.cycles = 0
 
 	start := time.Now()
 	defer func() {
@@ -120,7 +116,6 @@ func (router *Router) ExecLoop(ctx context.Context, executorLoop func(context.Co
 					zap.Any("event", ev))
 			}
 		default:
-			router.cycles++
 			if err := executorLoop(ctx); err != nil {
 				router.done <- err
 				return
@@ -140,8 +135,7 @@ func (router *Router) PrintStatistics() {
 		zap.Uint64("post_fails", router.postFails),
 		zap.Uint64("dispatch_count", router.dispatchCount),
 		zap.Uint64("dispatch_fails", router.dispatchFails),
-		zap.Float64("throughput", float64(router.postCount)/router.runTime.Seconds()),
-		zap.Uint64("cycles", router.cycles))
+		zap.Float64("throughput", float64(router.postCount)/router.runTime.Seconds()))
 }
 
 func (router *Router) dispatch(ev event) error {

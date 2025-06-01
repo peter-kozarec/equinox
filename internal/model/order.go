@@ -2,7 +2,7 @@ package model
 
 import (
 	"go.uber.org/zap/zapcore"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 )
 
 type OrderType int
@@ -24,10 +24,10 @@ type Order struct {
 	Command    Command
 	OrderType  OrderType
 	PositionId PositionId
-	Price      utility.Fixed
-	Size       utility.Fixed
-	StopLoss   utility.Fixed
-	TakeProfit utility.Fixed
+	Price      fixed.Point
+	Size       fixed.Point
+	StopLoss   fixed.Point
+	TakeProfit fixed.Point
 }
 
 func (order *Order) MarshalLogObject(enc zapcore.ObjectEncoder) error {

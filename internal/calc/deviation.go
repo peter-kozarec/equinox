@@ -1,11 +1,11 @@
 package calc
 
 import (
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 )
 
-func DownsideDeviation(returns []utility.Fixed, riskFreeRate utility.Fixed) utility.Fixed {
-	var sum utility.Fixed
+func DownsideDeviation(returns []fixed.Point, riskFreeRate fixed.Point) fixed.Point {
+	var sum fixed.Point
 	var count int
 	for _, r := range returns {
 		if r.Lt(riskFreeRate) {
@@ -15,13 +15,13 @@ func DownsideDeviation(returns []utility.Fixed, riskFreeRate utility.Fixed) util
 		}
 	}
 	if count == 0 {
-		return utility.ZeroFixed
+		return fixed.Zero
 	}
 	return sum.DivInt(count).Sqrt()
 }
 
-func StandardDeviation(returns []utility.Fixed, mean utility.Fixed) utility.Fixed {
-	var sum utility.Fixed
+func StandardDeviation(returns []fixed.Point, mean fixed.Point) fixed.Point {
+	var sum fixed.Point
 	for _, r := range returns {
 		diff := r.Sub(mean)
 		sum = sum.Add(diff.Mul(diff))

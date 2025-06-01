@@ -1,13 +1,13 @@
 package cfg
 
 import (
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
-var LotValue = utility.MustNewFixed(10, 0)
-var PipSize = utility.MustNewFixed(1, 4)
-var CommissionPerLot = utility.MustNewFixed(3, 0)
-var PipSlippage = utility.MustNewFixed(10, 5)
+var LotValue = fixed.New(10, 0)
+var PipSize = fixed.New(1, 4)
+var CommissionPerLot = fixed.New(3, 0)
+var PipSlippage = fixed.New(10, 5)
 var BarPeriod = time.Minute
-var StartBalance = utility.TenThousandFixed
+var StartBalance = fixed.New(10000, 0)

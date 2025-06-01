@@ -1,8 +1,10 @@
 package calc
 
-import "peter-kozarec/equinox/internal/utility"
+import (
+	"peter-kozarec/equinox/internal/utility/fixed"
+)
 
-func SharpeRatio(returns []utility.Fixed, riskFreeRate utility.Fixed) utility.Fixed {
+func SharpeRatio(returns []fixed.Point, riskFreeRate fixed.Point) fixed.Point {
 	mean := Mean(returns)
 	volatility := StandardDeviation(returns, mean)
 	return mean.Sub(riskFreeRate).Div(volatility)

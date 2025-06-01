@@ -8,7 +8,7 @@ import (
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"sync"
 	"time"
 )
@@ -27,8 +27,8 @@ type State struct {
 
 	balanceMu   sync.Mutex
 	postBalance bool
-	balance     utility.Fixed
-	equity      utility.Fixed
+	balance     fixed.Point
+	equity      fixed.Point
 }
 
 func NewState(router *bus.Router, logger *zap.Logger, symbolInfo model.SymbolInfo, barPeriod time.Duration) *State {
@@ -51,18 +51,18 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := model.Tick{}
-	internalTick.Ask = utility.NewFixedFromUInt(v.GetAsk(), state.symbolInfo.Digits)
-	internalTick.Bid = utility.NewFixedFromUInt(v.GetBid(), state.symbolInfo.Digits)
+	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.symbolInfo.Digits)
+	internalTick.Bid = fixed.FromUint(v.GetBid(), state.symbolInfo.Digits)
 	internalTick.TimeStamp = v.GetTimestamp()
 
-	if internalTick.Ask.Eq(utility.ZeroFixed) {
-		if state.lastTick.Ask.Eq(utility.ZeroFixed) {
+	if internalTick.Ask.Eq(fixed.Zero) {
+		if state.lastTick.Ask.Eq(fixed.Zero) {
 			return
 		}
 		internalTick.Ask = state.lastTick.Ask
 	}
-	if internalTick.Bid.Eq(utility.ZeroFixed) {
-		if state.lastTick.Bid.Eq(utility.ZeroFixed) {
+	if internalTick.Bid.Eq(fixed.Zero) {
+		if state.lastTick.Bid.Eq(fixed.Zero) {
 			return
 		}
 		internalTick.Bid = state.lastTick.Bid
@@ -98,10 +98,10 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	var internalBar model.Bar
 	internalBar.Period = state.barPeriod
 	internalBar.TimeStamp = lastBarTimeStamp
-	internalBar.Low = utility.NewFixedFromInt(lastBar.GetLow(), state.symbolInfo.Digits)
-	internalBar.High = internalBar.Low.Add(utility.NewFixedFromUInt(lastBar.GetDeltaHigh(), state.symbolInfo.Digits))
-	internalBar.Close = internalBar.Low.Add(utility.NewFixedFromUInt(lastBar.GetDeltaClose(), state.symbolInfo.Digits))
-	internalBar.Open = internalBar.Low.Add(utility.NewFixedFromUInt(lastBar.GetDeltaOpen(), state.symbolInfo.Digits))
+	internalBar.Low = fixed.New(lastBar.GetLow(), state.symbolInfo.Digits)
+	internalBar.High = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaHigh(), state.symbolInfo.Digits))
+	internalBar.Close = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaClose(), state.symbolInfo.Digits))
+	internalBar.Open = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaOpen(), state.symbolInfo.Digits))
 	internalBar.Volume = lastBar.GetVolume()
 	state.lastBar = internalBar
 }
@@ -159,11 +159,11 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 		internalPosition.Id = model.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
-		internalPosition.OpenPrice = utility.NewFixedFromFloat64(position.GetPrice())
+		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
 		internalPosition.State = model.PendingOpen
-		internalPosition.StopLoss = utility.NewFixedFromFloat64(position.GetStopLoss())
-		internalPosition.TakeProfit = utility.NewFixedFromFloat64(position.GetTakeProfit())
-		internalPosition.Size = utility.NewFixedFromInt(position.TradeData.GetVolume(), 2)
+		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
+		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
+		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
@@ -191,11 +191,11 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 
 		internalPosition.Id = model.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
-		internalPosition.OpenPrice = utility.NewFixedFromFloat64(position.GetPrice())
+		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
 		internalPosition.State = model.Opened
-		internalPosition.StopLoss = utility.NewFixedFromFloat64(position.GetStopLoss())
-		internalPosition.TakeProfit = utility.NewFixedFromFloat64(position.GetTakeProfit())
-		internalPosition.Size = utility.NewFixedFromInt(position.TradeData.GetVolume(), 2)
+		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
+		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
+		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
@@ -292,7 +292,7 @@ func (state *State) calcEquity() {
 	}
 }
 
-func (state *State) setBalance(newBalance utility.Fixed) {
+func (state *State) setBalance(newBalance fixed.Point) {
 	state.balanceMu.Lock()
 	state.balance = newBalance
 	if state.postBalance {
@@ -304,7 +304,7 @@ func (state *State) setBalance(newBalance utility.Fixed) {
 	state.balanceMu.Unlock()
 }
 
-func (state *State) getBalance(balance *utility.Fixed) {
+func (state *State) getBalance(balance *fixed.Point) {
 	state.balanceMu.Lock()
 	*balance = state.balance
 	state.balanceMu.Unlock()

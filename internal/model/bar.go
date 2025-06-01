@@ -2,17 +2,17 @@ package model
 
 import (
 	"go.uber.org/zap/zapcore"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
 type Bar struct {
 	Period    time.Duration
 	TimeStamp int64
-	Open      utility.Fixed
-	High      utility.Fixed
-	Low       utility.Fixed
-	Close     utility.Fixed
+	Open      fixed.Point
+	High      fixed.Point
+	Low       fixed.Point
+	Close     fixed.Point
 	Volume    int64
 }
 

@@ -3,32 +3,32 @@ package simulation
 import (
 	"fmt"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
 type Report struct {
 	StartDate            time.Time
 	EndDate              time.Time
-	InitialEquity        utility.Fixed
-	FinalEquity          utility.Fixed
-	TotalProfit          utility.Fixed
-	AnnualizedReturn     utility.Fixed
-	MaxDrawdown          utility.Fixed
+	InitialEquity        fixed.Point
+	FinalEquity          fixed.Point
+	TotalProfit          fixed.Point
+	AnnualizedReturn     fixed.Point
+	MaxDrawdown          fixed.Point
 	TotalTrades          int
 	WinningTrades        int
 	LosingTrades         int
-	WinRate              utility.Fixed
-	Expectancy           utility.Fixed
-	ProfitFactor         utility.Fixed
-	AverageWin           utility.Fixed
-	AverageLoss          utility.Fixed
-	RiskRewardRatio      utility.Fixed
+	WinRate              fixed.Point
+	Expectancy           fixed.Point
+	ProfitFactor         fixed.Point
+	AverageWin           fixed.Point
+	AverageLoss          fixed.Point
+	RiskRewardRatio      fixed.Point
 	AverageTradeDuration time.Duration
-	RecoveryFactor       utility.Fixed
-	SharpeRatio          utility.Fixed
-	SortinoRatio         utility.Fixed
-	AnnualizedVolatility utility.Fixed
+	RecoveryFactor       fixed.Point
+	SharpeRatio          fixed.Point
+	SortinoRatio         fixed.Point
+	AnnualizedVolatility fixed.Point
 }
 
 func (report Report) Print(logger *zap.Logger) {

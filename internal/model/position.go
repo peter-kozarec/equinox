@@ -2,7 +2,7 @@ package model
 
 import (
 	"go.uber.org/zap/zapcore"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
@@ -23,24 +23,24 @@ const (
 type Position struct {
 	Id          PositionId
 	State       State
-	GrossProfit utility.Fixed
-	NetProfit   utility.Fixed
-	PipPnL      utility.Fixed
-	OpenPrice   utility.Fixed
-	ClosePrice  utility.Fixed
+	GrossProfit fixed.Point
+	NetProfit   fixed.Point
+	PipPnL      fixed.Point
+	OpenPrice   fixed.Point
+	ClosePrice  fixed.Point
 	OpenTime    time.Time
 	CloseTime   time.Time
-	Size        utility.Fixed
-	StopLoss    utility.Fixed
-	TakeProfit  utility.Fixed
+	Size        fixed.Point
+	StopLoss    fixed.Point
+	TakeProfit  fixed.Point
 }
 
 func (position *Position) IsLong() bool {
-	return position.Size.Gt(utility.ZeroFixed)
+	return position.Size.Gt(fixed.Zero)
 }
 
 func (position *Position) IsShort() bool {
-	return position.Size.Lt(utility.ZeroFixed)
+	return position.Size.Lt(fixed.Zero)
 }
 
 func (position *Position) MarshalLogObject(enc zapcore.ObjectEncoder) error {

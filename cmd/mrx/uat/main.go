@@ -18,7 +18,12 @@ import (
 
 func main() {
 	logger := dbg.NewProdLogger()
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		err := logger.Sync()
+		if err != nil {
+			panic(err)
+		}
+	}(logger)
 
 	logger.Info("MRX started", zap.String("environment", "uat"), zap.String("version", mrx.Version))
 	defer logger.Info("MRX finished")
@@ -56,7 +61,7 @@ func main() {
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(strategy.OnPositionPnlUpdated)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(orderHandler)
 
-	go router.Exec(ctx, time.Millisecond)
+	go router.Exec(ctx)
 
 	defer router.PrintStatistics()
 	defer telemetry.PrintStatistics()

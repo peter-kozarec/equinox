@@ -1,22 +1,19 @@
 package model
 
 import (
-	"github.com/govalues/decimal"
 	"go.uber.org/zap/zapcore"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 )
-
-var decimalTwo, _ = decimal.New(2, 0)
 
 type Tick struct {
 	TimeStamp int64 // Unix NanoSeconds
-	Ask       utility.Fixed
-	Bid       utility.Fixed
+	Ask       fixed.Point
+	Bid       fixed.Point
 	AskVolume int64
 	BidVolume int64
 }
 
-func (tick Tick) Average() utility.Fixed {
+func (tick Tick) Average() fixed.Point {
 	return tick.Ask.Add(tick.Bid).DivInt(2)
 }
 

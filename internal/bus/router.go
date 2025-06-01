@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
@@ -153,13 +153,13 @@ func (router *Router) dispatch(ev event) error {
 		}
 		return router.BarHandler(bar)
 	case EquityEvent:
-		eq, ok := ev.data.(*utility.Fixed)
+		eq, ok := ev.data.(*fixed.Point)
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
 		return router.EquityHandler(eq)
 	case BalanceEvent:
-		bal, ok := ev.data.(*utility.Fixed)
+		bal, ok := ev.data.(*fixed.Point)
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
 		}

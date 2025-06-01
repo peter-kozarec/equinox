@@ -6,7 +6,7 @@ import (
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/cfg"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
 )
 
@@ -16,8 +16,8 @@ type Simulator struct {
 	aggregator *Aggregator
 	audit      *Audit
 
-	equity  utility.Fixed
-	balance utility.Fixed
+	equity  fixed.Point
+	balance fixed.Point
 
 	simulationTime time.Time
 	lastTick       model.Tick
@@ -26,10 +26,10 @@ type Simulator struct {
 	openPositions     []*model.Position
 	openOrders        []*model.Order
 
-	slippage    utility.Fixed
-	commissions utility.Fixed
-	lotValue    utility.Fixed
-	pipSize     utility.Fixed
+	slippage    fixed.Point
+	commissions fixed.Point
+	lotValue    fixed.Point
+	pipSize     fixed.Point
 }
 
 func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit) *Simulator {
@@ -191,7 +191,7 @@ func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit utility.Fixed) error {
+func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) error {
 
 	simulator.positionIdCounter++
 	simulator.openPositions = append(simulator.openPositions, &model.Position{
@@ -204,7 +204,7 @@ func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit utility.
 	return nil
 }
 
-func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit utility.Fixed) error {
+func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit fixed.Point) error {
 
 	for idx := range simulator.openPositions {
 		position := simulator.openPositions[idx]
@@ -218,14 +218,14 @@ func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takePr
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) shouldOpenPosition(price, size utility.Fixed, tick *model.Tick) bool {
+func (simulator *Simulator) shouldOpenPosition(price, size fixed.Point, tick *model.Tick) bool {
 
 	// For long limit: trigger when Ask <= limit price
-	if size.Gt(utility.ZeroFixed) && tick.Ask.Lte(price) {
+	if size.Gt(fixed.Zero) && tick.Ask.Lte(price) {
 		return true
 	}
 	// For short limit: trigger when Bid >= limit price
-	if size.Lt(utility.ZeroFixed) && tick.Bid.Gte(price) {
+	if size.Lt(fixed.Zero) && tick.Bid.Gte(price) {
 		return true
 	}
 	return false
@@ -295,8 +295,8 @@ func (simulator *Simulator) processPendingChanges(tick *model.Tick) {
 	simulator.openPositions = tmpOpenPositions
 }
 
-func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice utility.Fixed) {
-	var pipPnL utility.Fixed
+func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
+	var pipPnL fixed.Point
 	if position.IsLong() {
 		pipPnL = closePrice.Sub(position.OpenPrice)
 	} else {

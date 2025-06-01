@@ -4,7 +4,7 @@ import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 )
 
 type Strategy struct {
@@ -35,8 +35,8 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 
 	// Calculate mean and standard deviation of Close prices
 	var (
-		sum    utility.Fixed
-		closes []utility.Fixed
+		sum    fixed.Point
+		closes []fixed.Point
 	)
 	for _, b := range s.barHistory {
 		sum = sum.Add(b.Close)
@@ -44,7 +44,7 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 	}
 	mean := sum.DivInt(len(s.barHistory))
 
-	variance := utility.ZeroFixed
+	variance := fixed.Zero
 	for _, c := range closes {
 		diff := c.Sub(mean)
 		variance = variance.Add(diff.Mul(diff))
@@ -56,7 +56,7 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 		order := model.Order{
 			Command:   model.CmdOpen,
 			OrderType: model.Market,
-			Size:      utility.MustNewFixed(1, 2),
+			Size:      fixed.New(1, 2),
 		}
 		_ = s.router.Post(bus.OrderEvent, &order)
 		s.inPosition = true
@@ -69,7 +69,7 @@ func (s *Strategy) OnBar(bar *model.Bar) error {
 			Command:    model.CmdClose,
 			OrderType:  model.Market,
 			PositionId: s.positionId,
-			Size:       utility.MustNewFixed(1, 2),
+			Size:       fixed.New(1, 2),
 		}
 		_ = s.router.Post(bus.OrderEvent, &order)
 		s.inPosition = false
@@ -84,6 +84,6 @@ func (s *Strategy) OnPositionOpened(position *model.Position) error {
 }
 func (s *Strategy) OnPositionClosed(_ *model.Position) error     { return nil }
 func (s *Strategy) OnTick(_ *model.Tick) error                   { return nil }
-func (s *Strategy) OnBalance(_ *utility.Fixed) error             { return nil }
-func (s *Strategy) OnEquity(_ *utility.Fixed) error              { return nil }
+func (s *Strategy) OnBalance(_ *fixed.Point) error               { return nil }
+func (s *Strategy) OnEquity(_ *fixed.Point) error                { return nil }
 func (s *Strategy) OnPositionPnlUpdated(_ *model.Position) error { return nil }

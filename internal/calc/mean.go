@@ -1,9 +1,11 @@
 package calc
 
-import "peter-kozarec/equinox/internal/utility"
+import (
+	"peter-kozarec/equinox/internal/utility/fixed"
+)
 
-func Mean(returns []utility.Fixed) utility.Fixed {
-	var sum utility.Fixed
+func Mean(returns []fixed.Point) fixed.Point {
+	var sum fixed.Point
 	for _, r := range returns {
 		sum = sum.Add(r)
 	}

@@ -4,13 +4,12 @@ import (
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 )
 
 type MonitorFlags uint16
 
 const (
-	None         MonitorFlags = 0
 	MonitorTicks MonitorFlags = 1 << iota
 	MonitorBars
 	MonitorEquity
@@ -52,7 +51,7 @@ func (monitor *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler
 }
 
 func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *utility.Fixed) error {
+	return func(equity *fixed.Point) error {
 		if monitor.flags&MonitorEquity != 0 {
 			monitor.logger.Info("equity event", zap.Object("equity", equity))
 		}
@@ -61,7 +60,7 @@ func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEve
 }
 
 func (monitor *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *utility.Fixed) error {
+	return func(balance *fixed.Point) error {
 		if monitor.flags&MonitorBalance != 0 {
 			monitor.logger.Info("balance event", zap.Object("balance", balance))
 		}

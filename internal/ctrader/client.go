@@ -10,7 +10,7 @@ import (
 	"net"
 	"peter-kozarec/equinox/internal/ctrader/openapi"
 	"peter-kozarec/equinox/internal/model"
-	"peter-kozarec/equinox/internal/utility"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"strings"
 	"time"
 )
@@ -115,7 +115,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	for _, s := range symbolResp.GetSymbol() {
 		if s.GetSymbolId() == symbolInfo.Id {
 			symbolInfo.Digits = int(s.GetDigits())
-			symbolInfo.LotSize = utility.NewFixedFromInt(s.GetLotSize(), 2) // Lot Size is in cents
+			symbolInfo.LotSize = fixed.New(s.GetLotSize(), 2) // Lot Size is in cents
 			symbolInfo.DenominationUnit = s.GetMeasurementUnits()
 			return symbolInfo, nil
 		}
@@ -136,16 +136,16 @@ func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, acc
 	return nil
 }
 
-func (client *Client) GetBalance(ctx context.Context, accountId int64) (utility.Fixed, error) {
+func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Point, error) {
 
 	traderReq := &openapi.ProtoOATraderReq{CtidTraderAccountId: &accountId}
 	traderResp := &openapi.ProtoOATraderRes{}
 
 	if err := sendReceive(ctx, client.conn, traderReq, traderResp); err != nil {
-		return utility.Fixed{}, fmt.Errorf("unable to perform trader request: %w", err)
+		return fixed.Point{}, fmt.Errorf("unable to perform trader request: %w", err)
 	}
 
-	return utility.NewFixedFromInt(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
+	return fixed.New(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
 func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.SymbolInfo, period time.Duration, cb func(*openapi.ProtoMessage)) error {
@@ -185,7 +185,7 @@ func (client *Client) GetOpenPositions(ctx context.Context, accountId int64) ([]
 	return resp.GetPosition(), nil
 }
 
-func (client *Client) ClosePosition(ctx context.Context, accountId, positionId int64, size utility.Fixed) error {
+func (client *Client) ClosePosition(ctx context.Context, accountId, positionId int64, size fixed.Point) error {
 
 	vol := int64(size.Abs().MulInt(100).Float64())
 
@@ -202,7 +202,7 @@ func (client *Client) OpenPosition(
 	ctx context.Context,
 	accountId int64,
 	symbolInfo model.SymbolInfo,
-	openPrice, size, stopLoss, takeProfit utility.Fixed,
+	openPrice, size, stopLoss, takeProfit fixed.Point,
 	orderType model.OrderType) error {
 
 	var limitPrice, sl, tp *float64 = nil, nil, nil
@@ -218,7 +218,7 @@ func (client *Client) OpenPosition(
 	}
 
 	var ts openapi.ProtoOATradeSide
-	if size.Gt(utility.ZeroFixed) {
+	if size.Gt(fixed.Zero) {
 		ts = openapi.ProtoOATradeSide_BUY
 	} else {
 		ts = openapi.ProtoOATradeSide_SELL

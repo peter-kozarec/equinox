@@ -304,7 +304,6 @@ func (simulator *Simulator) calcPositionProfits(position *model.Position, closeP
 	}
 
 	pipPnL = pipPnL.Sub(simulator.slippage.MulInt64(2)) // round-trip slippage
-	position.PipPnL = pipPnL
 
 	// Clean profit calculation: USD = pipPnL / pipSize × lot size × $10
 	pips := pipPnL.Div(simulator.pipSize)

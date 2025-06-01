@@ -25,7 +25,6 @@ type Position struct {
 	State       State
 	GrossProfit fixed.Point
 	NetProfit   fixed.Point
-	PipPnL      fixed.Point
 	OpenPrice   fixed.Point
 	ClosePrice  fixed.Point
 	OpenTime    time.Time
@@ -48,7 +47,6 @@ func (position *Position) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddInt("state", int(position.State))
 	enc.AddString("gross_profit", position.GrossProfit.String())
 	enc.AddString("net_profit", position.NetProfit.String())
-	enc.AddString("pip_pnl", position.PipPnL.String())
 	enc.AddString("open_price", position.OpenPrice.String())
 	enc.AddString("close_price", position.ClosePrice.String())
 	enc.AddString("open_time", position.OpenTime.String())

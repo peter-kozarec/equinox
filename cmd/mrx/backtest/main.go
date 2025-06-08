@@ -11,7 +11,6 @@ import (
 	"peter-kozarec/equinox/cmd/mrx/advisor"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/data/mapper"
-	"peter-kozarec/equinox/internal/dbg"
 	"peter-kozarec/equinox/internal/middleware"
 	"peter-kozarec/equinox/internal/simulation"
 	"syscall"
@@ -19,7 +18,7 @@ import (
 )
 
 func main() {
-	logger := dbg.NewDevLogger()
+	logger, _ := zap.NewDevelopment()
 	defer func() {
 		if err := logger.Sync(); err != nil {
 			fmt.Println("Failed to sync logger:", err)

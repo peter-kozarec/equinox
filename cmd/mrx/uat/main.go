@@ -10,14 +10,13 @@ import (
 	"peter-kozarec/equinox/cmd/mrx/advisor"
 	"peter-kozarec/equinox/internal/bus"
 	"peter-kozarec/equinox/internal/ctrader"
-	"peter-kozarec/equinox/internal/dbg"
 	"peter-kozarec/equinox/internal/middleware"
 	"syscall"
 	"time"
 )
 
 func main() {
-	logger := dbg.NewProdLogger()
+	logger, _ := zap.NewDevelopment()
 	defer func(logger *zap.Logger) {
 		err := logger.Sync()
 		if err != nil {

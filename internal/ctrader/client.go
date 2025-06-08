@@ -83,45 +83,45 @@ func (client *Client) GetAccountList(ctx context.Context, accessToken string) ([
 	return resp.GetCtidTraderAccount(), nil
 }
 
-func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.SymbolInfo, error) {
+func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.Instrument, error) {
 
 	req := &openapi.ProtoOASymbolsListReq{CtidTraderAccountId: &accountId}
 	resp := &openapi.ProtoOASymbolsListRes{}
 
 	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
-		return model.SymbolInfo{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
+		return model.Instrument{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
 	}
 
-	var symbolInfo model.SymbolInfo
+	var instrument model.Instrument
 
 	for _, s := range resp.GetSymbol() {
 		if strings.ToUpper(s.GetSymbolName()) == strings.ToUpper(symbol) {
-			symbolInfo.Id = s.GetSymbolId()
+			instrument.Id = s.GetSymbolId()
 			break
 		}
 	}
 
-	if symbolInfo.Id == 0 {
-		return model.SymbolInfo{}, fmt.Errorf("unable to retrieve symbol")
+	if instrument.Id == 0 {
+		return model.Instrument{}, fmt.Errorf("unable to retrieve symbol")
 	}
 
-	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbolInfo.Id}}
+	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}}
 	symbolResp := &openapi.ProtoOASymbolByIdRes{}
 
 	if err := sendReceive(ctx, client.conn, symbolReq, symbolResp); err != nil {
-		return model.SymbolInfo{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
+		return model.Instrument{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
 	}
 
 	for _, s := range symbolResp.GetSymbol() {
-		if s.GetSymbolId() == symbolInfo.Id {
-			symbolInfo.Digits = int(s.GetDigits())
-			symbolInfo.LotSize = fixed.New(s.GetLotSize(), 2) // Lot Size is in cents
-			symbolInfo.DenominationUnit = s.GetMeasurementUnits()
-			return symbolInfo, nil
+		if s.GetSymbolId() == instrument.Id {
+			instrument.Digits = int(s.GetDigits())
+			instrument.LotSize = fixed.New(s.GetLotSize(), 2) // Lot Size is in cents
+			instrument.DenominationUnit = s.GetMeasurementUnits()
+			return instrument, nil
 		}
 	}
 
-	return model.SymbolInfo{}, errors.New("symbol not found")
+	return model.Instrument{}, errors.New("symbol not found")
 }
 
 func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, accessToken string) error {
@@ -148,9 +148,9 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 	return fixed.New(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
-func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbol model.SymbolInfo, period time.Duration, cb func(*openapi.ProtoMessage)) error {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument model.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
 
-	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbol.Id}}
+	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}}
 	spotsResp := &openapi.ProtoOASubscribeSpotsRes{}
 
 	if err := sendReceive(ctx, client.conn, spotsReq, spotsResp); err != nil {
@@ -158,7 +158,7 @@ func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbo
 	}
 
 	periodMinutes := openapi.ProtoOATrendbarPeriod(int32(period.Minutes()))
-	barsReq := &openapi.ProtoOASubscribeLiveTrendbarReq{CtidTraderAccountId: &accountId, Period: &periodMinutes, SymbolId: &symbol.Id}
+	barsReq := &openapi.ProtoOASubscribeLiveTrendbarReq{CtidTraderAccountId: &accountId, Period: &periodMinutes, SymbolId: &instrument.Id}
 	barsResp := &openapi.ProtoOASubscribeLiveTrendbarRes{}
 
 	if err := sendReceive(ctx, client.conn, barsReq, barsResp); err != nil {
@@ -201,7 +201,7 @@ func (client *Client) ClosePosition(ctx context.Context, accountId, positionId i
 func (client *Client) OpenPosition(
 	ctx context.Context,
 	accountId int64,
-	symbolInfo model.SymbolInfo,
+	instrument model.Instrument,
 	openPrice, size, stopLoss, takeProfit fixed.Point,
 	orderType model.OrderType) error {
 
@@ -237,7 +237,7 @@ func (client *Client) OpenPosition(
 
 	req := &openapi.ProtoOANewOrderReq{
 		CtidTraderAccountId: &accountId,
-		SymbolId:            &symbolInfo.Id,
+		SymbolId:            &instrument.Id,
 		StopLoss:            sl,
 		TakeProfit:          tp,
 		TradeSide:           &ts,

@@ -17,7 +17,7 @@ type State struct {
 	router *bus.Router
 	logger *zap.Logger
 
-	symbolInfo model.SymbolInfo
+	instrument model.Instrument
 	barPeriod  time.Duration
 
 	lastTick model.Tick
@@ -31,11 +31,11 @@ type State struct {
 	equity      fixed.Point
 }
 
-func NewState(router *bus.Router, logger *zap.Logger, symbolInfo model.SymbolInfo, barPeriod time.Duration) *State {
+func NewState(router *bus.Router, logger *zap.Logger, instrument model.Instrument, barPeriod time.Duration) *State {
 	return &State{
 		router:      router,
 		logger:      logger,
-		symbolInfo:  symbolInfo,
+		instrument:  instrument,
 		barPeriod:   barPeriod,
 		postBalance: true, // Post balance on first poll, then only when position is closed
 	}
@@ -51,8 +51,8 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := model.Tick{}
-	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.symbolInfo.Digits)
-	internalTick.Bid = fixed.FromUint(v.GetBid(), state.symbolInfo.Digits)
+	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.instrument.Digits)
+	internalTick.Bid = fixed.FromUint(v.GetBid(), state.instrument.Digits)
 	internalTick.TimeStamp = v.GetTimestamp()
 
 	if internalTick.Ask.Eq(fixed.Zero) {
@@ -98,10 +98,10 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	var internalBar model.Bar
 	internalBar.Period = state.barPeriod
 	internalBar.TimeStamp = lastBarTimeStamp
-	internalBar.Low = fixed.New(lastBar.GetLow(), state.symbolInfo.Digits)
-	internalBar.High = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaHigh(), state.symbolInfo.Digits))
-	internalBar.Close = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaClose(), state.symbolInfo.Digits))
-	internalBar.Open = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaOpen(), state.symbolInfo.Digits))
+	internalBar.Low = fixed.New(lastBar.GetLow(), state.instrument.Digits)
+	internalBar.High = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaHigh(), state.instrument.Digits))
+	internalBar.Close = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaClose(), state.instrument.Digits))
+	internalBar.Open = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaOpen(), state.instrument.Digits))
 	internalBar.Volume = lastBar.GetVolume()
 	state.lastBar = internalBar
 }
@@ -256,9 +256,9 @@ func (state *State) calcPnL() {
 
 		// This is without commissions
 		if position.IsLong() {
-			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.symbolInfo.LotSize).Mul(position.Size.Abs())
+			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.instrument.LotSize).Mul(position.Size.Abs())
 		} else if position.IsShort() {
-			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.symbolInfo.LotSize).Mul(position.Size.Abs())
+			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.instrument.LotSize).Mul(position.Size.Abs())
 		}
 
 		// ToDo: Calc gross profit as well

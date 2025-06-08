@@ -4,7 +4,7 @@ import (
 	"peter-kozarec/equinox/internal/utility/fixed"
 )
 
-type SymbolInfo struct {
+type Instrument struct {
 	Id               int64
 	Digits           int
 	LotSize          fixed.Point

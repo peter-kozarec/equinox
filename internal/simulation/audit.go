@@ -2,9 +2,9 @@ package simulation
 
 import (
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/internal/calc"
 	"peter-kozarec/equinox/internal/model"
 	"peter-kozarec/equinox/internal/utility/fixed"
+	"peter-kozarec/equinox/internal/utility/math"
 	"time"
 )
 
@@ -124,13 +124,13 @@ func (audit *Audit) GenerateReport() Report {
 
 	// --- Risk Metrics: Volatility, Sharpe, Sortino ---
 	dailyReturns := audit.dailyReturns()
-	meanReturn := calc.Mean(dailyReturns)
-	vol := calc.StandardDeviation(dailyReturns, meanReturn)
+	meanReturn := math.Mean(dailyReturns)
+	vol := math.StandardDeviation(dailyReturns, meanReturn)
 
 	if !meanReturn.IsZero() && !vol.IsZero() {
 		report.AnnualizedVolatility = vol.Mul(fixed.Sqrt252).MulInt(100).Rescale(2)
-		report.SharpeRatio = calc.SharpeRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
-		report.SortinoRatio = calc.SortinoRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
+		report.SharpeRatio = math.SharpeRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
+		report.SortinoRatio = math.SortinoRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
 	}
 
 	return report

@@ -47,3 +47,19 @@ func (b *Buffer[T]) Get(idx uint) T {
 func (b *Buffer[T]) IsFull() bool {
 	return b.size == b.capacity
 }
+
+func (b *Buffer[T]) IsEmpty() bool {
+	return b.size == 0
+}
+
+func (b *Buffer[T]) Data() []T {
+	if b.size == 0 {
+		return nil
+	}
+	result := make([]T, b.size)
+	start := (b.head + b.capacity - b.size) % b.capacity
+	for i := uint(0); i < b.size; i++ {
+		result[i] = b.data[(start+i)%b.capacity]
+	}
+	return result
+}

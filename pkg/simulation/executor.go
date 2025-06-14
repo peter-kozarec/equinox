@@ -52,7 +52,7 @@ func (e *Executor) Feed(_ context.Context) error {
 	e.binaryTick.ToModelTick(&e.tick)
 
 	// Feed ticks to simulation
-	if e.lastErr = e.simulator.OnTick(&e.tick); e.lastErr != nil {
+	if e.lastErr = e.simulator.OnTick(e.tick); e.lastErr != nil {
 		return e.lastErr
 	}
 

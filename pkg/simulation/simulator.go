@@ -53,19 +53,19 @@ func (simulator *Simulator) OnOrder(order *model.Order) {
 	simulator.openOrders = append(simulator.openOrders, order)
 }
 
-func (simulator *Simulator) OnTick(tick *model.Tick) error {
+func (simulator *Simulator) OnTick(tick model.Tick) error {
 
 	// Set simulation time from processed tick
 	simulator.simulationTime = time.Unix(0, tick.TimeStamp)
-	simulator.lastTick = *tick
+	simulator.lastTick = tick
 
 	// Store balance and equity before processing the tick
 	lastBalance := simulator.balance
 	lastEquity := simulator.equity
 
-	simulator.checkPositions(tick)
-	simulator.checkOrders(tick)
-	simulator.processPendingChanges(tick)
+	simulator.checkPositions(&tick)
+	simulator.checkOrders(&tick)
+	simulator.processPendingChanges(&tick)
 
 	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != simulator.balance {
@@ -86,7 +86,7 @@ func (simulator *Simulator) OnTick(tick *model.Tick) error {
 		simulator.logger.Error("unable to post tick event", zap.Error(err))
 	}
 
-	if err := simulator.aggregator.OnTick(tick); err != nil {
+	if err := simulator.aggregator.OnTick(&tick); err != nil {
 		simulator.logger.Warn("unable to aggregate ticks", zap.Error(err))
 	}
 

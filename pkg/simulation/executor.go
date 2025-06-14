@@ -18,7 +18,6 @@ type Executor struct {
 	idx  int64
 
 	binaryTick mapper.BinaryTick
-	tick       model.Tick
 	lastErr    error
 }
 
@@ -49,10 +48,11 @@ func (e *Executor) Feed(_ context.Context) error {
 		return mapper.EOF
 	}
 
-	e.binaryTick.ToModelTick(&e.tick)
+	var tick model.Tick
+	e.binaryTick.ToModelTick(&tick)
 
 	// Feed ticks to simulation
-	if e.lastErr = e.simulator.OnTick(e.tick); e.lastErr != nil {
+	if e.lastErr = e.simulator.OnTick(tick); e.lastErr != nil {
 		return e.lastErr
 	}
 

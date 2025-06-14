@@ -86,7 +86,7 @@ func (simulator *Simulator) OnTick(tick model.Tick) error {
 		simulator.logger.Error("unable to post tick event", zap.Error(err))
 	}
 
-	if err := simulator.aggregator.OnTick(&tick); err != nil {
+	if err := simulator.aggregator.OnTick(tick); err != nil {
 		simulator.logger.Warn("unable to aggregate ticks", zap.Error(err))
 	}
 

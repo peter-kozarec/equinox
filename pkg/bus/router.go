@@ -145,11 +145,19 @@ func (router *Router) dispatch(ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for tick event")
 		}
+		if router.TickHandler == nil {
+			router.logger.Debug("tick handler is nil")
+			return nil
+		}
 		return router.TickHandler(tick)
 	case BarEvent:
 		bar, ok := ev.data.(*model.Bar)
 		if !ok {
 			return errors.New("invalid type assertion for bar event")
+		}
+		if router.BarHandler == nil {
+			router.logger.Debug("bar handler is nil")
+			return nil
 		}
 		return router.BarHandler(bar)
 	case EquityEvent:
@@ -157,11 +165,19 @@ func (router *Router) dispatch(ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
+		if router.EquityHandler == nil {
+			router.logger.Debug("equity handler is nil")
+			return nil
+		}
 		return router.EquityHandler(eq)
 	case BalanceEvent:
 		bal, ok := ev.data.(*fixed.Point)
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
+		}
+		if router.BalanceHandler == nil {
+			router.logger.Debug("balance handler is nil")
+			return nil
 		}
 		return router.BalanceHandler(bal)
 	case PositionOpenedEvent:
@@ -169,11 +185,19 @@ func (router *Router) dispatch(ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for position opened event")
 		}
+		if router.PositionOpenedHandler == nil {
+			router.logger.Debug("position opened handler is nil")
+			return nil
+		}
 		return router.PositionOpenedHandler(pos)
 	case PositionClosedEvent:
 		pos, ok := ev.data.(*model.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position closed event")
+		}
+		if router.PositionClosedHandler == nil {
+			router.logger.Debug("position closed handler is nil")
+			return nil
 		}
 		return router.PositionClosedHandler(pos)
 	case PositionPnLUpdatedEvent:
@@ -181,11 +205,19 @@ func (router *Router) dispatch(ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for position pnl updated event")
 		}
+		if router.PositionPnLUpdatedHandler == nil {
+			router.logger.Debug("position pnl updated handler is nil")
+			return nil
+		}
 		return router.PositionPnLUpdatedHandler(pos)
 	case OrderEvent:
 		order, ok := ev.data.(*model.Order)
 		if !ok {
 			return errors.New("invalid type assertion for order event")
+		}
+		if router.OrderHandler == nil {
+			router.logger.Debug("order handler is nil")
+			return nil
 		}
 		return router.OrderHandler(order)
 	default:

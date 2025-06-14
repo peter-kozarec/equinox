@@ -27,56 +27,56 @@ func NewTelemetry(logger *zap.Logger) *Telemetry {
 }
 
 func (telemetry *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick *model.Tick) {
+	return func(tick model.Tick) {
 		telemetry.tickEventCounter++
 		handler(tick)
 	}
 }
 
 func (telemetry *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar *model.Bar) {
+	return func(bar model.Bar) {
 		telemetry.barEventCounter++
 		handler(bar)
 	}
 }
 
 func (telemetry *Telemetry) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *fixed.Point) {
+	return func(balance fixed.Point) {
 		telemetry.balanceEventCounter++
 		handler(balance)
 	}
 }
 
 func (telemetry *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *fixed.Point) {
+	return func(equity fixed.Point) {
 		telemetry.equityEventCounter++
 		handler(equity)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		telemetry.positionOpenedEventCounter++
 		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		telemetry.positionClosedEventCounter++
 		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		telemetry.positionPnLUpdatedEventCounter++
 		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order *model.Order) {
+	return func(order model.Order) {
 		telemetry.orderEventCounter++
 		handler(order)
 	}

@@ -34,72 +34,72 @@ func NewMonitor(logger *zap.Logger, flags MonitorFlags) *Monitor {
 }
 
 func (monitor *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick *model.Tick) {
+	return func(tick model.Tick) {
 		if monitor.flags&MonitorTicks != 0 {
-			monitor.logger.Info("event", zap.Object("tick", tick))
+			monitor.logger.Info("event", zap.Any("tick", tick))
 		}
 		handler(tick)
 	}
 }
 
 func (monitor *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar *model.Bar) {
+	return func(bar model.Bar) {
 		if monitor.flags&MonitorBars != 0 {
-			monitor.logger.Info("bar event", zap.Object("bar", bar))
+			monitor.logger.Info("bar event", zap.Any("bar", bar))
 		}
 		handler(bar)
 	}
 }
 
 func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *fixed.Point) {
+	return func(equity fixed.Point) {
 		if monitor.flags&MonitorEquity != 0 {
-			monitor.logger.Info("equity event", zap.Object("equity", equity))
+			monitor.logger.Info("equity event", zap.Any("equity", equity))
 		}
 		handler(equity)
 	}
 }
 
 func (monitor *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *fixed.Point) {
+	return func(balance fixed.Point) {
 		if monitor.flags&MonitorBalance != 0 {
-			monitor.logger.Info("balance event", zap.Object("balance", balance))
+			monitor.logger.Info("balance event", zap.Any("balance", balance))
 		}
 		handler(balance)
 	}
 }
 
 func (monitor *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		if monitor.flags&MonitorPositionsOpened != 0 {
-			monitor.logger.Info("position opened event", zap.Object("position", position))
+			monitor.logger.Info("position opened event", zap.Any("position", position))
 		}
 		handler(position)
 	}
 }
 
 func (monitor *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		if monitor.flags&MonitorPositionsClosed != 0 {
-			monitor.logger.Info("position closed event", zap.Object("position", position))
+			monitor.logger.Info("position closed event", zap.Any("position", position))
 		}
 		handler(position)
 	}
 }
 
 func (monitor *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position *model.Position) {
+	return func(position model.Position) {
 		if monitor.flags&MonitorPositionsPnLUpdated != 0 {
-			monitor.logger.Info("position pnl updated event", zap.Object("position", position))
+			monitor.logger.Info("position pnl updated event", zap.Any("position", position))
 		}
 		handler(position)
 	}
 }
 
 func (monitor *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order *model.Order) {
+	return func(order model.Order) {
 		if monitor.flags&MonitorOrders != 0 {
-			monitor.logger.Info("order event", zap.Object("order", order))
+			monitor.logger.Info("order event", zap.Any("order", order))
 		}
 		handler(order)
 	}

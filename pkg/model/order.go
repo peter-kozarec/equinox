@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap/zapcore"
 )
 
 type OrderType int
@@ -28,15 +27,4 @@ type Order struct {
 	Size       fixed.Point
 	StopLoss   fixed.Point
 	TakeProfit fixed.Point
-}
-
-func (order *Order) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddInt("command", int(order.Command))
-	enc.AddInt("order_type", int(order.OrderType))
-	enc.AddInt("position_id", int(order.PositionId))
-	enc.AddString("price", order.Price.String())
-	enc.AddString("size", order.Size.String())
-	enc.AddString("stop_loss", order.StopLoss.String())
-	enc.AddString("take_profit", order.TakeProfit.String())
-	return nil
 }

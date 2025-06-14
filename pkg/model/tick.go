@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap/zapcore"
 )
 
 type Tick struct {
@@ -19,13 +18,4 @@ func (tick Tick) Average() fixed.Point {
 
 func (tick Tick) Volume() fixed.Point {
 	return tick.AskVolume.Add(tick.BidVolume)
-}
-
-func (tick Tick) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddInt64("time_stamp", tick.TimeStamp)
-	enc.AddString("ask", tick.Ask.String())
-	enc.AddString("bid", tick.Bid.String())
-	enc.AddString("ask_volume", tick.AskVolume.String())
-	enc.AddString("bid_volume", tick.BidVolume.String())
-	return nil
 }

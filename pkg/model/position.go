@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap/zapcore"
 	"time"
 )
 
@@ -40,19 +39,4 @@ func (position *Position) IsLong() bool {
 
 func (position *Position) IsShort() bool {
 	return position.Size.Lt(fixed.Zero)
-}
-
-func (position *Position) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddUint64("id", uint64(position.Id))
-	enc.AddInt("state", int(position.State))
-	enc.AddString("gross_profit", position.GrossProfit.String())
-	enc.AddString("net_profit", position.NetProfit.String())
-	enc.AddString("open_price", position.OpenPrice.String())
-	enc.AddString("close_price", position.ClosePrice.String())
-	enc.AddString("open_time", position.OpenTime.String())
-	enc.AddString("close_time", position.CloseTime.String())
-	enc.AddString("size", position.Size.String())
-	enc.AddString("stop_loss", position.StopLoss.String())
-	enc.AddString("take_profit", position.TakeProfit.String())
-	return nil
 }

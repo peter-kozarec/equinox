@@ -1,8 +1,8 @@
 package mapper
 
 import (
-	"peter-kozarec/equinox/pkg/model"
-	"peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type BinaryTick struct {

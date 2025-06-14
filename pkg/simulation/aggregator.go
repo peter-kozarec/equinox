@@ -1,8 +1,8 @@
 package simulation
 
 import (
-	"peter-kozarec/equinox/pkg/bus"
-	"peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/model"
 	"time"
 )
 

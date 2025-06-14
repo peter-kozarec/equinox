@@ -1,7 +1,7 @@
 package math
 
 import (
-	"peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 func Mean(returns []fixed.Point) fixed.Point {

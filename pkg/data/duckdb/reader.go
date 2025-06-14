@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/marcboeker/go-duckdb"
-	"peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/model"
 	"time"
 )
 

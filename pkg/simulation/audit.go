@@ -1,10 +1,10 @@
 package simulation
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/utility/math"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/pkg/model"
-	"peter-kozarec/equinox/pkg/utility/fixed"
-	"peter-kozarec/equinox/pkg/utility/math"
 	"time"
 )
 

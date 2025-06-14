@@ -1,7 +1,7 @@
 package simulation
 
 import (
-	"peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"time"
 )
 

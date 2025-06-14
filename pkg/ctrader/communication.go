@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"google.golang.org/protobuf/proto"
-	"peter-kozarec/equinox/pkg/ctrader/openapi"
 )
 
 func send[InType proto.Message](

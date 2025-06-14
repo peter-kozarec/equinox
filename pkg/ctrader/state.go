@@ -3,12 +3,12 @@ package ctrader
 import (
 	"context"
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
-	"peter-kozarec/equinox/pkg/bus"
-	"peter-kozarec/equinox/pkg/ctrader/openapi"
-	"peter-kozarec/equinox/pkg/model"
-	"peter-kozarec/equinox/pkg/utility/fixed"
 	"sync"
 	"time"
 )

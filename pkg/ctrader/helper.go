@@ -3,10 +3,10 @@ package ctrader
 import (
 	"context"
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/model"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/pkg/bus"
-	"peter-kozarec/equinox/pkg/ctrader/openapi"
-	"peter-kozarec/equinox/pkg/model"
 	"time"
 )
 

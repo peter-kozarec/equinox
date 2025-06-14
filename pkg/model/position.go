@@ -1,8 +1,8 @@
 package model
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap/zapcore"
-	"peter-kozarec/equinox/pkg/utility/fixed"
 	"time"
 )
 

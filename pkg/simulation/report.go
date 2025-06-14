@@ -2,8 +2,8 @@ package simulation
 
 import (
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/pkg/utility/fixed"
 	"time"
 )
 

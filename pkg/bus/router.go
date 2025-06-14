@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/pkg/model"
-	"peter-kozarec/equinox/pkg/utility/fixed"
 	"time"
 )
 

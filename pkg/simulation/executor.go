@@ -2,9 +2,9 @@ package simulation
 
 import (
 	"context"
+	"github.com/peter-kozarec/equinox/pkg/data/mapper"
+	"github.com/peter-kozarec/equinox/pkg/model"
 	"go.uber.org/zap"
-	"peter-kozarec/equinox/pkg/data/mapper"
-	"peter-kozarec/equinox/pkg/model"
 	"time"
 )
 

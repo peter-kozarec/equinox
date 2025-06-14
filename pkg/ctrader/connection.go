@@ -3,10 +3,10 @@ package ctrader
 import (
 	"context"
 	"encoding/binary"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"net"
-	"peter-kozarec/equinox/pkg/ctrader/openapi"
 	"sync"
 )
 

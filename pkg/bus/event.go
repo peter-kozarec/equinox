@@ -1,8 +1,8 @@
 package bus
 
 import (
-	"peter-kozarec/equinox/pkg/model"
-	"peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type EventId uint8

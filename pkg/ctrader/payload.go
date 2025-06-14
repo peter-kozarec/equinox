@@ -2,8 +2,8 @@ package ctrader
 
 import (
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"google.golang.org/protobuf/proto"
-	"peter-kozarec/equinox/pkg/ctrader/openapi"
 )
 
 func mapPayload(message proto.Message) (openapi.ProtoOAPayloadType, error) {

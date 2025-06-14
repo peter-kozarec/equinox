@@ -1,7 +1,7 @@
 package math
 
 import (
-	"peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 func SharpeRatio(returns []fixed.Point, riskFreeRate fixed.Point) fixed.Point {

@@ -27,58 +27,58 @@ func NewTelemetry(logger *zap.Logger) *Telemetry {
 }
 
 func (telemetry *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick *model.Tick) error {
+	return func(tick *model.Tick) {
 		telemetry.tickEventCounter++
-		return handler(tick)
+		handler(tick)
 	}
 }
 
 func (telemetry *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar *model.Bar) error {
+	return func(bar *model.Bar) {
 		telemetry.barEventCounter++
-		return handler(bar)
+		handler(bar)
 	}
 }
 
 func (telemetry *Telemetry) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance *fixed.Point) error {
+	return func(balance *fixed.Point) {
 		telemetry.balanceEventCounter++
-		return handler(balance)
+		handler(balance)
 	}
 }
 
 func (telemetry *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity *fixed.Point) error {
+	return func(equity *fixed.Point) {
 		telemetry.equityEventCounter++
-		return handler(equity)
+		handler(equity)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position *model.Position) error {
+	return func(position *model.Position) {
 		telemetry.positionOpenedEventCounter++
-		return handler(position)
+		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position *model.Position) error {
+	return func(position *model.Position) {
 		telemetry.positionClosedEventCounter++
-		return handler(position)
+		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position *model.Position) error {
+	return func(position *model.Position) {
 		telemetry.positionPnLUpdatedEventCounter++
-		return handler(position)
+		handler(position)
 	}
 }
 
 func (telemetry *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order *model.Order) error {
+	return func(order *model.Order) {
 		telemetry.orderEventCounter++
-		return handler(order)
+		handler(order)
 	}
 }
 

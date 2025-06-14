@@ -18,11 +18,11 @@ const (
 	OrderEvent
 )
 
-type TickEventHandler func(*model.Tick) error
-type BarEventHandler func(*model.Bar) error
-type EquityEventHandler func(*fixed.Point) error
-type BalanceEventHandler func(*fixed.Point) error
-type PositionOpenedEventHandler func(*model.Position) error
-type PositionClosedEventHandler func(*model.Position) error
-type PositionPnLUpdatedEventHandler func(*model.Position) error
-type OrderEventHandler func(*model.Order) error
+type TickEventHandler func(*model.Tick)
+type BarEventHandler func(*model.Bar)
+type EquityEventHandler func(*fixed.Point)
+type BalanceEventHandler func(*fixed.Point)
+type PositionOpenedEventHandler func(*model.Position)
+type PositionClosedEventHandler func(*model.Position)
+type PositionPnLUpdatedEventHandler func(*model.Position)
+type OrderEventHandler func(*model.Order)

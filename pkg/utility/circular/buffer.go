@@ -43,3 +43,7 @@ func (b *Buffer[T]) Get(idx uint) T {
 	}
 	return b.data[b.head-1-idx]
 }
+
+func (b *Buffer[T]) IsFull() bool {
+	return b.size == b.capacity
+}

@@ -49,9 +49,8 @@ func (simulator *Simulator) PrintDetails() {
 		zap.String("aggregator_interval", simulator.aggregator.interval.String()))
 }
 
-func (simulator *Simulator) OnOrder(order *model.Order) error {
+func (simulator *Simulator) OnOrder(order *model.Order) {
 	simulator.openOrders = append(simulator.openOrders, order)
-	return nil
 }
 
 func (simulator *Simulator) OnTick(tick *model.Tick) error {

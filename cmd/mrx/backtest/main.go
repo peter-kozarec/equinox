@@ -13,6 +13,7 @@ import (
 	"peter-kozarec/equinox/internal/data/mapper"
 	"peter-kozarec/equinox/internal/middleware"
 	"peter-kozarec/equinox/internal/simulation"
+	"peter-kozarec/equinox/internal/utility/fixed"
 	"syscall"
 	"time"
 )
@@ -37,6 +38,16 @@ func main() {
 	}
 	defer reader.Close()
 
+	// Configuration
+	simCfg := simulation.Configuration{
+		LotValue:         fixed.New(10, 0),
+		PipSize:          fixed.New(1, 4),
+		CommissionPerLot: fixed.New(3, 0),
+		PipSlippage:      fixed.New(10, 5),
+		BarPeriod:        time.Minute,
+		StartBalance:     fixed.New(10000, 0),
+	}
+
 	// Create
 	monitor := middleware.NewMonitor(logger, MonitorFlags)
 	telemetry := middleware.NewTelemetry(logger)
@@ -45,7 +56,7 @@ func main() {
 
 	audit := simulation.NewAudit(logger, time.Hour)
 	strategy := advisor.NewStrategy(logger, router)
-	simulator := simulation.NewSimulator(logger, router, audit)
+	simulator := simulation.NewSimulator(logger, router, audit, simCfg)
 	executor := simulation.NewExecutor(logger, simulator, reader, SimulationStart, SimulationEnd)
 
 	// Initialize middleware

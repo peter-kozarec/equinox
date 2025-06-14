@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"peter-kozarec/equinox/internal/bus"
-	"peter-kozarec/equinox/internal/cfg"
 	"peter-kozarec/equinox/internal/model"
 	"peter-kozarec/equinox/internal/utility/fixed"
 	"time"
@@ -26,33 +25,27 @@ type Simulator struct {
 	openPositions     []*model.Position
 	openOrders        []*model.Order
 
-	slippage    fixed.Point
-	commissions fixed.Point
-	lotValue    fixed.Point
-	pipSize     fixed.Point
+	cfg Configuration
 }
 
-func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit) *Simulator {
+func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit, cfg Configuration) *Simulator {
 	return &Simulator{
-		logger:      logger,
-		router:      router,
-		aggregator:  NewAggregator(cfg.BarPeriod, router),
-		audit:       audit,
-		equity:      cfg.StartBalance,
-		balance:     cfg.StartBalance,
-		slippage:    cfg.PipSlippage,
-		commissions: cfg.CommissionPerLot,
-		lotValue:    cfg.LotValue,
-		pipSize:     cfg.PipSize,
+		logger:     logger,
+		router:     router,
+		aggregator: NewAggregator(cfg.BarPeriod, router),
+		audit:      audit,
+		equity:     cfg.StartBalance,
+		balance:    cfg.StartBalance,
+		cfg:        cfg,
 	}
 }
 
 func (simulator *Simulator) PrintDetails() {
 	simulator.logger.Info("simulation details",
-		zap.String("slippage", simulator.slippage.String()),
-		zap.String("commissions", simulator.commissions.String()),
-		zap.String("lot_value", simulator.lotValue.String()),
-		zap.String("pip_size", simulator.pipSize.String()),
+		zap.String("slippage", simulator.cfg.PipSlippage.String()),
+		zap.String("commissions", simulator.cfg.CommissionPerLot.String()),
+		zap.String("lot_value", simulator.cfg.LotValue.String()),
+		zap.String("pip_size", simulator.cfg.PipSize.String()),
 		zap.String("aggregator_interval", simulator.aggregator.interval.String()))
 }
 
@@ -303,13 +296,13 @@ func (simulator *Simulator) calcPositionProfits(position *model.Position, closeP
 		pipPnL = position.OpenPrice.Sub(closePrice)
 	}
 
-	pipPnL = pipPnL.Sub(simulator.slippage.MulInt64(2)) // round-trip slippage
+	pipPnL = pipPnL.Sub(simulator.cfg.PipSlippage.MulInt64(2)) // round-trip slippage
 
 	// Clean profit calculation: USD = pipPnL / pipSize × lot size × $10
-	pips := pipPnL.Div(simulator.pipSize)
-	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.lotValue)
+	pips := pipPnL.Div(simulator.cfg.PipSize)
+	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.cfg.LotValue)
 
 	// Commission: per lot × 2 × size
-	commission := simulator.commissions.MulInt64(2).Mul(position.Size.Abs())
+	commission := simulator.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

@@ -10,7 +10,8 @@ import (
 type MonitorFlags uint16
 
 const (
-	MonitorTicks MonitorFlags = 1 << iota
+	MonitorNone MonitorFlags = 1 << iota
+	MonitorTicks
 	MonitorBars
 	MonitorEquity
 	MonitorBalance

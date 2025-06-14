@@ -52,7 +52,7 @@ func (aggregator *Aggregator) OnTick(tick *model.Tick) error {
 			aggregator.currentBar.Low = price
 		}
 		aggregator.currentBar.Close = price
-		aggregator.currentBar.Volume += volume
+		aggregator.currentBar.Volume = aggregator.currentBar.Volume.Add(volume)
 	}
 
 	aggregator.lastTS = tick.TimeStamp

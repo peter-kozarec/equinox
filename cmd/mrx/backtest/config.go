@@ -10,6 +10,6 @@ var SimulationEnd = time.Date(2018, 12, 31, 0, 0, 0, 0, time.UTC)
 
 const (
 	RouterEventCapacity = 1000
-	TickDataSource      = "data/eurusd_ticks_2018-2025_v2.bin"
+	TickDataSource      = "data/audusd.bin"
 	MonitorFlags        = middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened
 )

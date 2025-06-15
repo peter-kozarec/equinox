@@ -32,7 +32,7 @@ func NewAudit(logger *zap.Logger, minSnapshotInterval time.Duration) *Audit {
 
 func (audit *Audit) SnapshotAccount(balance, equity fixed.Point, t time.Time) {
 	if len(audit.accountSnapshots) == 0 ||
-		t.Sub(audit.accountSnapshots[len(audit.accountSnapshots)-1].t) < audit.minSnapshotInterval {
+		t.Sub(audit.accountSnapshots[len(audit.accountSnapshots)-1].t) >= audit.minSnapshotInterval {
 		audit.addSnapshot(balance, equity, t)
 	}
 }

@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"context"
+	"fmt"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/model"
 	"go.uber.org/zap"
@@ -30,6 +31,43 @@ func NewExecutor(logger *zap.Logger, simulator *Simulator, reader *mapper.Reader
 		from:      from.UnixNano(),
 		to:        to.UnixNano(),
 	}
+}
+
+func (e *Executor) LookupStartIndex() error {
+	entryCount, err := e.reader.EntryCount()
+	if err != nil {
+		return fmt.Errorf("error getting entry count: %w", err)
+	}
+
+	if entryCount == 0 {
+		return fmt.Errorf("entry count is zero")
+	}
+
+	var entry mapper.BinaryTick
+
+	low := int64(0)
+	high := entryCount - 1
+
+	for low <= high {
+		mid := (low + high) / 2
+
+		if err := e.reader.Read(mid, &entry); err != nil {
+			return fmt.Errorf("error reading entry at index %d: %w", mid, err)
+		}
+
+		if entry.TimeStamp < e.from {
+			low = mid + 1
+		} else {
+			high = mid - 1
+		}
+	}
+
+	if low >= entryCount {
+		return fmt.Errorf("no entry found with timestamp >= from")
+	}
+
+	e.idx = low
+	return nil
 }
 
 func (e *Executor) Feed(_ context.Context) error {

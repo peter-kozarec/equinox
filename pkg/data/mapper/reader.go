@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/exp/mmap"
 	"io"
+	"os"
 	"sync"
 	"unsafe"
 )
@@ -58,4 +59,25 @@ func (r *Reader[T]) Read(index int64, data *T) error {
 
 	*data = *(*T)(unsafe.Pointer(&(*buffer)[0])) // Unsafe casting, for performance, T must not be padded
 	return nil
+}
+
+func (r *Reader[T]) EntryCount() (int64, error) {
+
+	var entry T
+	entrySize := int64(unsafe.Sizeof(entry))
+	if entrySize == 0 {
+		return 0, fmt.Errorf("T size is zero")
+	}
+
+	fileInfo, err := os.Stat(r.dataSourceName)
+	if err != nil {
+		return 0, fmt.Errorf("unable to get data source %q stats: %w", r.dataSourceName, err)
+	}
+
+	totalSize := fileInfo.Size()
+	if totalSize%entrySize != 0 {
+		return 0, fmt.Errorf("file size is not a multiple of entry size")
+	}
+
+	return totalSize / entrySize, nil
 }

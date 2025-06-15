@@ -41,7 +41,7 @@ func InitTradeSession(
 	accountId int64,
 	symbol string,
 	period time.Duration,
-	router *bus.Router) (func(*model.Order) error, error) {
+	router *bus.Router) (func(*model.Order), error) {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
 	defer symbolInfoCancel()
@@ -102,23 +102,21 @@ func InitTradeSession(
 	client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Millisecond*500))
 
 	// Return callback for making orders
-	return func(order *model.Order) error {
+	return func(order *model.Order) {
 		if order.Command == model.CmdClose {
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)
 			defer closeCancel()
 
 			if err := client.ClosePosition(closeContext, accountId, order.PositionId.Int64(), order.Size); err != nil {
-				return fmt.Errorf("unable to close position: %w", err)
+				client.logger.Warn("unable to close position", zap.Error(err))
 			}
 		} else if order.Command == model.CmdOpen {
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 
 			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.OrderType); err != nil {
-				return fmt.Errorf("unable to open position: %w", err)
+				client.logger.Warn("unable to open position", zap.Error(err))
 			}
 		}
-
-		return nil
 	}, nil
 }

@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"go.uber.org/zap"
 )
 
 type Tick struct {
@@ -12,10 +13,20 @@ type Tick struct {
 	BidVolume fixed.Point
 }
 
-func (tick Tick) Average() fixed.Point {
-	return tick.Ask.Add(tick.Bid).DivInt(2)
+func (t Tick) Average() fixed.Point {
+	return t.Ask.Add(t.Bid).DivInt(2)
 }
 
-func (tick Tick) Volume() fixed.Point {
-	return tick.AskVolume.Add(tick.BidVolume)
+func (t Tick) Volume() fixed.Point {
+	return t.AskVolume.Add(t.BidVolume)
+}
+
+func (t Tick) Fields() []zap.Field {
+	return []zap.Field{
+		zap.Int64("time_stamp", t.TimeStamp),
+		zap.String("ask", t.Ask.String()),
+		zap.String("bid", t.Bid.String()),
+		zap.String("ask_volume", t.AskVolume.String()),
+		zap.String("bid_volume", t.BidVolume.String()),
+	}
 }

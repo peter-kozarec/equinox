@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -33,10 +34,26 @@ type Position struct {
 	TakeProfit  fixed.Point
 }
 
-func (position *Position) IsLong() bool {
-	return position.Size.Gt(fixed.Zero)
+func (p Position) IsLong() bool {
+	return p.Size.Gt(fixed.Zero)
 }
 
-func (position *Position) IsShort() bool {
-	return position.Size.Lt(fixed.Zero)
+func (p Position) IsShort() bool {
+	return p.Size.Lt(fixed.Zero)
+}
+
+func (p Position) Fields() []zap.Field {
+	return []zap.Field{
+		zap.Int("id", int(p.Id)),
+		zap.Int("state", int(p.State)),
+		zap.String("gross_profit", p.GrossProfit.String()),
+		zap.String("net_profit", p.NetProfit.String()),
+		zap.String("open_price", p.OpenPrice.String()),
+		zap.String("close_price", p.ClosePrice.String()),
+		zap.String("open_time", p.OpenTime.String()),
+		zap.String("close_time", p.CloseTime.String()),
+		zap.String("size", p.Size.String()),
+		zap.String("stop_loss", p.StopLoss.String()),
+		zap.String("take_profit", p.TakeProfit.String()),
+	}
 }

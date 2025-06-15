@@ -11,15 +11,14 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"time"
 )
 
 const (
-	TickBinDir = "C:\\Users\\peter\\market_data\\"
-
-	StartTime = "2019-01-01 00:00:00"
+	StartTime = "2020-01-01 00:00:00"
 	EndTime   = "2020-01-01 00:00:00"
 )
 
@@ -32,15 +31,6 @@ func main() {
 
 	router := bus.NewRouter(logger, 1000)
 
-	mp := mapper.NewReader[mapper.BinaryTick](TickBinDir + "eurusd.bin")
-	if err := mp.Open(); err != nil {
-		logger.Fatal("unable to open mapper", zap.Error(err))
-	}
-	defer mp.Close()
-
-	startTime, _ := time.Parse(time.DateTime, StartTime)
-	endTime, _ := time.Parse(time.DateTime, EndTime)
-
 	simConf := simulation.Configuration{
 		BarPeriod:        time.Minute,
 		PipSize:          fixed.New(1, 4),
@@ -52,10 +42,20 @@ func main() {
 
 	audit := simulation.NewAudit(logger, time.Minute)
 	sim := simulation.NewSimulator(logger, router, audit, simConf)
-	exec := simulation.NewExecutor(logger, sim, mp, startTime, endTime)
+
+	rng := rand.New(rand.NewSource(123))
+	startTime, _ := time.Parse(time.DateTime, StartTime)
+	startPrice := fixed.New(112345, 5)          // ~1.12345
+	spread := fixed.New(5, 5)                   // small spread, adjust as needed
+	sigma := fixed.New(1, 2)                    // realistic volatility
+	mu := sigma.Mul(sigma).Mul(fixed.New(5, 1)) // neutral drift
+	dt := fixed.New(1, 0).DivInt(86400)         // time step of 1 second
+	steps := int64(10_000_000)                  // large number of steps
+
+	exec := simulation.NewMonteCarloExecutor(logger, sim, rng, startTime, startPrice, spread, mu, sigma, dt, steps)
 
 	telemetry := middleware.NewTelemetry(logger)
-	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed)
+	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed|middleware.MonitorBars)
 
 	advisor := strategy.NewAdvisor(logger, router)
 	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick)(advisor.NewTick)
@@ -66,10 +66,6 @@ func main() {
 	router.PositionPnLUpdatedHandler = middleware.Chain(telemetry.WithPositionPnLUpdated, monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.EquityHandler = middleware.Chain(telemetry.WithEquity, monitor.WithEquity)(middleware.NoopEquityHdl)
 	router.BalanceHandler = middleware.Chain(telemetry.WithBalance, monitor.WithBalance)(middleware.NoopBalanceHdl)
-
-	if err := exec.LookupStartIndex(); err != nil {
-		logger.Fatal("unable to lookup start index", zap.Error(err))
-	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()

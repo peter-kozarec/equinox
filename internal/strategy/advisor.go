@@ -1,4 +1,4 @@
-package main
+package strategy
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/bus"

@@ -10,14 +10,14 @@ import (
 type Telemetry struct {
 	logger *zap.Logger
 
-	tickEventCounter               int64
-	barEventCounter                int64
-	balanceEventCounter            int64
-	equityEventCounter             int64
-	positionOpenedEventCounter     int64
-	positionClosedEventCounter     int64
-	positionPnLUpdatedEventCounter int64
-	orderEventCounter              int64
+	tickEventCounter               uint64
+	barEventCounter                uint64
+	balanceEventCounter            uint64
+	equityEventCounter             uint64
+	positionOpenedEventCounter     uint64
+	positionClosedEventCounter     uint64
+	positionPnLUpdatedEventCounter uint64
+	orderEventCounter              uint64
 }
 
 func NewTelemetry(logger *zap.Logger) *Telemetry {
@@ -84,12 +84,12 @@ func (telemetry *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEv
 
 func (telemetry *Telemetry) PrintStatistics() {
 	telemetry.logger.Info("event statistics",
-		zap.Int64("tick_events", telemetry.tickEventCounter),
-		zap.Int64("bar_events", telemetry.barEventCounter),
-		zap.Int64("balance_events", telemetry.balanceEventCounter),
-		zap.Int64("equity_events", telemetry.equityEventCounter),
-		zap.Int64("position_opened_events", telemetry.positionOpenedEventCounter),
-		zap.Int64("position_closed_events", telemetry.positionClosedEventCounter),
-		zap.Int64("position_pnl_updated_events", telemetry.positionPnLUpdatedEventCounter),
-		zap.Int64("order_events", telemetry.orderEventCounter))
+		zap.Uint64("tick_events", telemetry.tickEventCounter),
+		zap.Uint64("bar_events", telemetry.barEventCounter),
+		zap.Uint64("balance_events", telemetry.balanceEventCounter),
+		zap.Uint64("equity_events", telemetry.equityEventCounter),
+		zap.Uint64("position_opened_events", telemetry.positionOpenedEventCounter),
+		zap.Uint64("position_closed_events", telemetry.positionClosedEventCounter),
+		zap.Uint64("position_pnl_updated_events", telemetry.positionPnLUpdatedEventCounter),
+		zap.Uint64("order_events", telemetry.orderEventCounter))
 }

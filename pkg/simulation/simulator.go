@@ -22,8 +22,8 @@ type Simulator struct {
 	lastTick       model.Tick
 
 	positionIdCounter model.PositionId
-	openPositions     []model.Position
-	openOrders        []model.Order
+	openPositions     []*model.Position
+	openOrders        []*model.Order
 
 	cfg Configuration
 }
@@ -50,7 +50,7 @@ func (simulator *Simulator) PrintDetails() {
 }
 
 func (simulator *Simulator) OnOrder(order model.Order) {
-	simulator.openOrders = append(simulator.openOrders, order)
+	simulator.openOrders = append(simulator.openOrders, &order)
 }
 
 func (simulator *Simulator) OnTick(tick model.Tick) error {
@@ -105,13 +105,13 @@ func (simulator *Simulator) CloseAllOpenPositions() {
 			closePrice = simulator.lastTick.Ask
 		}
 
-		simulator.calcPositionProfits(&position, closePrice)
+		simulator.calcPositionProfits(position, closePrice)
 		simulator.equity = simulator.equity.Add(position.NetProfit)
 
 		position.State = model.Closed
 		position.ClosePrice = closePrice
 		position.CloseTime = time.Unix(0, simulator.lastTick.TimeStamp)
-		simulator.audit.AddClosedPosition(position)
+		simulator.audit.AddClosedPosition(*position)
 	}
 
 	simulator.balance = simulator.equity
@@ -123,7 +123,7 @@ func (simulator *Simulator) checkPositions(tick model.Tick) {
 	for idx := range simulator.openPositions {
 		position := simulator.openPositions[idx]
 
-		if simulator.shouldClosePosition(position, tick) {
+		if simulator.shouldClosePosition(*position, tick) {
 			position.State = model.PendingClose
 		}
 	}
@@ -131,7 +131,7 @@ func (simulator *Simulator) checkPositions(tick model.Tick) {
 
 func (simulator *Simulator) checkOrders(tick model.Tick) {
 
-	tmpOpenOrders := make([]model.Order, 0, len(simulator.openOrders))
+	tmpOpenOrders := make([]*model.Order, 0, len(simulator.openOrders))
 
 	for idx := range simulator.openOrders {
 		order := simulator.openOrders[idx]
@@ -186,7 +186,7 @@ func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) error {
 
 	simulator.positionIdCounter++
-	simulator.openPositions = append(simulator.openPositions, model.Position{
+	simulator.openPositions = append(simulator.openPositions, &model.Position{
 		Id:         simulator.positionIdCounter,
 		State:      model.PendingOpen,
 		Size:       size,
@@ -242,8 +242,7 @@ func (simulator *Simulator) shouldClosePosition(position model.Position, tick mo
 }
 
 func (simulator *Simulator) processPendingChanges(tick model.Tick) {
-
-	tmpOpenPositions := make([]model.Position, 0, len(simulator.openPositions))
+	tmpOpenPositions := make([]*model.Position, 0, len(simulator.openPositions))
 	simulator.equity = simulator.balance
 
 	for idx := range simulator.openPositions {
@@ -255,32 +254,32 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 			openPrice = tick.Bid
 			closePrice = tick.Ask
 		}
-
 		switch position.State {
 		case model.PendingOpen:
-			tmpOpenPositions = append(tmpOpenPositions, position)
 			position.State = model.Opened
 			position.OpenPrice = openPrice
 			position.OpenTime = time.Unix(0, tick.TimeStamp)
-			if err := simulator.router.Post(bus.PositionOpenedEvent, position); err != nil {
+			if err := simulator.router.Post(bus.PositionOpenedEvent, *position); err != nil {
 				simulator.logger.Warn("unable to post position opened event", zap.Error(err))
 			}
+			tmpOpenPositions = append(tmpOpenPositions, position)
 		case model.PendingClose:
 			position.State = model.Closed
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
+			simulator.calcPositionProfits(position, closePrice)
 			simulator.balance = simulator.balance.Add(position.NetProfit)
-			simulator.audit.AddClosedPosition(position)
-			if err := simulator.router.Post(bus.PositionClosedEvent, position); err != nil {
+			simulator.audit.AddClosedPosition(*position)
+			if err := simulator.router.Post(bus.PositionClosedEvent, *position); err != nil {
 				simulator.logger.Warn("unable to post position closed event", zap.Error(err))
 			}
 		default:
-			tmpOpenPositions = append(tmpOpenPositions, position)
-			simulator.calcPositionProfits(&position, closePrice)
+			simulator.calcPositionProfits(position, closePrice)
 			simulator.equity = simulator.equity.Add(position.NetProfit)
-			if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
+			if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
 				simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
 			}
+			tmpOpenPositions = append(tmpOpenPositions, position)
 		}
 	}
 

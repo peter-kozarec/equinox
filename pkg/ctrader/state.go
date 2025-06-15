@@ -68,7 +68,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 		internalTick.Bid = state.lastTick.Bid
 	}
 
-	if err := state.router.Post(bus.TickEvent, &internalTick); err != nil {
+	if err := state.router.Post(bus.TickEvent, internalTick); err != nil {
 		state.logger.Warn("unable to post tick event", zap.Error(err))
 		return
 	} else {
@@ -89,7 +89,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	lastBarTimeStamp := int64(lastBar.GetUtcTimestampInMinutes()) * int64(time.Minute)
 
 	if lastInternalBarTimeStamp != 0 && lastBarTimeStamp != lastInternalBarTimeStamp { // New bar has came, propagate old one
-		if err := state.router.Post(bus.BarEvent, &state.lastBar); err != nil {
+		if err := state.router.Post(bus.BarEvent, state.lastBar); err != nil {
 			state.logger.Warn("unable to post bar event", zap.Error(err))
 			return
 		}
@@ -141,7 +141,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 				// Remove the closed position
 				state.openPositions = append(state.openPositions[:idx], state.openPositions[idx+1:]...)
 
-				if err := state.router.Post(bus.PositionClosedEvent, internalPosition); err != nil {
+				if err := state.router.Post(bus.PositionClosedEvent, *internalPosition); err != nil {
 					state.logger.Warn("unable to post position closed event", zap.Error(err))
 				}
 
@@ -171,7 +171,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 		state.openPositions = append(state.openPositions, internalPosition)
 
-		if err := state.router.Post(bus.PositionOpenedEvent, &internalPosition); err != nil {
+		if err := state.router.Post(bus.PositionOpenedEvent, internalPosition); err != nil {
 			state.logger.Warn("unable to post position opened event", zap.Error(err))
 			return
 		}
@@ -265,7 +265,7 @@ func (state *State) calcPnL() {
 
 		// Only post event if profit changed
 		if !oldProfit.Eq(position.NetProfit) {
-			if err := state.router.Post(bus.PositionPnLUpdatedEvent, position); err != nil {
+			if err := state.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
 				state.logger.Warn("unable to post position updated event", zap.Error(err))
 			}
 		}
@@ -286,7 +286,7 @@ func (state *State) calcEquity() {
 	}
 
 	if !oldEquity.Eq(state.equity) {
-		if err := state.router.Post(bus.EquityEvent, &state.equity); err != nil {
+		if err := state.router.Post(bus.EquityEvent, state.equity); err != nil {
 			state.logger.Warn("unable to post equity event", zap.Error(err))
 		}
 	}
@@ -297,7 +297,7 @@ func (state *State) setBalance(newBalance fixed.Point) {
 	state.balance = newBalance
 	if state.postBalance {
 		state.postBalance = false
-		if err := state.router.Post(bus.BalanceEvent, &state.balance); err != nil {
+		if err := state.router.Post(bus.BalanceEvent, state.balance); err != nil {
 			state.logger.Warn("unable to post balance event", zap.Error(err))
 		}
 	}

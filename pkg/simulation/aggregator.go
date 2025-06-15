@@ -34,7 +34,7 @@ func (aggregator *Aggregator) OnTick(tick model.Tick) error {
 		aggregator.currentBar = nil
 	}
 
-	if aggregator.currentBar != nil {
+	if aggregator.currentBar == nil {
 		aggregator.currentBar = &model.Bar{
 			TimeStamp: barTS,
 			Open:      price,

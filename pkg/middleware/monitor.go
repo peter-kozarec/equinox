@@ -54,7 +54,7 @@ func (monitor *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler
 func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
 	return func(equity fixed.Point) {
 		if monitor.flags&MonitorEquity != 0 {
-			monitor.logger.Info("equity event", zap.Any("equity", zap.String("equity", equity.String())))
+			monitor.logger.Info("equity event", zap.String("equity", equity.String()))
 		}
 		handler(equity)
 	}
@@ -63,7 +63,7 @@ func (monitor *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEve
 func (monitor *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
 	return func(balance fixed.Point) {
 		if monitor.flags&MonitorBalance != 0 {
-			monitor.logger.Info("balance event", zap.Any("balance", zap.String("balance", balance.String())))
+			monitor.logger.Info("balance event", zap.String("balance", balance.String()))
 		}
 		handler(balance)
 	}

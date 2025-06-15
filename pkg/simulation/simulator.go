@@ -44,7 +44,7 @@ func (simulator *Simulator) PrintDetails() {
 	simulator.logger.Info("simulation details",
 		zap.String("slippage", simulator.cfg.PipSlippage.String()),
 		zap.String("commissions", simulator.cfg.CommissionPerLot.String()),
-		zap.String("lot_value", simulator.cfg.LotValue.String()),
+		zap.String("contract_size", simulator.cfg.ContractSize.String()),
 		zap.String("pip_size", simulator.cfg.PipSize.String()),
 		zap.String("aggregator_interval", simulator.aggregator.interval.String()))
 }
@@ -287,31 +287,29 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 }
 
 func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
-	var priceDiff fixed.Point
-	var multiplier fixed.Point = fixed.One
+	var pipPnL fixed.Point
 
+	// Calculate price difference in pips
 	if position.IsLong() {
-		priceDiff = closePrice.Sub(position.OpenPrice)
-		// For long: positive price diff = profit
+		pipPnL = closePrice.Sub(position.OpenPrice)
 	} else {
-		priceDiff = position.OpenPrice.Sub(closePrice)
-		// For short: positive price diff = profit
-		// But we need to handle the position size sign
-		if position.Size.Lt(fixed.Zero) {
-			multiplier = fixed.NegOne
-		}
+		pipPnL = position.OpenPrice.Sub(closePrice)
 	}
 
-	// Apply slippage (always reduces profit)
-	priceDiff = priceDiff.Sub(simulator.cfg.PipSlippage.MulInt64(2))
+	// Apply slippage
+	pipPnL = pipPnL.Sub(simulator.cfg.PipSlippage.MulInt64(2))
 
-	// Convert to pips
-	pips := priceDiff.Div(simulator.cfg.PipSize)
+	// Convert price difference to pips
+	pips := pipPnL.Div(simulator.cfg.PipSize)
+
+	// Calculate dynamic lot value based on current close price
+	// For EUR/USD: LotValue = PipSize × ContractSize × CurrentRate
+	currentLotValue := simulator.cfg.PipSize.Mul(simulator.cfg.ContractSize).Mul(closePrice)
 
 	// Calculate gross profit
-	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.cfg.LotValue).Mul(multiplier)
+	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(currentLotValue)
 
-	// Commission (always a cost)
+	// Commission calculation
 	commission := simulator.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

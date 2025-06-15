@@ -6,7 +6,7 @@ import (
 )
 
 type Configuration struct {
-	LotValue         fixed.Point
+	ContractSize     fixed.Point
 	PipSize          fixed.Point
 	CommissionPerLot fixed.Point
 	PipSlippage      fixed.Point

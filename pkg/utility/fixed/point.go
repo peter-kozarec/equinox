@@ -9,6 +9,7 @@ var (
 	NegOne = New(-1, 0)
 	Zero   = New(0, 0)
 	One    = New(1, 0)
+	Two    = New(2, 0)
 
 	Sqrt252 = New(1587450786638754, 14)
 )

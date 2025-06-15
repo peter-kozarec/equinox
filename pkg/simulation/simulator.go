@@ -185,6 +185,22 @@ func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 
 func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) error {
 
+	// Validate position size
+	if size.IsZero() {
+		return fmt.Errorf("position size cannot be zero")
+	}
+
+	// Validate stop loss and take profit logic
+	if size.Gt(fixed.Zero) { // Long position
+		if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Gte(takeProfit) {
+			return fmt.Errorf("long position: stop loss must be less than take profit")
+		}
+	} else { // Short position
+		if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Lte(takeProfit) {
+			return fmt.Errorf("short position: stop loss must be greater than take profit")
+		}
+	}
+
 	simulator.positionIdCounter++
 	simulator.openPositions = append(simulator.openPositions, &model.Position{
 		Id:         simulator.positionIdCounter,
@@ -248,12 +264,17 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 	for idx := range simulator.openPositions {
 		position := simulator.openPositions[idx]
 
-		openPrice := tick.Ask
-		closePrice := tick.Bid
-		if position.IsShort() {
+		var openPrice, closePrice fixed.Point
+		if position.IsLong() {
+			openPrice = tick.Ask
+			closePrice = tick.Bid
+		} else if position.IsShort() {
 			openPrice = tick.Bid
 			closePrice = tick.Ask
+		} else {
+			panic("invalid position, unable to determine long/short side")
 		}
+
 		switch position.State {
 		case model.PendingOpen:
 			position.State = model.Opened
@@ -289,27 +310,23 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
 	var pipPnL fixed.Point
 
-	// Calculate price difference in pips
 	if position.IsLong() {
 		pipPnL = closePrice.Sub(position.OpenPrice)
-	} else {
+	} else if position.IsShort() {
 		pipPnL = position.OpenPrice.Sub(closePrice)
+	} else {
+		panic("invalid position, unable to determine long/short side")
 	}
 
-	// Apply slippage
 	pipPnL = pipPnL.Sub(simulator.cfg.PipSlippage.MulInt64(2))
-
-	// Convert price difference to pips
 	pips := pipPnL.Div(simulator.cfg.PipSize)
 
-	// Calculate dynamic lot value based on current close price
-	// For EUR/USD: LotValue = PipSize × ContractSize × CurrentRate
-	currentLotValue := simulator.cfg.PipSize.Mul(simulator.cfg.ContractSize).Mul(closePrice)
+	// Use average price for more accurate lot value
+	avgPrice := position.OpenPrice.Add(closePrice).DivInt(2)
+	currentLotValue := simulator.cfg.PipSize.Mul(simulator.cfg.ContractSize).Mul(avgPrice)
 
-	// Calculate gross profit
 	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(currentLotValue)
 
-	// Commission calculation
 	commission := simulator.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

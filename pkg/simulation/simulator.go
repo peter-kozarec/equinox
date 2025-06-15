@@ -287,20 +287,31 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 }
 
 func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
-	var pipPnL fixed.Point
+	var priceDiff fixed.Point
+	var multiplier fixed.Point = fixed.One
+
 	if position.IsLong() {
-		pipPnL = closePrice.Sub(position.OpenPrice)
+		priceDiff = closePrice.Sub(position.OpenPrice)
+		// For long: positive price diff = profit
 	} else {
-		pipPnL = position.OpenPrice.Sub(closePrice)
+		priceDiff = position.OpenPrice.Sub(closePrice)
+		// For short: positive price diff = profit
+		// But we need to handle the position size sign
+		if position.Size.Lt(fixed.Zero) {
+			multiplier = fixed.NegOne
+		}
 	}
 
-	pipPnL = pipPnL.Sub(simulator.cfg.PipSlippage.MulInt64(2)) // round-trip slippage
+	// Apply slippage (always reduces profit)
+	priceDiff = priceDiff.Sub(simulator.cfg.PipSlippage.MulInt64(2))
 
-	// Clean profit calculation: USD = pipPnL / pipSize × lot size × $10
-	pips := pipPnL.Div(simulator.cfg.PipSize)
-	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.cfg.LotValue)
+	// Convert to pips
+	pips := priceDiff.Div(simulator.cfg.PipSize)
 
-	// Commission: per lot × 2 × size
+	// Calculate gross profit
+	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(simulator.cfg.LotValue).Mul(multiplier)
+
+	// Commission (always a cost)
 	commission := simulator.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

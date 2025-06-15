@@ -9,7 +9,7 @@ import (
 type Aggregator struct {
 	interval   time.Duration
 	router     *bus.Router
-	currentBar model.Bar
+	currentBar *model.Bar
 	lastTS     int64
 }
 
@@ -27,15 +27,15 @@ func (aggregator *Aggregator) OnTick(tick model.Tick) error {
 	volume := tick.Volume()
 
 	// Gap detection — flush and reset
-	if aggregator.currentBar.TimeStamp != 0 && barTS != aggregator.currentBar.TimeStamp {
-		if err := aggregator.router.Post(bus.BarEvent, aggregator.currentBar); err != nil {
+	if aggregator.currentBar != nil && barTS != aggregator.currentBar.TimeStamp {
+		if err := aggregator.router.Post(bus.BarEvent, *aggregator.currentBar); err != nil {
 			return err
 		}
-		aggregator.currentBar.TimeStamp = 0
+		aggregator.currentBar = nil
 	}
 
-	if aggregator.currentBar.TimeStamp != 0 {
-		aggregator.currentBar = model.Bar{
+	if aggregator.currentBar != nil {
+		aggregator.currentBar = &model.Bar{
 			TimeStamp: barTS,
 			Open:      price,
 			High:      price,
@@ -60,9 +60,9 @@ func (aggregator *Aggregator) OnTick(tick model.Tick) error {
 }
 
 func (aggregator *Aggregator) Flush() error {
-	if aggregator.currentBar.TimeStamp != 0 {
-		err := aggregator.router.Post(bus.BarEvent, aggregator.currentBar)
-		aggregator.currentBar.TimeStamp = 0
+	if aggregator.currentBar != nil && aggregator.currentBar.TimeStamp != 0 {
+		err := aggregator.router.Post(bus.BarEvent, *aggregator.currentBar)
+		aggregator.currentBar = nil
 		return err
 	}
 	return nil

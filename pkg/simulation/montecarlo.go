@@ -1,7 +1,6 @@
 package simulation
 
 import (
-	"context"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/model"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
@@ -66,7 +65,7 @@ func NewMonteCarloExecutor(
 	}
 }
 
-func (e *MonteCarloExecutor) Feed(_ context.Context) error {
+func (e *MonteCarloExecutor) DoOnce() error {
 
 	if e.t >= e.steps {
 		return mapper.EOF

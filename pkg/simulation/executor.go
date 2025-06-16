@@ -1,7 +1,6 @@
 package simulation
 
 import (
-	"context"
 	"fmt"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/model"
@@ -70,7 +69,7 @@ func (e *Executor) LookupStartIndex() error {
 	return nil
 }
 
-func (e *Executor) Feed(_ context.Context) error {
+func (e *Executor) DoOnce() error {
 
 	// Read the next tick from the reader
 	if e.lastErr = e.reader.Read(e.idx, &e.binaryTick); e.lastErr != nil {

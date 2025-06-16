@@ -89,7 +89,7 @@ func (router *Router) Exec(ctx context.Context) {
 	}
 }
 
-func (router *Router) ExecLoop(ctx context.Context, executorLoop func(context.Context) error) {
+func (router *Router) ExecLoop(ctx context.Context, doOnceCb func() error) {
 
 	router.runTime = 0
 	router.dispatchCount = 0
@@ -116,7 +116,7 @@ func (router *Router) ExecLoop(ctx context.Context, executorLoop func(context.Co
 					zap.Any("event", ev))
 			}
 		default:
-			if err := executorLoop(ctx); err != nil {
+			if err := doOnceCb(); err != nil {
 				router.done <- err
 				return
 			}

@@ -74,7 +74,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	go router.ExecLoop(ctx, exec.Feed)
+	go router.ExecLoop(ctx, exec.DoOnce)
 
 	defer router.PrintStatistics()
 	defer telemetry.PrintStatistics()

@@ -4,10 +4,10 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-func DownsideDeviation(returns []fixed.Point, riskFreeRate fixed.Point) fixed.Point {
+func DownsideDeviation(data []fixed.Point, riskFreeRate fixed.Point) fixed.Point {
 	var sum fixed.Point
 	var count int
-	for _, r := range returns {
+	for _, r := range data {
 		if r.Lt(riskFreeRate) {
 			diff := r.Sub(riskFreeRate)
 			sum = sum.Add(diff.Mul(diff))
@@ -20,11 +20,11 @@ func DownsideDeviation(returns []fixed.Point, riskFreeRate fixed.Point) fixed.Po
 	return sum.DivInt(count).Sqrt()
 }
 
-func StandardDeviation(returns []fixed.Point, mean fixed.Point) fixed.Point {
+func StandardDeviation(data []fixed.Point, mean fixed.Point) fixed.Point {
 	var sum fixed.Point
-	for _, r := range returns {
+	for _, r := range data {
 		diff := r.Sub(mean)
 		sum = sum.Add(diff.Mul(diff))
 	}
-	return sum.DivInt(len(returns)).Sqrt()
+	return sum.DivInt(len(data)).Sqrt()
 }

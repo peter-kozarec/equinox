@@ -2,6 +2,7 @@ package ctrader
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
@@ -220,11 +221,20 @@ func (state *State) LoadBalance(ctx context.Context, client *Client, accountId i
 }
 
 func (state *State) StartBalancePolling(parentCtx context.Context, client *Client, accountId int64, pollInterval time.Duration) {
+	// Ensure minimum timeout of 5 seconds, but allow longer for slow poll intervals
+	requestTimeout := 5 * time.Second
+	if pollInterval > 10*time.Second {
+		requestTimeout = pollInterval / 2
+	}
 
 	ticker := time.NewTicker(pollInterval)
 
 	go func() {
 		defer ticker.Stop()
+
+		state.logger.Debug("balance polling started",
+			zap.Duration("interval", pollInterval),
+			zap.Duration("timeout", requestTimeout))
 
 	outer:
 		for {
@@ -232,14 +242,24 @@ func (state *State) StartBalancePolling(parentCtx context.Context, client *Clien
 			case <-parentCtx.Done():
 				break outer
 			case <-ticker.C:
-				balanceContext, balanceCancel := context.WithTimeout(parentCtx, pollInterval-(time.Millisecond*50))
-				balance, err := client.GetBalance(balanceContext, accountId)
+				// Use the calculated timeout, not the poll interval
+				balanceCtx, cancel := context.WithTimeout(parentCtx, requestTimeout)
+
+				balance, err := client.GetBalance(balanceCtx, accountId)
 				if err != nil {
-					state.logger.Warn("unable to poll balance", zap.Error(err))
+					// Distinguish between timeout and other errors for better debugging
+					if errors.Is(balanceCtx.Err(), context.DeadlineExceeded) {
+						state.logger.Warn("balance poll timed out",
+							zap.Duration("timeout", requestTimeout),
+							zap.Error(err))
+					} else {
+						state.logger.Warn("unable to poll balance", zap.Error(err))
+					}
 				} else {
 					state.setBalance(balance)
 				}
-				balanceCancel()
+
+				cancel() // Always clean up the context
 			}
 		}
 

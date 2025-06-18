@@ -2,6 +2,7 @@ package ctrader
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
@@ -89,6 +90,8 @@ func sendReceive[InType proto.Message, OutType proto.Message](
 		return ctx.Err()
 	case <-conn.ctx.Done():
 		return conn.ctx.Err()
+	default:
+		return errors.New("writeChan is full or blocked")
 	}
 
 	// Wait for response or cancel
@@ -101,8 +104,10 @@ func sendReceive[InType proto.Message, OutType proto.Message](
 			return fmt.Errorf("cannot decode response payload: %w", err)
 		}
 	case <-ctx.Done():
+		go func() { <-respChan }() // prevent goroutine leak
 		return ctx.Err()
 	case <-conn.ctx.Done():
+		go func() { <-respChan }() // prevent goroutine leak
 		return conn.ctx.Err()
 	}
 

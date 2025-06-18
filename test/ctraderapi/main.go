@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 
 	"syscall"
@@ -30,6 +31,12 @@ func main() {
 	defer func(logger *zap.Logger) {
 		_ = logger.Sync()
 	}(logger)
+
+	go func() {
+		for range time.Tick(time.Minute) {
+			logger.Info("goroutine count", zap.Int("count", runtime.NumGoroutine()))
+		}
+	}()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()

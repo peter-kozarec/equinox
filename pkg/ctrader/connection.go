@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
@@ -125,14 +126,13 @@ func (c *connection) read() {
 }
 
 func (c *connection) write() {
-
 	for {
 		select {
 		case <-c.ctx.Done():
 			return
 		case msg, ok := <-c.writeChan:
 			if !ok {
-				continue
+				return // channel closed — stop writing
 			}
 
 			c.logger.Debug("write",
@@ -141,13 +141,20 @@ func (c *connection) write() {
 
 			data, err := proto.Marshal(msg)
 			if err != nil {
+				c.logger.Warn("failed to marshal message", zap.Error(err))
 				continue
 			}
 
-			full := append(make([]byte, 4), data...)
+			full := make([]byte, 4+len(data))
 			binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
+			copy(full[4:], data)
+
+			if err := c.conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+				c.logger.Warn("failed to set write deadline", zap.Error(err))
+			}
 
 			if _, err = c.conn.Write(full); err != nil {
+				c.logger.Warn("failed to write to connection", zap.Error(err))
 				continue
 			}
 		}

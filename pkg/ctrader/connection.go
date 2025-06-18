@@ -89,6 +89,8 @@ func (c *connection) read() {
 
 			data := make([]byte, length)
 			if _, err := io.ReadFull(c.conn, data); err != nil {
+				c.logger.Warn("cannot read data", zap.Error(err))
+				time.Sleep(1 * time.Second) // prevent tight loop
 				continue
 			}
 
@@ -163,6 +165,7 @@ func (c *connection) write() {
 
 			if _, err = c.conn.Write(full); err != nil {
 				c.logger.Warn("failed to write to connection", zap.Error(err))
+				time.Sleep(1 * time.Second) // prevent tight loop
 				continue
 			}
 		}

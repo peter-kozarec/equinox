@@ -99,8 +99,8 @@ func InitTradeSession(
 	client.logger.Info("subscribed to execution events")
 
 	// Start balance polling
-	state.StartBalancePolling(ctx, client, accountId, time.Second*10)
-	client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Second*10))
+	//state.StartBalancePolling(ctx, client, accountId, time.Second*10)
+	//client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Second*10))
 
 	// Return callback for making orders
 	return func(order model.Order) {

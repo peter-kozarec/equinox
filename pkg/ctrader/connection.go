@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -79,11 +81,19 @@ func (c *connection) read() {
 			return
 		default:
 			header := make([]byte, 4)
-			if _, err := c.conn.Read(header); err != nil {
+			if _, err := io.ReadFull(c.conn, header); err != nil {
+				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
+					c.logger.Debug("connection closed, exiting read loop")
+					return
+				}
+				c.logger.Warn("read header failed", zap.Error(err))
+				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 			length := binary.BigEndian.Uint32(header)
-			if length == 0 {
+			if length == 0 || length > 10_000_000 { // sanity check
+				c.logger.Warn("invalid message length", zap.Uint32("length", length))
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 
@@ -99,6 +109,7 @@ func (c *connection) read() {
 				c.logger.Warn("unmarshal failed",
 					zap.String("raw", hex.EncodeToString(data)),
 					zap.Error(err))
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 
@@ -114,13 +125,16 @@ func (c *connection) read() {
 				for _, ch := range c.subscribers[payloadType] {
 					select {
 					case ch <- &msg:
-					default:
+					default: // drop if blocked
 					}
 				}
 				c.subscribersMu.RUnlock()
 			} else if msg.ClientMsgId != nil {
 				if ch, ok := c.pending.LoadAndDelete(*msg.ClientMsgId); ok {
-					ch.(chan *openapi.ProtoMessage) <- &msg
+					select {
+					case ch.(chan *openapi.ProtoMessage) <- &msg:
+					default: // drop if blocked
+					}
 				}
 			}
 		}
@@ -152,12 +166,12 @@ func (c *connection) write() {
 			copy(full[4:], data)
 
 			if tcpConn, ok := c.conn.(*net.TCPConn); ok {
-				err := tcpConn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				err := tcpConn.SetWriteDeadline(time.Now().Add(time.Second))
 				if err != nil {
 					c.logger.Warn("failed to set write deadline", zap.Error(err))
 				}
 			} else if c.conn != nil {
-				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
 				if err != nil {
 					c.logger.Warn("failed to set write deadline", zap.Error(err))
 				}

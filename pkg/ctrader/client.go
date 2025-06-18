@@ -260,7 +260,7 @@ func (client *Client) keepAlive(interval time.Duration) {
 				return
 			case <-ticker.C:
 				payloadType := uint32(openapi.ProtoPayloadType_HEARTBEAT_EVENT)
-				msg := openapi.ProtoMessage{
+				msg := &openapi.ProtoMessage{
 					PayloadType: &payloadType,
 				}
 				client.conn.writeChan <- msg

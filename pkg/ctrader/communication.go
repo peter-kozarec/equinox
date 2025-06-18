@@ -31,7 +31,7 @@ func send[InType proto.Message](
 	msgID := id.String()
 	reqType := uint32(payloadType)
 
-	msg := openapi.ProtoMessage{
+	msg := &openapi.ProtoMessage{
 		ClientMsgId: &msgID,
 		PayloadType: &reqType,
 		Payload:     payloadBase,
@@ -72,13 +72,13 @@ func sendReceive[InType proto.Message, OutType proto.Message](
 	msgID := id.String()
 	reqType := uint32(payloadType)
 
-	msg := openapi.ProtoMessage{
+	msg := &openapi.ProtoMessage{
 		ClientMsgId: &msgID,
 		PayloadType: &reqType,
 		Payload:     payloadBase,
 	}
 
-	respChan := make(chan openapi.ProtoMessage, 1)
+	respChan := make(chan *openapi.ProtoMessage, 1)
 	conn.pending.Store(msgID, respChan)
 	defer conn.pending.Delete(msgID)
 
@@ -115,7 +115,7 @@ func subscribe(
 	cb func(*openapi.ProtoMessage),
 ) (func(), error) {
 
-	internalChan := make(chan openapi.ProtoMessage, 256)
+	internalChan := make(chan *openapi.ProtoMessage, 256)
 
 	conn.subscribersMu.Lock()
 	defer conn.subscribersMu.Unlock()
@@ -133,7 +133,7 @@ func subscribe(
 					return
 				}
 
-				cb(&msg)
+				cb(msg)
 			}
 		}
 	}()

@@ -3,6 +3,7 @@ package ctrader
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -36,12 +37,12 @@ type connection struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	writeChan chan openapi.ProtoMessage
-	msgQueue  chan openapi.ProtoMessage
+	writeChan chan *openapi.ProtoMessage
+	msgQueue  chan *openapi.ProtoMessage
 
 	pending       sync.Map // map[uint64]chan openapi.ProtoMessage
 	subscribersMu sync.RWMutex
-	subscribers   map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage
+	subscribers   map[openapi.ProtoOAPayloadType][]chan *openapi.ProtoMessage
 }
 
 func newConnection(conn net.Conn, logger *zap.Logger) *connection {
@@ -52,9 +53,9 @@ func newConnection(conn net.Conn, logger *zap.Logger) *connection {
 		logger:      logger,
 		ctx:         ctx,
 		ctxCancel:   cancel,
-		writeChan:   make(chan openapi.ProtoMessage),
-		msgQueue:    make(chan openapi.ProtoMessage, 1024),
-		subscribers: make(map[openapi.ProtoOAPayloadType][]chan openapi.ProtoMessage),
+		writeChan:   make(chan *openapi.ProtoMessage),
+		msgQueue:    make(chan *openapi.ProtoMessage, 1024),
+		subscribers: make(map[openapi.ProtoOAPayloadType][]chan *openapi.ProtoMessage),
 	}
 	return c
 }
@@ -94,7 +95,7 @@ func (c *connection) read() {
 				continue
 			}
 
-			c.logger.Debug("read", zap.String("msg", msg.String()))
+			c.logger.Debug("read", zap.String("payload", hex.EncodeToString(msg.GetPayload())))
 
 			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
 			_, isStream := streamMessageTypes[payloadType]
@@ -103,14 +104,14 @@ func (c *connection) read() {
 				c.subscribersMu.RLock()
 				for _, ch := range c.subscribers[payloadType] {
 					select {
-					case ch <- msg:
+					case ch <- &msg:
 					default:
 					}
 				}
 				c.subscribersMu.RUnlock()
 			} else if msg.ClientMsgId != nil {
 				if ch, ok := c.pending.LoadAndDelete(*msg.ClientMsgId); ok {
-					ch.(chan openapi.ProtoMessage) <- msg
+					ch.(chan *openapi.ProtoMessage) <- &msg
 				}
 			}
 		}
@@ -127,9 +128,9 @@ func (c *connection) write() {
 			if !ok {
 				continue
 			}
-			c.logger.Debug("write", zap.String("msg", msg.String()))
+			c.logger.Debug("write", zap.String("payload", hex.EncodeToString(msg.GetPayload())))
 
-			data, err := proto.Marshal(&msg)
+			data, err := proto.Marshal(msg)
 			if err != nil {
 				continue
 			}

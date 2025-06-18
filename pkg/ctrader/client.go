@@ -150,7 +150,8 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 
 func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument model.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
 
-	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}}
+	subTimeStamp := true
+	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}, SubscribeToSpotTimestamp: &subTimeStamp}
 	spotsResp := &openapi.ProtoOASubscribeSpotsRes{}
 
 	if err := sendReceive(ctx, client.conn, spotsReq, spotsResp); err != nil {

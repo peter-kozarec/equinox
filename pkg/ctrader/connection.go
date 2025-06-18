@@ -7,6 +7,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"net"
 	"sync"
 )
@@ -86,19 +87,24 @@ func (c *connection) read() {
 			}
 
 			data := make([]byte, length)
-			if _, err := c.conn.Read(data); err != nil {
+			if _, err := io.ReadFull(c.conn, data); err != nil {
 				continue
 			}
 
 			var msg openapi.ProtoMessage
 			if err := proto.Unmarshal(data, &msg); err != nil {
+				c.logger.Warn("unmarshal failed",
+					zap.String("raw", hex.EncodeToString(data)),
+					zap.Error(err))
 				continue
 			}
 
-			c.logger.Debug("read", zap.String("payload", hex.EncodeToString(msg.GetPayload())))
-
 			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
 			_, isStream := streamMessageTypes[payloadType]
+
+			c.logger.Debug("read",
+				zap.String("type", payloadType.String()),
+				zap.String("payload", hex.EncodeToString(msg.GetPayload())))
 
 			if isStream {
 				c.subscribersMu.RLock()
@@ -128,7 +134,10 @@ func (c *connection) write() {
 			if !ok {
 				continue
 			}
-			c.logger.Debug("write", zap.String("payload", hex.EncodeToString(msg.GetPayload())))
+
+			c.logger.Debug("write",
+				zap.String("type", openapi.ProtoOAPayloadType(*msg.PayloadType).String()),
+				zap.String("payload", hex.EncodeToString(msg.GetPayload())))
 
 			data, err := proto.Marshal(msg)
 			if err != nil {

@@ -34,7 +34,7 @@ func main() {
 
 	go func() {
 		for range time.Tick(time.Minute) {
-			logger.Info("goroutine count", zap.Int("count", runtime.NumGoroutine()))
+			logger.Info("runtime", zap.Int("count", runtime.NumGoroutine()))
 		}
 	}()
 

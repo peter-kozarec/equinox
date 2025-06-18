@@ -54,7 +54,7 @@ func newConnection(conn net.Conn, logger *zap.Logger) *connection {
 		logger:      logger,
 		ctx:         ctx,
 		ctxCancel:   cancel,
-		writeChan:   make(chan *openapi.ProtoMessage),
+		writeChan:   make(chan *openapi.ProtoMessage, 100),
 		msgQueue:    make(chan *openapi.ProtoMessage, 1024),
 		subscribers: make(map[openapi.ProtoOAPayloadType][]chan *openapi.ProtoMessage),
 	}

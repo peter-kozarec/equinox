@@ -149,8 +149,16 @@ func (c *connection) write() {
 			binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
 			copy(full[4:], data)
 
-			if err := c.conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
-				c.logger.Warn("failed to set write deadline", zap.Error(err))
+			if tcpConn, ok := c.conn.(*net.TCPConn); ok {
+				err := tcpConn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				if err != nil {
+					c.logger.Warn("failed to set write deadline", zap.Error(err))
+				}
+			} else if c.conn != nil {
+				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				if err != nil {
+					c.logger.Warn("failed to set write deadline", zap.Error(err))
+				}
 			}
 
 			if _, err = c.conn.Write(full); err != nil {

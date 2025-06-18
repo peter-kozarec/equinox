@@ -30,10 +30,20 @@ jobs:
 
       - name: Build
         run: |
-          go build ./cmd/dumpit
-          go build ./test/backtest
-          go build ./test/ctraderapi
-          go build ./test/montecarlo
+          go build -o ./bin/dumpit ./cmd/dumpit
+          go build -o ./bin/backtest ./test/backtest
+          go build -o ./bin/ctraderapi ./test/ctraderapi
+          go build -o ./bin/montecarlo ./test/montecarlo
+
+      - name: Check built executables
+        run: |
+          test -f ./bin/dumpit && echo "dumpit exists"
+          test -f ./bin/backtest && echo "backtest exists"
+          test -f ./bin/ctraderapi && echo "ctraderapi exists"
+          test -f ./bin/montecarlo && echo "montecarlo exists"
+
+      - name: Run Monte Carlo Simulation
+        run: ./bin/montecarlo
 
       - name: Test
         run: go test -v ./...

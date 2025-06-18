@@ -26,7 +26,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to initializing logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		_ = logger.Sync()
+	}(logger)
 
 	router := bus.NewRouter(logger, 1000)
 
@@ -49,7 +51,7 @@ func main() {
 	sigma := fixed.New(1, 2)                    // realistic volatility
 	mu := sigma.Mul(sigma).Mul(fixed.New(5, 1)) // neutral drift
 	dt := fixed.New(1, 0).DivInt(86400)         // time step of 1 second
-	steps := int64(10_000_000)                 // large number of steps
+	steps := int64(10_000_000)                  // large number of steps
 
 	exec := simulation.NewMonteCarloExecutor(logger, sim, rng, startTime, startPrice, spread, mu, sigma, dt, steps)
 

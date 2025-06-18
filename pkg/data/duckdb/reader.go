@@ -14,6 +14,7 @@ type Reader struct {
 	db             *sql.DB
 }
 
+//goland:noinspection GoUnusedExportedFunction
 func NewReader(dataSourceName string) *Reader {
 	return &Reader{
 		dataSourceName: dataSourceName,

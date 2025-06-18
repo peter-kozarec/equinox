@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+//goland:noinspection ALL
 var (
 	NegOne = New(-1, 0)
 	Zero   = New(0, 0)

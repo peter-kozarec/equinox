@@ -5,6 +5,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
+//goland:noinspection ALL
 var (
 	NoopTickHdl    = func(model.Tick) {}
 	NoopBarHdl     = func(model.Bar) {}

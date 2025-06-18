@@ -9,6 +9,7 @@ import (
 
 type MonitorFlags uint16
 
+//goland:noinspection GoUnusedConst
 const (
 	MonitorNone MonitorFlags = 1 << iota
 	MonitorTicks

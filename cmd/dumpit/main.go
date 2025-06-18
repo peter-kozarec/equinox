@@ -4,11 +4,11 @@ import (
 	"encoding/binary"
 	"encoding/csv"
 	"flag"
+	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"go.uber.org/zap"
 	"io"
 	"log"
 	"os"
-	"peter-kozarec/equinox/internal/data/mapper"
 	"strconv"
 	"time"
 )
@@ -27,7 +27,9 @@ func dumpIt(csvPath string, binFile *os.File) error {
 	if err != nil {
 		return err
 	}
-	defer csvFile.Close()
+	defer func(csvFile *os.File) {
+		_ = csvFile.Close()
+	}(csvFile)
 
 	reader := csv.NewReader(csvFile)
 	var quotes []Quote
@@ -91,7 +93,9 @@ func dumpAll(symbol string, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer binFile.Close()
+	defer func(binFile *os.File) {
+		_ = binFile.Close()
+	}(binFile)
 
 	for i := 2018; i <= 2025; i++ {
 		s := symbol + "_" + strconv.Itoa(i) + ".csv"
@@ -106,7 +110,9 @@ func dumpAll(symbol string, logger *zap.Logger) error {
 
 func main() {
 	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		_ = logger.Sync()
+	}(logger)
 
 	symbol := flag.String("symbol", "", "symbol")
 	flag.Parse()

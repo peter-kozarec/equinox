@@ -47,6 +47,7 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 	return client, nil
 }
 
+//goland:noinspection GoUnusedExportedFunction
 func DialLive(logger *zap.Logger) (*Client, error) {
 	return dial(logger, "live.ctraderapi.com", "5035")
 }

@@ -28,7 +28,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to initializing logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		_ = logger.Sync()
+	}(logger)
 
 	router := bus.NewRouter(logger, 1000)
 

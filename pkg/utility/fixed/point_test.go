@@ -482,30 +482,30 @@ func (m *mockEncoder) AddString(key, val string) {
 	m.fields[key] = val
 }
 
-func (m *mockEncoder) AddArray(key string, marshaler zapcore.ArrayMarshaler) error   { return nil }
-func (m *mockEncoder) AddObject(key string, marshaler zapcore.ObjectMarshaler) error { return nil }
-func (m *mockEncoder) AddBinary(key string, val []byte)                              {}
-func (m *mockEncoder) AddByteString(key string, val []byte)                          {}
-func (m *mockEncoder) AddBool(key string, val bool)                                  {}
-func (m *mockEncoder) AddComplex128(key string, val complex128)                      {}
-func (m *mockEncoder) AddComplex64(key string, val complex64)                        {}
-func (m *mockEncoder) AddDuration(key string, val time.Duration)                     {}
-func (m *mockEncoder) AddFloat64(key string, val float64)                            {}
-func (m *mockEncoder) AddFloat32(key string, val float32)                            {}
-func (m *mockEncoder) AddInt(key string, val int)                                    {}
-func (m *mockEncoder) AddInt64(key string, val int64)                                {}
-func (m *mockEncoder) AddInt32(key string, val int32)                                {}
-func (m *mockEncoder) AddInt16(key string, val int16)                                {}
-func (m *mockEncoder) AddInt8(key string, val int8)                                  {}
-func (m *mockEncoder) AddTime(key string, val time.Time)                             {}
-func (m *mockEncoder) AddUint(key string, val uint)                                  {}
-func (m *mockEncoder) AddUint64(key string, val uint64)                              {}
-func (m *mockEncoder) AddUint32(key string, val uint32)                              {}
-func (m *mockEncoder) AddUint16(key string, val uint16)                              {}
-func (m *mockEncoder) AddUint8(key string, val uint8)                                {}
-func (m *mockEncoder) AddUintptr(key string, val uintptr)                            {}
-func (m *mockEncoder) AddReflected(key string, val interface{}) error                { return nil }
-func (m *mockEncoder) OpenNamespace(key string)                                      {}
+func (m *mockEncoder) AddArray(string, zapcore.ArrayMarshaler) error   { return nil }
+func (m *mockEncoder) AddObject(string, zapcore.ObjectMarshaler) error { return nil }
+func (m *mockEncoder) AddBinary(string, []byte)                        {}
+func (m *mockEncoder) AddByteString(string, []byte)                    {}
+func (m *mockEncoder) AddBool(string, bool)                            {}
+func (m *mockEncoder) AddComplex128(string, complex128)                {}
+func (m *mockEncoder) AddComplex64(string, complex64)                  {}
+func (m *mockEncoder) AddDuration(string, time.Duration)               {}
+func (m *mockEncoder) AddFloat64(string, float64)                      {}
+func (m *mockEncoder) AddFloat32(string, float32)                      {}
+func (m *mockEncoder) AddInt(string, int)                              {}
+func (m *mockEncoder) AddInt64(string, int64)                          {}
+func (m *mockEncoder) AddInt32(string, int32)                          {}
+func (m *mockEncoder) AddInt16(string, int16)                          {}
+func (m *mockEncoder) AddInt8(string, int8)                            {}
+func (m *mockEncoder) AddTime(string, time.Time)                       {}
+func (m *mockEncoder) AddUint(string, uint)                            {}
+func (m *mockEncoder) AddUint64(string, uint64)                        {}
+func (m *mockEncoder) AddUint32(string, uint32)                        {}
+func (m *mockEncoder) AddUint16(string, uint16)                        {}
+func (m *mockEncoder) AddUint8(string, uint8)                          {}
+func (m *mockEncoder) AddUintptr(string, uintptr)                      {}
+func (m *mockEncoder) AddReflected(string, interface{}) error          { return nil }
+func (m *mockEncoder) OpenNamespace(string)                            {}
 
 // Test edge cases and error conditions
 func TestEdgeCases(t *testing.T) {

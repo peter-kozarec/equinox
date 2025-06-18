@@ -82,7 +82,7 @@ func (a *Advisor) NewBar(b model.Bar) {
 	}
 }
 
-func (a *Advisor) PositionClosed(p model.Position) {
+func (a *Advisor) PositionClosed(_ model.Position) {
 	a.posOpen = false
 }
 

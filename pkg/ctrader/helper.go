@@ -28,7 +28,7 @@ func Authenticate(
 	authAccCtx, authAccCancel := context.WithTimeout(ctx, time.Second*5)
 	defer authAccCancel()
 
-	if err := client.AuthorizeAccount(authAccCtx, int64(accountId), accessToken); err != nil {
+	if err := client.AuthorizeAccount(authAccCtx, accountId, accessToken); err != nil {
 		return fmt.Errorf("unable to authorize account: %w", err)
 	}
 	client.logger.Info("account authorized")

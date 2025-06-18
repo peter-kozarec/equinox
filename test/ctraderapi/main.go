@@ -27,7 +27,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
+	defer func(logger *zap.Logger) {
+		_ = logger.Sync()
+	}(logger)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()

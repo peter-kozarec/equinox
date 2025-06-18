@@ -23,7 +23,7 @@ var accessToken = os.Getenv("CtAccessToken")
 
 func main() {
 	// For development - pretty console output
-	logger, err := zap.NewDevelopment()
+	logger, err := zap.NewProduction()
 	if err != nil {
 		panic(err)
 	}

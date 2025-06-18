@@ -232,10 +232,6 @@ func (state *State) StartBalancePolling(parentCtx context.Context, client *Clien
 	go func() {
 		defer ticker.Stop()
 
-		state.logger.Debug("balance polling started",
-			zap.Duration("interval", pollInterval),
-			zap.Duration("timeout", requestTimeout))
-
 	outer:
 		for {
 			select {

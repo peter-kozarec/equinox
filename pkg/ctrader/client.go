@@ -26,6 +26,15 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 		return nil, err
 	}
 
+	if tcp, ok := tcpConn.(*net.TCPConn); ok {
+		if err := tcp.SetKeepAlive(true); err != nil {
+			return nil, err
+		}
+		if err := tcp.SetKeepAlivePeriod(30 * time.Second); err != nil {
+			return nil, err
+		}
+	}
+
 	tlsConn := tls.Client(tcpConn, &tls.Config{
 		ServerName: host,
 	})

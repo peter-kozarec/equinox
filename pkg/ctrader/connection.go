@@ -84,6 +84,7 @@ func (c *connection) read() {
 			if _, err := io.ReadFull(c.conn, header); err != nil {
 				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
 					c.logger.Debug("connection closed, exiting read loop")
+					time.Sleep(500 * time.Millisecond)
 					return
 				}
 				c.logger.Warn("read header failed", zap.Error(err))

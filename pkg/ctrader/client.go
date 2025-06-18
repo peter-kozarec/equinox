@@ -270,14 +270,16 @@ func (client *Client) keepAlive(interval time.Duration) {
 				return
 			case <-ticker.C:
 				payloadType := uint32(openapi.ProtoPayloadType_HEARTBEAT_EVENT)
-				msg := &openapi.ProtoMessage{
-					PayloadType: &payloadType,
+				msg := &openapi.ProtoMessage{PayloadType: &payloadType}
+
+				select {
+				case client.conn.writeChan <- msg:
+				default:
+					client.logger.Warn("heartbeat dropped: writeChan full")
 				}
-				client.conn.writeChan <- msg
 			}
 		}
 	}()
-
 }
 
 func (client *Client) addErrRespHandler() {

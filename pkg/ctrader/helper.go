@@ -3,11 +3,12 @@ package ctrader
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"github.com/peter-kozarec/equinox/pkg/model"
 	"go.uber.org/zap"
-	"time"
 )
 
 func Authenticate(
@@ -52,7 +53,7 @@ func InitTradeSession(
 		return nil, fmt.Errorf("unable to get %s symbol info: %w", symbol, err)
 	}
 	symbolInfo.Digits = 5
-	client.logger.Info("symbol info",
+	client.logger.Info("info",
 		zap.String("symbol", symbol),
 		zap.Int64("id", symbolInfo.Id),
 		zap.Int("digits", symbolInfo.Digits),
@@ -68,7 +69,7 @@ func InitTradeSession(
 	if err := state.LoadBalance(balanceContext, client, accountId); err != nil {
 		return nil, fmt.Errorf("unable to load balance: %w", err)
 	}
-	client.logger.Info("account info", zap.String("balance", state.balance.String()))
+	client.logger.Info("account", zap.String("balance", state.balance.String()))
 
 	// Load open positions
 	loadPosContext, loadPosCancel := context.WithTimeout(ctx, time.Second)
@@ -79,7 +80,7 @@ func InitTradeSession(
 	if len(state.openPositions) > 0 {
 		client.logger.Info("opened positions present", zap.Int("count", len(state.openPositions)))
 	} else {
-		client.logger.Info("no opened positions are present")
+		client.logger.Info("no opened positions")
 	}
 
 	// Subscribe to spot events

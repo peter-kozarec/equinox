@@ -17,13 +17,13 @@ func (t Tick) Average() fixed.Point {
 	return t.Ask.Add(t.Bid).DivInt(2)
 }
 
-func (t Tick) Volume() fixed.Point {
+func (t Tick) AggregatedVolume() fixed.Point {
 	return t.AskVolume.Add(t.BidVolume)
 }
 
 func (t Tick) Fields() []zap.Field {
 	return []zap.Field{
-		zap.Int64("time_stamp", t.TimeStamp),
+		zap.Int64("timestamp", t.TimeStamp),
 		zap.String("ask", t.Ask.String()),
 		zap.String("bid", t.Bid.String()),
 		zap.String("ask_volume", t.AskVolume.String()),

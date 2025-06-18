@@ -1,9 +1,10 @@
 package simulation
 
 import (
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/model"
-	"time"
 )
 
 type Aggregator struct {
@@ -24,7 +25,7 @@ func (aggregator *Aggregator) OnTick(tick model.Tick) error {
 	ts := time.Unix(0, tick.TimeStamp)
 	barTS := ts.Truncate(aggregator.interval).UnixNano()
 	price := tick.Average()
-	volume := tick.Volume()
+	volume := tick.AggregatedVolume()
 
 	// Gap detection — flush and reset
 	if aggregator.currentBar != nil && barTS != aggregator.currentBar.TimeStamp {

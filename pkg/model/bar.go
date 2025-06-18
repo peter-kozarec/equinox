@@ -1,9 +1,10 @@
 package model
 
 import (
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"time"
 )
 
 type Bar struct {
@@ -19,7 +20,7 @@ type Bar struct {
 func (b Bar) Fields() []zap.Field {
 	return []zap.Field{
 		zap.String("period", b.Period.String()),
-		zap.Int64("timeStamp", b.TimeStamp),
+		zap.Int64("timestamp", b.TimeStamp),
 		zap.String("open", b.Open.String()),
 		zap.String("high", b.High.String()),
 		zap.String("low", b.Low.String()),

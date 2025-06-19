@@ -54,7 +54,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	internalTick := model.Tick{}
 	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.instrument.Digits)
 	internalTick.Bid = fixed.FromUint(v.GetBid(), state.instrument.Digits)
-	internalTick.TimeStamp = v.GetTimestamp()
+	internalTick.TimeStamp = v.GetTimestamp() * 1000
 
 	if internalTick.Ask.Eq(fixed.Zero) {
 		if state.lastTick.Ask.Eq(fixed.Zero) {

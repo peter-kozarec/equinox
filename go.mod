@@ -4,6 +4,7 @@ go 1.24.3
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/govalues/decimal v0.1.36
 	github.com/marcboeker/go-duckdb v1.8.5
 	go.uber.org/zap v1.27.0

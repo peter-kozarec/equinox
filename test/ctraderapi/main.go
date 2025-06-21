@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
-	"runtime"
 	"strconv"
 
 	"syscall"
@@ -32,12 +31,6 @@ func main() {
 		_ = logger.Sync()
 	}(logger)
 
-	go func() {
-		for range time.Tick(time.Minute) {
-			logger.Info("runtime", zap.Int("count", runtime.NumGoroutine()))
-		}
-	}()
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
@@ -56,7 +49,7 @@ func main() {
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		logger.Fatal("unable to authenticate", zap.Error(err))
 	}
-	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "EURUSD", time.Minute, router)
+	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router)
 	if err != nil {
 		logger.Fatal("unable to initialize trading session", zap.Error(err))
 	}

@@ -2,15 +2,11 @@ package ctrader
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/hex"
-	"errors"
+	"github.com/gorilla/websocket"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"net"
-	"strings"
 	"sync"
 	"time"
 )
@@ -35,7 +31,7 @@ var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
 }
 
 type connection struct {
-	conn   net.Conn
+	conn   *websocket.Conn
 	logger *zap.Logger
 
 	ctx       context.Context
@@ -49,7 +45,7 @@ type connection struct {
 	subscribers   map[openapi.ProtoOAPayloadType][]chan *openapi.ProtoMessage
 }
 
-func newConnection(conn net.Conn, logger *zap.Logger) *connection {
+func newConnection(conn *websocket.Conn, logger *zap.Logger) *connection {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &connection{
@@ -80,35 +76,17 @@ func (c *connection) read() {
 		case <-c.ctx.Done():
 			return
 		default:
-			header := make([]byte, 4)
-			if _, err := io.ReadFull(c.conn, header); err != nil {
-				if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
-					c.logger.Debug("connection closed, exiting read loop")
-					time.Sleep(500 * time.Millisecond)
-					return
-				}
-				c.logger.Warn("read header failed", zap.Error(err))
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			length := binary.BigEndian.Uint32(header)
-			if length == 0 || length > 10_000_000 { // sanity check
-				c.logger.Warn("invalid message length", zap.Uint32("length", length))
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-
-			data := make([]byte, length)
-			if _, err := io.ReadFull(c.conn, data); err != nil {
+			_, message, err := c.conn.ReadMessage()
+			if err != nil {
 				c.logger.Warn("cannot read data", zap.Error(err))
 				time.Sleep(1 * time.Second) // prevent tight loop
-				continue
+				return
 			}
 
 			var msg openapi.ProtoMessage
-			if err := proto.Unmarshal(data, &msg); err != nil {
+			if err := proto.Unmarshal(message, &msg); err != nil {
 				c.logger.Warn("unmarshal failed",
-					zap.String("raw", hex.EncodeToString(data)),
+					zap.String("raw", hex.EncodeToString(message)),
 					zap.Error(err))
 				time.Sleep(100 * time.Millisecond)
 				continue
@@ -162,23 +140,7 @@ func (c *connection) write() {
 				continue
 			}
 
-			full := make([]byte, 4+len(data))
-			binary.BigEndian.PutUint32(full[:4], uint32(len(data)))
-			copy(full[4:], data)
-
-			if tcpConn, ok := c.conn.(*net.TCPConn); ok {
-				err := tcpConn.SetWriteDeadline(time.Now().Add(time.Second))
-				if err != nil {
-					c.logger.Warn("failed to set write deadline", zap.Error(err))
-				}
-			} else if c.conn != nil {
-				err := c.conn.SetWriteDeadline(time.Now().Add(time.Second))
-				if err != nil {
-					c.logger.Warn("failed to set write deadline", zap.Error(err))
-				}
-			}
-
-			if _, err = c.conn.Write(full); err != nil {
+			if err = c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
 				c.logger.Warn("failed to write to connection", zap.Error(err))
 				time.Sleep(1 * time.Second) // prevent tight loop
 				continue

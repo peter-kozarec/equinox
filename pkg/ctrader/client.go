@@ -2,15 +2,14 @@ package ctrader
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"github.com/peter-kozarec/equinox/pkg/model"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
-	"net"
 	"strings"
 	"time"
 )
@@ -21,29 +20,13 @@ type Client struct {
 }
 
 func dial(logger *zap.Logger, host, port string) (*Client, error) {
-	tcpConn, err := net.DialTimeout("tcp", host+":"+port, time.Second*5)
+
+	wsConn, _, err := websocket.DefaultDialer.Dial("wss://"+host+":"+port, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if tcp, ok := tcpConn.(*net.TCPConn); ok {
-		if err := tcp.SetKeepAlive(true); err != nil {
-			return nil, err
-		}
-		if err := tcp.SetKeepAlivePeriod(30 * time.Second); err != nil {
-			return nil, err
-		}
-	}
-
-	tlsConn := tls.Client(tcpConn, &tls.Config{
-		ServerName: host,
-	})
-
-	if err := tlsConn.Handshake(); err != nil {
-		return nil, err
-	}
-
-	conn := newConnection(tlsConn, logger)
+	conn := newConnection(wsConn, logger)
 	conn.start()
 
 	client := &Client{

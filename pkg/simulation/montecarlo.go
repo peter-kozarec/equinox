@@ -251,7 +251,7 @@ func (e *MonteCarloExecutor) DoOnce() error {
 	e.tick.BidVolume = bidVol
 
 	// Optional: Add some tick-level noise for more realism
-	//e.addTickNoise()
+	e.addTickNoise()
 
 	e.tick.Ask = e.tick.Ask.Rescale(e.normPriceDigits)
 	e.tick.Bid = e.tick.Bid.Rescale(e.normPriceDigits)
@@ -350,14 +350,4 @@ func (e *MonteCarloExecutor) addTickNoise() {
 		e.tick.Bid = mid.Sub(tickSize)
 		e.tick.Ask = mid.Add(tickSize)
 	}
-}
-
-// GetProgress returns current simulation progress
-func (e *MonteCarloExecutor) GetProgress() (current, total int64) {
-	return e.t, e.steps
-}
-
-// GetCurrentState returns current simulation state
-func (e *MonteCarloExecutor) GetCurrentState() (time.Time, fixed.Point, fixed.Point) {
-	return e.lastTime, e.lastPrice, e.currentSpread
 }

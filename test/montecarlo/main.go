@@ -11,6 +11,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"time"
@@ -46,9 +47,10 @@ func main() {
 	exec := simulation.NewEurUsdMonteCarloTickSimulator(
 		logger,
 		sim,
-		12*30*24*time.Hour, // Duration
-		0.1607143264,       // Your mu
-		0.0698081590,       // Your sigma
+		rand.New(rand.NewSource(time.Now().UnixNano())),
+		30*24*time.Hour, // Duration
+		0.1607143264,    // Your mu
+		0.0698081590,    // Your sigma
 	)
 
 	telemetry := middleware.NewTelemetry(logger)

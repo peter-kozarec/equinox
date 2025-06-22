@@ -11,7 +11,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"time"
@@ -44,16 +43,13 @@ func main() {
 	audit := simulation.NewAudit(logger, time.Minute)
 	sim := simulation.NewSimulator(logger, router, audit, simConf)
 
-	rng := rand.New(rand.NewSource(123))
-	startTime, _ := time.Parse(time.DateTime, StartTime)
-	startPrice := fixed.New(112345, 5)          // ~1.12345
-	spread := fixed.New(5, 5)                   // small spread, adjust as needed
-	sigma := fixed.New(1, 2)                    // realistic volatility
-	mu := sigma.Mul(sigma).Mul(fixed.New(5, 1)) // neutral drift
-	dt := fixed.New(1, 0).DivInt(86400)         // time step of 1 second
-	steps := int64(10_000_000)                  // large number of steps
-
-	exec := simulation.NewMonteCarloExecutor(logger, sim, rng, startTime, startPrice, spread, mu, sigma, dt, steps)
+	exec := simulation.NewEurUsdMonteCarloTickSimulator(
+		logger,
+		sim,
+		30*24*time.Hour, // Duration
+		0.1607143264,    // Your mu
+		0.0698081590,    // Your sigma
+	)
 
 	telemetry := middleware.NewTelemetry(logger)
 	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed|middleware.MonitorBalance)

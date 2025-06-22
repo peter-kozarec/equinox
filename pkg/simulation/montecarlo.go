@@ -102,6 +102,7 @@ func NewMonteCarloExecutor(
 func NewEurUsdMonteCarloTickSimulator(
 	logger *zap.Logger,
 	simulator *Simulator,
+	rng *rand.Rand,
 	duration time.Duration,
 	mu, sigma float64) *MonteCarloExecutor {
 
@@ -131,7 +132,6 @@ func NewEurUsdMonteCarloTickSimulator(
 
 	// Setup timing
 	startTime := time.Now()
-	rng := rand.New(rand.NewSource(startTime.UnixNano()))
 
 	// Convert duration to number of ticks
 	totalSeconds := int64(duration.Seconds())

@@ -46,13 +46,13 @@ func main() {
 	exec := simulation.NewEurUsdMonteCarloTickSimulator(
 		logger,
 		sim,
-		30*24*time.Hour, // Duration
-		0.1607143264,    // Your mu
-		0.0698081590,    // Your sigma
+		12*30*24*time.Hour, // Duration
+		0.1607143264,       // Your mu
+		0.0698081590,       // Your sigma
 	)
 
 	telemetry := middleware.NewTelemetry(logger)
-	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed|middleware.MonitorBalance)
+	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed)
 
 	advisor := strategy.NewAdvisor(logger, router)
 	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick)(advisor.NewTick)

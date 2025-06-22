@@ -106,17 +106,17 @@ func NewEurUsdMonteCarloTickSimulator(
 	const (
 		// Market characteristics
 		eurUsdStartPrice    = 1.0550  // Typical EURUSD starting price
-		eurUsdTypicalSpread = 0.00005 // 0.5 pips spread
-		eurUsdMinSpread     = 0.00002 // 0.2 pips minimum
-		eurUsdMaxSpread     = 0.00010 // 1.0 pips maximum
+		eurUsdTypicalSpread = 0.00003 // 0.3 pips spread
+		eurUsdMinSpread     = 0.00001 // 0.1 pips minimum
+		eurUsdMaxSpread     = 0.00006 // 0.6 pips maximum
 
 		// Tick timing (realistic for EURUSD)
 		avgTickIntervalSeconds = 1    // second average between ticks
 		tickTimingVariability  = 0.45 // 45% timing variation
 
 		// Volume characteristics
-		avgVolumeUnits    = 750000 // 750K units average volume
-		volumeVariability = 0.65   // 65% volume variance
+		avgVolumeUnits    = 100  // 100 units average volume
+		volumeVariability = 0.65 // 65% volume variance
 
 		// Spread dynamics
 		spreadVolatility = 0.12 // 12% spread volatility

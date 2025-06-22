@@ -115,7 +115,7 @@ func NewEurUsdMonteCarloTickSimulator(
 		tickTimingVariability  = 0.45 // 45% timing variation
 
 		// Volume characteristics
-		avgVolumeUnits    = 100  // 100 units average volume
+		avgVolumeUnits    = 1    // 1 units average volume
 		volumeVariability = 0.65 // 65% volume variance
 
 		// Spread dynamics

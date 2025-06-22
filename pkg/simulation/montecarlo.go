@@ -175,7 +175,7 @@ func NewEurUsdMonteCarloTickSimulator(
 	)
 
 	// Log configuration
-	logger.Info("EURUSD Monte Carlo Tick Simulator configured",
+	logger.Debug("EURUSD Monte Carlo Tick Simulator configured",
 		zap.Duration("duration", duration),
 		zap.Float64("mu_annual", mu),
 		zap.Float64("sigma_annual", sigma),

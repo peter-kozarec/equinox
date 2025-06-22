@@ -49,6 +49,9 @@ type MonteCarloExecutor struct {
 	currentSpread fixed.Point
 
 	tick model.Tick
+
+	normPriceDigits  int
+	normVolumeDigits int
 }
 
 func NewMonteCarloExecutor(
@@ -120,6 +123,10 @@ func NewEurUsdMonteCarloTickSimulator(
 
 		// Spread dynamics
 		spreadVolatility = 0.12 // 12% spread volatility
+
+		// Normalization digits
+		normPriceDigits  = 5
+		normVolumeDigits = 2
 	)
 
 	// Setup timing
@@ -173,6 +180,9 @@ func NewEurUsdMonteCarloTickSimulator(
 		minSpread,
 		maxSpread,
 	)
+
+	executor.normPriceDigits = normPriceDigits
+	executor.normVolumeDigits = normVolumeDigits
 
 	// Log configuration
 	logger.Debug("EURUSD Monte Carlo Tick Simulator configured",
@@ -241,7 +251,13 @@ func (e *MonteCarloExecutor) DoOnce() error {
 	e.tick.BidVolume = bidVol
 
 	// Optional: Add some tick-level noise for more realism
-	e.addTickNoise()
+	//e.addTickNoise()
+
+	e.tick.Ask = e.tick.Ask.Rescale(e.normPriceDigits)
+	e.tick.Bid = e.tick.Bid.Rescale(e.normPriceDigits)
+
+	e.tick.AskVolume = e.tick.AskVolume.Rescale(e.normVolumeDigits)
+	e.tick.BidVolume = e.tick.BidVolume.Rescale(e.normVolumeDigits)
 
 	if err := e.simulator.OnTick(e.tick); err != nil {
 		return err

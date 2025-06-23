@@ -61,6 +61,7 @@ func (p Point) Pow(o Point) Point { return Point{must(p.v.Pow(o.v))} }
 func (p Point) Sqrt() Point       { return Point{must(p.v.Sqrt())} }
 
 func (p Point) Exp() Point { return Point{must(p.v.Exp())} }
+func (p Point) Log() Point { return Point{must(p.v.Log())} }
 
 func (p Point) Rescale(scale int) Point { return Point{p.v.Rescale(scale)} }
 func (p Point) Float64() float64        { return mustFloat64(p.v.Float64()) }

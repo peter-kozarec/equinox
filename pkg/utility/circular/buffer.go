@@ -44,6 +44,14 @@ func (b *Buffer[T]) Get(idx uint) T {
 	return b.data[b.head-1-idx]
 }
 
+func (b *Buffer[T]) First() T {
+	return b.Get(0)
+}
+
+func (b *Buffer[T]) Last() T {
+	return b.Get(b.Size() - 1)
+}
+
 func (b *Buffer[T]) IsFull() bool {
 	return b.size == b.capacity
 }

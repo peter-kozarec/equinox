@@ -15,7 +15,7 @@ var (
 	ten   = fixed.New(10, 0)
 )
 
-func TestPoint(t *testing.T) {
+func TestPoint_PushUpdate(t *testing.T) {
 	p := CreatePointBuffer(5)
 	p.PushUpdate(three)
 	p.PushUpdate(one)
@@ -43,5 +43,15 @@ func TestPoint(t *testing.T) {
 				t.Errorf("got %d, want %d", tt.result, tt.expected)
 			}
 		})
+	}
+}
+
+func Benchmark_PushUpdate(b *testing.B) {
+	p := CreatePointBuffer(1000)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		value := fixed.FromUint(uint64(i%100), 0)
+		p.PushUpdate(value)
 	}
 }

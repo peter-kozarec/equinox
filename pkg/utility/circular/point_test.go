@@ -15,7 +15,7 @@ var (
 	ten   = fixed.New(10, 0)
 )
 
-func TestPoint_Mean(t *testing.T) {
+func TestPoint(t *testing.T) {
 	p := CreatePointBuffer(5)
 	p.PushUpdate(three)
 	p.PushUpdate(one)

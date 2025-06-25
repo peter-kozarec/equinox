@@ -16,7 +16,7 @@ var (
 )
 
 func TestPoint_PushUpdate(t *testing.T) {
-	p := CreatePointBuffer(5)
+	p := NewPointBuffer(5)
 	p.PushUpdate(three)
 	p.PushUpdate(one)
 	p.PushUpdate(two)
@@ -47,7 +47,7 @@ func TestPoint_PushUpdate(t *testing.T) {
 }
 
 func Benchmark_PushUpdate(b *testing.B) {
-	p := CreatePointBuffer(1000)
+	p := NewPointBuffer(1000)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {

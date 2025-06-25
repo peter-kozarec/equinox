@@ -4,7 +4,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-type Point struct {
+type PointBuffer struct {
 	b *Buffer[fixed.Point]
 
 	mean       fixed.Point
@@ -14,13 +14,13 @@ type Point struct {
 	variance   fixed.Point
 }
 
-func CreatePointBuffer(capacity uint) *Point {
-	return &Point{
+func NewPointBuffer(capacity uint) *PointBuffer {
+	return &PointBuffer{
 		b: NewBuffer[fixed.Point](capacity),
 	}
 }
 
-func (p *Point) PushUpdate(v fixed.Point) {
+func (p *PointBuffer) PushUpdate(v fixed.Point) {
 	if p.b.IsEmpty() {
 		p.b.Push(v)
 		p.sum = v
@@ -45,18 +45,18 @@ func (p *Point) PushUpdate(v fixed.Point) {
 	}
 }
 
-func (p *Point) Mean() fixed.Point {
+func (p *PointBuffer) Mean() fixed.Point {
 	return p.mean
 }
 
-func (p *Point) Sum() fixed.Point {
+func (p *PointBuffer) Sum() fixed.Point {
 	return p.sum
 }
 
-func (p *Point) StdDev() fixed.Point {
+func (p *PointBuffer) StdDev() fixed.Point {
 	return p.stdDev
 }
 
-func (p *Point) Variance() fixed.Point {
+func (p *PointBuffer) Variance() fixed.Point {
 	return p.variance
 }

@@ -33,7 +33,7 @@ type Report struct {
 }
 
 func (r Report) Print(logger *zap.Logger) {
-	logger.Info("performance report",
+	logger.Info("trade report",
 		zap.String("initial_equity", r.InitialEquity.String()),
 		zap.String("final_equity", r.FinalEquity.String()),
 		zap.String("total_profit", fmt.Sprintf("%s%%", r.TotalProfit.String())),

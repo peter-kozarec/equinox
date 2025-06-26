@@ -23,13 +23,13 @@ func TestBuffer_PushGet(t *testing.T) {
 		result   int
 		expected int
 	}{
-		{"b.Get(0) == 8", b.Get(0), 8},
-		{"b.Get(1) == 7", b.Get(1), 7},
-		{"b.Get(2) == 6", b.Get(2), 6},
-		{"b.Get(3) == 5", b.Get(3), 5},
-		{"b.Get(4) == 4", b.Get(4), 4},
-		{"b.First() == 8", b.First(), 8},
-		{"b.Last() == 4", b.Last(), 4},
+		{"B.Get(0) == 8", b.Get(0), 8},
+		{"B.Get(1) == 7", b.Get(1), 7},
+		{"B.Get(2) == 6", b.Get(2), 6},
+		{"B.Get(3) == 5", b.Get(3), 5},
+		{"B.Get(4) == 4", b.Get(4), 4},
+		{"B.First() == 8", b.First(), 8},
+		{"B.Last() == 4", b.Last(), 4},
 		{"c.Get(0) == 1", c.Get(0), 1},
 		{"c.Get(1) == 0", c.Get(1), 0},
 	}
@@ -60,7 +60,7 @@ func TestBuffer_Data(t *testing.T) {
 		result   []int
 		expected []int
 	}{
-		{"b.Data() == [4,5,6,7,8]", b.Data(), []int{4, 5, 6, 7, 8}},
+		{"B.Data() == [4,5,6,7,8]", b.Data(), []int{4, 5, 6, 7, 8}},
 	}
 
 	for _, tt := range tests {

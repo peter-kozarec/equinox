@@ -5,7 +5,7 @@ import (
 )
 
 type PointBuffer struct {
-	b *Buffer[fixed.Point]
+	B *Buffer[fixed.Point]
 
 	mean       fixed.Point
 	stdDev     fixed.Point
@@ -16,28 +16,28 @@ type PointBuffer struct {
 
 func NewPointBuffer(capacity uint) *PointBuffer {
 	return &PointBuffer{
-		b: NewBuffer[fixed.Point](capacity),
+		B: NewBuffer[fixed.Point](capacity),
 	}
 }
 
 func (p *PointBuffer) PushUpdate(v fixed.Point) {
-	if p.b.IsEmpty() {
-		p.b.Push(v)
+	if p.B.IsEmpty() {
+		p.B.Push(v)
 		p.sum = v
 		p.sumSquares = v.Mul(v)
-	} else if !p.b.IsFull() {
-		p.b.Push(v)
+	} else if !p.B.IsFull() {
+		p.B.Push(v)
 		p.sum = p.sum.Add(v)
 		p.sumSquares = p.sumSquares.Add(v.Mul(v))
 	} else {
-		toBeRemoved := p.b.Last()
-		p.b.Push(v)
+		toBeRemoved := p.B.Last()
+		p.B.Push(v)
 		p.sum = p.sum.Sub(toBeRemoved).Add(v)
 		p.sumSquares = p.sumSquares.Sub(toBeRemoved.Mul(toBeRemoved)).Add(v.Mul(v))
 	}
 
-	p.mean = p.sum.Div(fixed.FromUint(uint64(p.b.Size()), 0))
-	p.variance = p.sumSquares.Div(fixed.FromUint(uint64(p.b.Size()), 0)).Sub(p.mean.Mul(p.mean))
+	p.mean = p.sum.Div(fixed.FromUint(uint64(p.B.Size()), 0))
+	p.variance = p.sumSquares.Div(fixed.FromUint(uint64(p.B.Size()), 0)).Sub(p.mean.Mul(p.mean))
 	if p.variance.Gt(fixed.Zero) {
 		p.stdDev = p.variance.Sqrt()
 	} else {

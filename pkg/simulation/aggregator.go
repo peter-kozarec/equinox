@@ -21,49 +21,49 @@ func NewAggregator(interval time.Duration, bus *bus.Router) *Aggregator {
 	}
 }
 
-func (aggregator *Aggregator) OnTick(tick model.Tick) error {
+func (a *Aggregator) OnTick(tick model.Tick) error {
 	ts := time.Unix(0, tick.TimeStamp)
-	barTS := ts.Truncate(aggregator.interval).UnixNano()
+	barTS := ts.Truncate(a.interval).UnixNano()
 	price := tick.Average()
 	volume := tick.AggregatedVolume()
 
 	// Gap detection — flush and reset
-	if aggregator.currentBar != nil && barTS != aggregator.currentBar.TimeStamp {
-		if err := aggregator.router.Post(bus.BarEvent, *aggregator.currentBar); err != nil {
+	if a.currentBar != nil && barTS != a.currentBar.TimeStamp {
+		if err := a.router.Post(bus.BarEvent, *a.currentBar); err != nil {
 			return err
 		}
-		aggregator.currentBar = nil
+		a.currentBar = nil
 	}
 
-	if aggregator.currentBar == nil {
-		aggregator.currentBar = &model.Bar{
+	if a.currentBar == nil {
+		a.currentBar = &model.Bar{
 			TimeStamp: barTS,
 			Open:      price,
 			High:      price,
 			Low:       price,
 			Close:     price,
 			Volume:    volume,
-			Period:    aggregator.interval,
+			Period:    a.interval,
 		}
 	} else {
-		if price.Gt(aggregator.currentBar.High) {
-			aggregator.currentBar.High = price
+		if price.Gt(a.currentBar.High) {
+			a.currentBar.High = price
 		}
-		if price.Lt(aggregator.currentBar.Low) {
-			aggregator.currentBar.Low = price
+		if price.Lt(a.currentBar.Low) {
+			a.currentBar.Low = price
 		}
-		aggregator.currentBar.Close = price
-		aggregator.currentBar.Volume = aggregator.currentBar.Volume.Add(volume)
+		a.currentBar.Close = price
+		a.currentBar.Volume = a.currentBar.Volume.Add(volume)
 	}
 
-	aggregator.lastTS = tick.TimeStamp
+	a.lastTS = tick.TimeStamp
 	return nil
 }
 
-func (aggregator *Aggregator) Flush() error {
-	if aggregator.currentBar != nil && aggregator.currentBar.TimeStamp != 0 {
-		err := aggregator.router.Post(bus.BarEvent, *aggregator.currentBar)
-		aggregator.currentBar = nil
+func (a *Aggregator) Flush() error {
+	if a.currentBar != nil && a.currentBar.TimeStamp != 0 {
+		err := a.router.Post(bus.BarEvent, *a.currentBar)
+		a.currentBar = nil
 		return err
 	}
 	return nil

@@ -2,11 +2,12 @@ package simulation
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/model"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"time"
 )
 
 type Simulator struct {
@@ -40,140 +41,140 @@ func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit, cfg Conf
 	}
 }
 
-func (simulator *Simulator) PrintDetails() {
-	simulator.logger.Info("simulation details",
-		zap.String("slippage", simulator.cfg.PipSlippage.String()),
-		zap.String("commissions", simulator.cfg.CommissionPerLot.String()),
-		zap.String("contract_size", simulator.cfg.ContractSize.String()),
-		zap.String("pip_size", simulator.cfg.PipSize.String()),
-		zap.String("aggregator_interval", simulator.aggregator.interval.String()))
+func (s *Simulator) PrintDetails() {
+	s.logger.Info("simulation details",
+		zap.String("slippage", s.cfg.PipSlippage.String()),
+		zap.String("commissions", s.cfg.CommissionPerLot.String()),
+		zap.String("contract_size", s.cfg.ContractSize.String()),
+		zap.String("pip_size", s.cfg.PipSize.String()),
+		zap.String("aggregator_interval", s.aggregator.interval.String()))
 }
 
-func (simulator *Simulator) OnOrder(order model.Order) {
-	simulator.openOrders = append(simulator.openOrders, &order)
+func (s *Simulator) OnOrder(order model.Order) {
+	s.openOrders = append(s.openOrders, &order)
 }
 
-func (simulator *Simulator) OnTick(tick model.Tick) error {
+func (s *Simulator) OnTick(tick model.Tick) error {
 
 	// Set simulation time from processed tick
-	simulator.simulationTime = time.Unix(0, tick.TimeStamp)
-	simulator.lastTick = tick
+	s.simulationTime = time.Unix(0, tick.TimeStamp)
+	s.lastTick = tick
 
 	// Store balance and equity before processing the tick
-	lastBalance := simulator.balance
-	lastEquity := simulator.equity
+	lastBalance := s.balance
+	lastEquity := s.equity
 
-	simulator.checkPositions(tick)
-	simulator.checkOrders(tick)
-	simulator.processPendingChanges(tick)
+	s.checkPositions(tick)
+	s.checkOrders(tick)
+	s.processPendingChanges(tick)
 
 	// Post balance event if the current balance changed after the tick was processed
-	if lastBalance != simulator.balance {
-		if err := simulator.router.Post(bus.BalanceEvent, simulator.balance); err != nil {
-			simulator.logger.Error("unable to post balance event", zap.Error(err))
+	if lastBalance != s.balance {
+		if err := s.router.Post(bus.BalanceEvent, s.balance); err != nil {
+			s.logger.Error("unable to post balance event", zap.Error(err))
 		}
 	}
 	// Post equity event if the current equity changed after the tick was processed
-	if lastEquity != simulator.equity {
-		if err := simulator.router.Post(bus.EquityEvent, simulator.equity); err != nil {
-			simulator.logger.Error("unable to post equity event", zap.Error(err))
+	if lastEquity != s.equity {
+		if err := s.router.Post(bus.EquityEvent, s.equity); err != nil {
+			s.logger.Error("unable to post equity event", zap.Error(err))
 		}
 	}
 
-	simulator.audit.SnapshotAccount(simulator.balance, simulator.equity, simulator.simulationTime)
+	s.audit.AddAccountSnapshot(s.balance, s.equity, s.simulationTime)
 
-	if err := simulator.router.Post(bus.TickEvent, tick); err != nil {
-		simulator.logger.Error("unable to post tick event", zap.Error(err))
+	if err := s.router.Post(bus.TickEvent, tick); err != nil {
+		s.logger.Error("unable to post tick event", zap.Error(err))
 	}
 
-	if err := simulator.aggregator.OnTick(tick); err != nil {
-		simulator.logger.Warn("unable to aggregate ticks", zap.Error(err))
+	if err := s.aggregator.OnTick(tick); err != nil {
+		s.logger.Warn("unable to aggregate ticks", zap.Error(err))
 	}
 
 	return nil
 }
 
-func (simulator *Simulator) CloseAllOpenPositions() {
+func (s *Simulator) CloseAllOpenPositions() {
 
-	simulator.equity = simulator.balance
+	s.equity = s.balance
 
-	for idx := range simulator.openPositions {
-		position := simulator.openPositions[idx]
+	for idx := range s.openPositions {
+		position := s.openPositions[idx]
 
-		closePrice := simulator.lastTick.Bid
+		closePrice := s.lastTick.Bid
 		if position.IsShort() {
-			closePrice = simulator.lastTick.Ask
+			closePrice = s.lastTick.Ask
 		}
 
-		simulator.calcPositionProfits(position, closePrice)
-		simulator.equity = simulator.equity.Add(position.NetProfit)
+		s.calcPositionProfits(position, closePrice)
+		s.equity = s.equity.Add(position.NetProfit)
 
 		position.State = model.Closed
 		position.ClosePrice = closePrice
-		position.CloseTime = time.Unix(0, simulator.lastTick.TimeStamp)
-		simulator.audit.AddClosedPosition(*position)
+		position.CloseTime = time.Unix(0, s.lastTick.TimeStamp)
+		s.audit.AddClosedPosition(*position)
 	}
 
-	simulator.balance = simulator.equity
-	simulator.audit.addSnapshot(simulator.balance, simulator.equity, simulator.simulationTime)
+	s.balance = s.equity
+	s.audit.addSnapshot(s.balance, s.equity, s.simulationTime)
 }
 
-func (simulator *Simulator) checkPositions(tick model.Tick) {
+func (s *Simulator) checkPositions(tick model.Tick) {
 
-	for idx := range simulator.openPositions {
-		position := simulator.openPositions[idx]
+	for idx := range s.openPositions {
+		position := s.openPositions[idx]
 
-		if simulator.shouldClosePosition(*position, tick) {
+		if s.shouldClosePosition(*position, tick) {
 			position.State = model.PendingClose
 		}
 	}
 }
 
-func (simulator *Simulator) checkOrders(tick model.Tick) {
+func (s *Simulator) checkOrders(tick model.Tick) {
 
-	tmpOpenOrders := make([]*model.Order, 0, len(simulator.openOrders))
+	tmpOpenOrders := make([]*model.Order, 0, len(s.openOrders))
 
-	for idx := range simulator.openOrders {
-		order := simulator.openOrders[idx]
+	for idx := range s.openOrders {
+		order := s.openOrders[idx]
 
 		switch order.Command {
 		case model.CmdOpen:
 			switch order.OrderType {
 			case model.Market:
-				if err := simulator.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					simulator.logger.Warn("unable to execute open order", zap.Error(err))
+				if err := s.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
+					s.logger.Warn("unable to execute open order", zap.Error(err))
 				}
 			case model.Limit:
-				if !simulator.shouldOpenPosition(order.Price, order.Size, tick) {
+				if !s.shouldOpenPosition(order.Price, order.Size, tick) {
 					tmpOpenOrders = append(tmpOpenOrders, order)
 					continue
 				}
-				if err := simulator.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					simulator.logger.Warn("unable to execute open order", zap.Error(err))
+				if err := s.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
+					s.logger.Warn("unable to execute open order", zap.Error(err))
 				}
 			}
 		case model.CmdClose:
-			if err := simulator.executeCloseOrder(order.PositionId); err != nil {
-				simulator.logger.Warn("unable to execute close order", zap.Error(err))
+			if err := s.executeCloseOrder(order.PositionId); err != nil {
+				s.logger.Warn("unable to execute close order", zap.Error(err))
 			}
 		case model.CmdModify:
-			if err := simulator.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit); err != nil {
-				simulator.logger.Warn("unable to modify open position", zap.Error(err))
+			if err := s.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit); err != nil {
+				s.logger.Warn("unable to modify open position", zap.Error(err))
 			}
 		case model.CmdRemove:
 			continue
 		default:
-			simulator.logger.Warn("unknown command", zap.Any("cmd", order.Command))
+			s.logger.Warn("unknown command", zap.Any("cmd", order.Command))
 		}
 	}
 
-	simulator.openOrders = tmpOpenOrders
+	s.openOrders = tmpOpenOrders
 }
 
-func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
+func (s *Simulator) executeCloseOrder(id model.PositionId) error {
 
-	for idx := range simulator.openPositions {
-		position := simulator.openPositions[idx]
+	for idx := range s.openPositions {
+		position := s.openPositions[idx]
 
 		if position.Id == id {
 			position.State = model.PendingClose
@@ -183,7 +184,7 @@ func (simulator *Simulator) executeCloseOrder(id model.PositionId) error {
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) error {
+func (s *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) error {
 
 	// Validate position size
 	if size.IsZero() {
@@ -201,9 +202,9 @@ func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Po
 		}
 	}
 
-	simulator.positionIdCounter++
-	simulator.openPositions = append(simulator.openPositions, &model.Position{
-		Id:         simulator.positionIdCounter,
+	s.positionIdCounter++
+	s.openPositions = append(s.openPositions, &model.Position{
+		Id:         s.positionIdCounter,
 		State:      model.PendingOpen,
 		Size:       size,
 		StopLoss:   stopLoss,
@@ -212,10 +213,10 @@ func (simulator *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Po
 	return nil
 }
 
-func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit fixed.Point) error {
+func (s *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit fixed.Point) error {
 
-	for idx := range simulator.openPositions {
-		position := simulator.openPositions[idx]
+	for idx := range s.openPositions {
+		position := s.openPositions[idx]
 
 		if position.Id == id {
 			position.StopLoss = stopLoss
@@ -226,7 +227,7 @@ func (simulator *Simulator) modifyPosition(id model.PositionId, stopLoss, takePr
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (simulator *Simulator) shouldOpenPosition(price, size fixed.Point, tick model.Tick) bool {
+func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick model.Tick) bool {
 
 	// For long limit: trigger when Ask <= limit price
 	if size.Gt(fixed.Zero) && tick.Ask.Lte(price) {
@@ -239,7 +240,7 @@ func (simulator *Simulator) shouldOpenPosition(price, size fixed.Point, tick mod
 	return false
 }
 
-func (simulator *Simulator) shouldClosePosition(position model.Position, tick model.Tick) bool {
+func (s *Simulator) shouldClosePosition(position model.Position, tick model.Tick) bool {
 
 	if position.IsLong() {
 		// Long, check if take profit or stop loss has been reached
@@ -257,12 +258,12 @@ func (simulator *Simulator) shouldClosePosition(position model.Position, tick mo
 	return false
 }
 
-func (simulator *Simulator) processPendingChanges(tick model.Tick) {
-	tmpOpenPositions := make([]*model.Position, 0, len(simulator.openPositions))
-	simulator.equity = simulator.balance
+func (s *Simulator) processPendingChanges(tick model.Tick) {
+	tmpOpenPositions := make([]*model.Position, 0, len(s.openPositions))
+	s.equity = s.balance
 
-	for idx := range simulator.openPositions {
-		position := simulator.openPositions[idx]
+	for idx := range s.openPositions {
+		position := s.openPositions[idx]
 
 		var openPrice, closePrice fixed.Point
 		if position.IsLong() {
@@ -280,34 +281,34 @@ func (simulator *Simulator) processPendingChanges(tick model.Tick) {
 			position.State = model.Opened
 			position.OpenPrice = openPrice
 			position.OpenTime = time.Unix(0, tick.TimeStamp)
-			if err := simulator.router.Post(bus.PositionOpenedEvent, *position); err != nil {
-				simulator.logger.Warn("unable to post position opened event", zap.Error(err))
+			if err := s.router.Post(bus.PositionOpenedEvent, *position); err != nil {
+				s.logger.Warn("unable to post position opened event", zap.Error(err))
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
 		case model.PendingClose:
 			position.State = model.Closed
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
-			simulator.calcPositionProfits(position, closePrice)
-			simulator.balance = simulator.balance.Add(position.NetProfit)
-			simulator.audit.AddClosedPosition(*position)
-			if err := simulator.router.Post(bus.PositionClosedEvent, *position); err != nil {
-				simulator.logger.Warn("unable to post position closed event", zap.Error(err))
+			s.calcPositionProfits(position, closePrice)
+			s.balance = s.balance.Add(position.NetProfit)
+			s.audit.AddClosedPosition(*position)
+			if err := s.router.Post(bus.PositionClosedEvent, *position); err != nil {
+				s.logger.Warn("unable to post position closed event", zap.Error(err))
 			}
 		default:
-			simulator.calcPositionProfits(position, closePrice)
-			simulator.equity = simulator.equity.Add(position.NetProfit)
-			if err := simulator.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
-				simulator.logger.Warn("unable to post position pnl updated event", zap.Error(err))
+			s.calcPositionProfits(position, closePrice)
+			s.equity = s.equity.Add(position.NetProfit)
+			if err := s.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
+				s.logger.Warn("unable to post position pnl updated event", zap.Error(err))
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
 		}
 	}
 
-	simulator.openPositions = tmpOpenPositions
+	s.openPositions = tmpOpenPositions
 }
 
-func (simulator *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
+func (s *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
 	var pipPnL fixed.Point
 
 	if position.IsLong() {
@@ -318,15 +319,15 @@ func (simulator *Simulator) calcPositionProfits(position *model.Position, closeP
 		panic("invalid position, unable to determine long/short side")
 	}
 
-	pipPnL = pipPnL.Sub(simulator.cfg.PipSlippage.MulInt64(2))
-	pips := pipPnL.Div(simulator.cfg.PipSize)
+	pipPnL = pipPnL.Sub(s.cfg.PipSlippage.MulInt64(2))
+	pips := pipPnL.Div(s.cfg.PipSize)
 
 	// Use average price for more accurate lot value
 	avgPrice := position.OpenPrice.Add(closePrice).DivInt(2)
-	currentLotValue := simulator.cfg.PipSize.Mul(simulator.cfg.ContractSize).Mul(avgPrice)
+	currentLotValue := s.cfg.PipSize.Mul(s.cfg.ContractSize).Mul(avgPrice)
 
 	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(currentLotValue)
 
-	commission := simulator.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
+	commission := s.cfg.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

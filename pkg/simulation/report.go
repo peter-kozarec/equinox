@@ -2,9 +2,10 @@ package simulation
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"time"
 )
 
 type Report struct {
@@ -31,32 +32,32 @@ type Report struct {
 	AnnualizedVolatility fixed.Point
 }
 
-func (report Report) Print(logger *zap.Logger) {
+func (r Report) Print(logger *zap.Logger) {
 	logger.Info("performance report",
-		zap.String("initial_equity", report.InitialEquity.String()),
-		zap.String("final_equity", report.FinalEquity.String()),
-		zap.String("total_profit", fmt.Sprintf("%s%%", report.TotalProfit.String())),
-		zap.String("annualized_return", fmt.Sprintf("%s%%", report.AnnualizedReturn.String())),
-		zap.String("max_drawdown", fmt.Sprintf("%s%%", report.MaxDrawdown.String())),
-		zap.String("recovery_factor", report.RecoveryFactor.String()),
+		zap.String("initial_equity", r.InitialEquity.String()),
+		zap.String("final_equity", r.FinalEquity.String()),
+		zap.String("total_profit", fmt.Sprintf("%s%%", r.TotalProfit.String())),
+		zap.String("annualized_return", fmt.Sprintf("%s%%", r.AnnualizedReturn.String())),
+		zap.String("max_drawdown", fmt.Sprintf("%s%%", r.MaxDrawdown.String())),
+		zap.String("recovery_factor", r.RecoveryFactor.String()),
 	)
 
 	logger.Info("trade statistics",
-		zap.Int("total_trades", report.TotalTrades),
-		zap.Int("winning_trades", report.WinningTrades),
-		zap.Int("losing_trades", report.LosingTrades),
-		zap.String("win_rate", fmt.Sprintf("%s%%", report.WinRate.String())),
-		zap.String("expectancy", report.Expectancy.String()),
-		zap.String("profit_factor", report.ProfitFactor.String()),
-		zap.String("average_win", report.AverageWin.String()),
-		zap.String("average_loss", report.AverageLoss.String()),
-		zap.String("risk_reward_ratio", report.RiskRewardRatio.String()),
-		zap.String("average_trade_duration", report.AverageTradeDuration.String()),
+		zap.Int("total_trades", r.TotalTrades),
+		zap.Int("winning_trades", r.WinningTrades),
+		zap.Int("losing_trades", r.LosingTrades),
+		zap.String("win_rate", fmt.Sprintf("%s%%", r.WinRate.String())),
+		zap.String("expectancy", r.Expectancy.String()),
+		zap.String("profit_factor", r.ProfitFactor.String()),
+		zap.String("average_win", r.AverageWin.String()),
+		zap.String("average_loss", r.AverageLoss.String()),
+		zap.String("risk_reward_ratio", r.RiskRewardRatio.String()),
+		zap.String("average_trade_duration", r.AverageTradeDuration.String()),
 	)
 
 	logger.Info("risk metrics",
-		zap.String("sharpe_ratio", report.SharpeRatio.String()),
-		zap.String("sortino_ratio", report.SortinoRatio.String()),
-		zap.String("annualized_volatility", fmt.Sprintf("%s%%", report.AnnualizedVolatility.String())),
+		zap.String("sharpe_ratio", r.SharpeRatio.String()),
+		zap.String("sortino_ratio", r.SortinoRatio.String()),
+		zap.String("annualized_volatility", fmt.Sprintf("%s%%", r.AnnualizedVolatility.String())),
 	)
 }

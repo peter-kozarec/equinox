@@ -3,6 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
+	"math/rand"
+	"os"
+	"os/signal"
+	"time"
+
 	"github.com/peter-kozarec/equinox/internal/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
@@ -10,11 +16,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/simulation"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"log"
-	"math/rand"
-	"os"
-	"os/signal"
-	"time"
 )
 
 const (
@@ -55,22 +56,24 @@ func main() {
 
 	telemetry := middleware.NewTelemetry(logger)
 	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed)
+	performance := middleware.NewPerformance(logger)
 
 	advisor := strategy.NewAdvisor(logger, router)
-	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick)(advisor.NewTick)
-	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar)(advisor.NewBar)
-	router.OrderHandler = middleware.Chain(telemetry.WithOrder, monitor.WithOrder)(sim.OnOrder)
-	router.PositionOpenedHandler = middleware.Chain(telemetry.WithPositionOpened, monitor.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(telemetry.WithPositionClosed, monitor.WithPositionClosed)(advisor.PositionClosed)
-	router.PositionPnLUpdatedHandler = middleware.Chain(telemetry.WithPositionPnLUpdated, monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
-	router.EquityHandler = middleware.Chain(telemetry.WithEquity, monitor.WithEquity)(middleware.NoopEquityHdl)
-	router.BalanceHandler = middleware.Chain(telemetry.WithBalance, monitor.WithBalance)(middleware.NoopBalanceHdl)
+	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(advisor.NewTick)
+	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar, performance.WithBar)(advisor.NewBar)
+	router.OrderHandler = middleware.Chain(telemetry.WithOrder, monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
+	router.PositionOpenedHandler = middleware.Chain(telemetry.WithPositionOpened, monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
+	router.PositionClosedHandler = middleware.Chain(telemetry.WithPositionClosed, monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.PositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(telemetry.WithPositionPnLUpdated, monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
+	router.EquityHandler = middleware.Chain(telemetry.WithEquity, monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
+	router.BalanceHandler = middleware.Chain(telemetry.WithBalance, monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	go router.ExecLoop(ctx, exec.DoOnce)
 
+	defer performance.PrintStatistics(telemetry)
 	defer router.PrintStatistics()
 	defer telemetry.PrintStatistics()
 	defer sim.PrintDetails()

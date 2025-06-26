@@ -26,70 +26,70 @@ func NewTelemetry(logger *zap.Logger) *Telemetry {
 	}
 }
 
-func (telemetry *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
+func (t *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
 	return func(tick model.Tick) {
-		telemetry.tickEventCounter++
+		t.tickEventCounter++
 		handler(tick)
 	}
 }
 
-func (telemetry *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
+func (t *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
 	return func(bar model.Bar) {
-		telemetry.barEventCounter++
+		t.barEventCounter++
 		handler(bar)
 	}
 }
 
-func (telemetry *Telemetry) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
+func (t *Telemetry) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
 	return func(balance fixed.Point) {
-		telemetry.balanceEventCounter++
+		t.balanceEventCounter++
 		handler(balance)
 	}
 }
 
-func (telemetry *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
+func (t *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
 	return func(equity fixed.Point) {
-		telemetry.equityEventCounter++
+		t.equityEventCounter++
 		handler(equity)
 	}
 }
 
-func (telemetry *Telemetry) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
+func (t *Telemetry) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
 	return func(position model.Position) {
-		telemetry.positionOpenedEventCounter++
+		t.positionOpenedEventCounter++
 		handler(position)
 	}
 }
 
-func (telemetry *Telemetry) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
+func (t *Telemetry) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
 	return func(position model.Position) {
-		telemetry.positionClosedEventCounter++
+		t.positionClosedEventCounter++
 		handler(position)
 	}
 }
 
-func (telemetry *Telemetry) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
+func (t *Telemetry) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
 	return func(position model.Position) {
-		telemetry.positionPnLUpdatedEventCounter++
+		t.positionPnLUpdatedEventCounter++
 		handler(position)
 	}
 }
 
-func (telemetry *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
+func (t *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
 	return func(order model.Order) {
-		telemetry.orderEventCounter++
+		t.orderEventCounter++
 		handler(order)
 	}
 }
 
-func (telemetry *Telemetry) PrintStatistics() {
-	telemetry.logger.Info("event statistics",
-		zap.Uint64("tick_events", telemetry.tickEventCounter),
-		zap.Uint64("bar_events", telemetry.barEventCounter),
-		zap.Uint64("balance_events", telemetry.balanceEventCounter),
-		zap.Uint64("equity_events", telemetry.equityEventCounter),
-		zap.Uint64("position_opened_events", telemetry.positionOpenedEventCounter),
-		zap.Uint64("position_closed_events", telemetry.positionClosedEventCounter),
-		zap.Uint64("position_pnl_updated_events", telemetry.positionPnLUpdatedEventCounter),
-		zap.Uint64("order_events", telemetry.orderEventCounter))
+func (t *Telemetry) PrintStatistics() {
+	t.logger.Info("event statistics",
+		zap.Uint64("tick_events", t.tickEventCounter),
+		zap.Uint64("bar_events", t.barEventCounter),
+		zap.Uint64("balance_events", t.balanceEventCounter),
+		zap.Uint64("equity_events", t.equityEventCounter),
+		zap.Uint64("position_opened_events", t.positionOpenedEventCounter),
+		zap.Uint64("position_closed_events", t.positionClosedEventCounter),
+		zap.Uint64("position_pnl_updated_events", t.positionPnLUpdatedEventCounter),
+		zap.Uint64("order_events", t.orderEventCounter))
 }

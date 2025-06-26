@@ -1,7 +1,7 @@
 package mapper
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -13,7 +13,7 @@ type BinaryTick struct {
 	AskVolume float64
 }
 
-func (binaryTick BinaryTick) ToModelTick(tick *model.Tick) {
+func (binaryTick BinaryTick) ToModelTick(tick *common.Tick) {
 	tick.TimeStamp = binaryTick.TimeStamp
 	tick.Ask = fixed.FromFloat(binaryTick.Ask)
 	tick.Bid = fixed.FromFloat(binaryTick.Bid)

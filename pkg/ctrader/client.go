@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -76,16 +77,16 @@ func (client *Client) GetAccountList(ctx context.Context, accessToken string) ([
 	return resp.GetCtidTraderAccount(), nil
 }
 
-func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (model.Instrument, error) {
+func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (common.Instrument, error) {
 
 	req := &openapi.ProtoOASymbolsListReq{CtidTraderAccountId: &accountId}
 	resp := &openapi.ProtoOASymbolsListRes{}
 
 	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
-		return model.Instrument{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
+		return common.Instrument{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
 	}
 
-	var instrument model.Instrument
+	var instrument common.Instrument
 
 	for _, s := range resp.GetSymbol() {
 		if strings.ToUpper(s.GetSymbolName()) == strings.ToUpper(symbol) {
@@ -95,14 +96,14 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	}
 
 	if instrument.Id == 0 {
-		return model.Instrument{}, fmt.Errorf("unable to retrieve symbol")
+		return common.Instrument{}, fmt.Errorf("unable to retrieve symbol")
 	}
 
 	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}}
 	symbolResp := &openapi.ProtoOASymbolByIdRes{}
 
 	if err := sendReceive(ctx, client.conn, symbolReq, symbolResp); err != nil {
-		return model.Instrument{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
+		return common.Instrument{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
 	}
 
 	for _, s := range symbolResp.GetSymbol() {
@@ -114,7 +115,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 		}
 	}
 
-	return model.Instrument{}, errors.New("symbol not found")
+	return common.Instrument{}, errors.New("symbol not found")
 }
 
 func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, accessToken string) error {
@@ -141,7 +142,7 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 	return fixed.New(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
-func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument model.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument common.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
 
 	subTimeStamp := true
 	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}, SubscribeToSpotTimestamp: &subTimeStamp}
@@ -195,17 +196,17 @@ func (client *Client) ClosePosition(ctx context.Context, accountId, positionId i
 func (client *Client) OpenPosition(
 	ctx context.Context,
 	accountId int64,
-	instrument model.Instrument,
+	instrument common.Instrument,
 	openPrice, size, stopLoss, takeProfit fixed.Point,
-	orderType model.OrderType) error {
+	orderType common.OrderType) error {
 
 	var limitPrice, sl, tp *float64 = nil, nil, nil
 
 	var ot openapi.ProtoOAOrderType
 	switch orderType {
-	case model.Market:
+	case common.Market:
 		ot = openapi.ProtoOAOrderType_MARKET
-	case model.Limit:
+	case common.Limit:
 		ot = openapi.ProtoOAOrderType_LIMIT
 		price := openPrice.Float64()
 		limitPrice = &price

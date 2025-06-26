@@ -2,7 +2,8 @@ package middleware
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 )
@@ -35,7 +36,7 @@ func NewMonitor(logger *zap.Logger, flags MonitorFlags) *Monitor {
 }
 
 func (m *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick model.Tick) {
+	return func(tick common.Tick) {
 		if m.flags&MonitorTicks != 0 {
 			m.logger.Info("event", zap.Any("tick", tick.Fields()))
 		}
@@ -44,7 +45,7 @@ func (m *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
 }
 
 func (m *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar model.Bar) {
+	return func(bar common.Bar) {
 		if m.flags&MonitorBars != 0 {
 			m.logger.Info("event", zap.Any("bar", bar.Fields()))
 		}
@@ -71,7 +72,7 @@ func (m *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventH
 }
 
 func (m *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		if m.flags&MonitorPositionsOpened != 0 {
 			m.logger.Info("event", zap.Any("position_open", position.Fields()))
 		}
@@ -80,7 +81,7 @@ func (m *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus
 }
 
 func (m *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		if m.flags&MonitorPositionsClosed != 0 {
 			m.logger.Info("event", zap.Any("position_closed", position.Fields()))
 		}
@@ -89,7 +90,7 @@ func (m *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus
 }
 
 func (m *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		if m.flags&MonitorPositionsPnLUpdated != 0 {
 			m.logger.Info("event", zap.Any("position", position.Fields()))
 		}
@@ -98,7 +99,7 @@ func (m *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHand
 }
 
 func (m *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order model.Order) {
+	return func(order common.Order) {
 		if m.flags&MonitorOrders != 0 {
 			m.logger.Info("event", zap.Any("order", order.Fields()))
 		}

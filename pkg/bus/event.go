@@ -1,7 +1,8 @@
 package bus
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -18,11 +19,11 @@ const (
 	OrderEvent
 )
 
-type TickEventHandler func(model.Tick)
-type BarEventHandler func(model.Bar)
+type TickEventHandler func(common.Tick)
+type BarEventHandler func(common.Bar)
 type EquityEventHandler func(fixed.Point)
 type BalanceEventHandler func(fixed.Point)
-type PositionOpenedEventHandler func(model.Position)
-type PositionClosedEventHandler func(model.Position)
-type PositionPnLUpdatedEventHandler func(model.Position)
-type OrderEventHandler func(model.Order)
+type PositionOpenedEventHandler func(common.Position)
+type PositionClosedEventHandler func(common.Position)
+type PositionPnLUpdatedEventHandler func(common.Position)
+type OrderEventHandler func(common.Order)

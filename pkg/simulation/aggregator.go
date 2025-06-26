@@ -1,16 +1,16 @@
 package simulation
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
 )
 
 type Aggregator struct {
 	interval   time.Duration
 	router     *bus.Router
-	currentBar *model.Bar
+	currentBar *common.Bar
 	lastTS     int64
 }
 
@@ -21,7 +21,7 @@ func NewAggregator(interval time.Duration, bus *bus.Router) *Aggregator {
 	}
 }
 
-func (a *Aggregator) OnTick(tick model.Tick) error {
+func (a *Aggregator) OnTick(tick common.Tick) error {
 	ts := time.Unix(0, tick.TimeStamp)
 	barTS := ts.Truncate(a.interval).UnixNano()
 	price := tick.Average()
@@ -36,7 +36,7 @@ func (a *Aggregator) OnTick(tick model.Tick) error {
 	}
 
 	if a.currentBar == nil {
-		a.currentBar = &model.Bar{
+		a.currentBar = &common.Bar{
 			TimeStamp: barTS,
 			Open:      price,
 			High:      price,

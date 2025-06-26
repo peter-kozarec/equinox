@@ -2,10 +2,11 @@ package simulation
 
 import (
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 )
@@ -20,11 +21,11 @@ type Simulator struct {
 	balance fixed.Point
 
 	simulationTime time.Time
-	lastTick       model.Tick
+	lastTick       common.Tick
 
-	positionIdCounter model.PositionId
-	openPositions     []*model.Position
-	openOrders        []*model.Order
+	positionIdCounter common.PositionId
+	openPositions     []*common.Position
+	openOrders        []*common.Order
 
 	cfg Configuration
 }
@@ -50,11 +51,11 @@ func (s *Simulator) PrintDetails() {
 		zap.String("aggregator_interval", s.aggregator.interval.String()))
 }
 
-func (s *Simulator) OnOrder(order model.Order) {
+func (s *Simulator) OnOrder(order common.Order) {
 	s.openOrders = append(s.openOrders, &order)
 }
 
-func (s *Simulator) OnTick(tick model.Tick) error {
+func (s *Simulator) OnTick(tick common.Tick) error {
 
 	// Set simulation time from processed tick
 	s.simulationTime = time.Unix(0, tick.TimeStamp)
@@ -109,7 +110,7 @@ func (s *Simulator) CloseAllOpenPositions() {
 		s.calcPositionProfits(position, closePrice)
 		s.equity = s.equity.Add(position.NetProfit)
 
-		position.State = model.Closed
+		position.State = common.Closed
 		position.ClosePrice = closePrice
 		position.CloseTime = time.Unix(0, s.lastTick.TimeStamp)
 		s.audit.AddClosedPosition(*position)
@@ -119,32 +120,32 @@ func (s *Simulator) CloseAllOpenPositions() {
 	s.audit.addSnapshot(s.balance, s.equity, s.simulationTime)
 }
 
-func (s *Simulator) checkPositions(tick model.Tick) {
+func (s *Simulator) checkPositions(tick common.Tick) {
 
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
 		if s.shouldClosePosition(*position, tick) {
-			position.State = model.PendingClose
+			position.State = common.PendingClose
 		}
 	}
 }
 
-func (s *Simulator) checkOrders(tick model.Tick) {
+func (s *Simulator) checkOrders(tick common.Tick) {
 
-	tmpOpenOrders := make([]*model.Order, 0, len(s.openOrders))
+	tmpOpenOrders := make([]*common.Order, 0, len(s.openOrders))
 
 	for idx := range s.openOrders {
 		order := s.openOrders[idx]
 
 		switch order.Command {
-		case model.CmdOpen:
+		case common.CmdOpen:
 			switch order.OrderType {
-			case model.Market:
+			case common.Market:
 				if err := s.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
 					s.logger.Warn("unable to execute open order", zap.Error(err))
 				}
-			case model.Limit:
+			case common.Limit:
 				if !s.shouldOpenPosition(order.Price, order.Size, tick) {
 					tmpOpenOrders = append(tmpOpenOrders, order)
 					continue
@@ -153,15 +154,15 @@ func (s *Simulator) checkOrders(tick model.Tick) {
 					s.logger.Warn("unable to execute open order", zap.Error(err))
 				}
 			}
-		case model.CmdClose:
+		case common.CmdClose:
 			if err := s.executeCloseOrder(order.PositionId); err != nil {
 				s.logger.Warn("unable to execute close order", zap.Error(err))
 			}
-		case model.CmdModify:
+		case common.CmdModify:
 			if err := s.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit); err != nil {
 				s.logger.Warn("unable to modify open position", zap.Error(err))
 			}
-		case model.CmdRemove:
+		case common.CmdRemove:
 			continue
 		default:
 			s.logger.Warn("unknown command", zap.Any("cmd", order.Command))
@@ -171,13 +172,13 @@ func (s *Simulator) checkOrders(tick model.Tick) {
 	s.openOrders = tmpOpenOrders
 }
 
-func (s *Simulator) executeCloseOrder(id model.PositionId) error {
+func (s *Simulator) executeCloseOrder(id common.PositionId) error {
 
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
 		if position.Id == id {
-			position.State = model.PendingClose
+			position.State = common.PendingClose
 			return nil
 		}
 	}
@@ -203,9 +204,9 @@ func (s *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) err
 	}
 
 	s.positionIdCounter++
-	s.openPositions = append(s.openPositions, &model.Position{
+	s.openPositions = append(s.openPositions, &common.Position{
 		Id:         s.positionIdCounter,
-		State:      model.PendingOpen,
+		State:      common.PendingOpen,
 		Size:       size,
 		StopLoss:   stopLoss,
 		TakeProfit: takeProfit,
@@ -213,7 +214,7 @@ func (s *Simulator) executeOpenOrder(size, stopLoss, takeProfit fixed.Point) err
 	return nil
 }
 
-func (s *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit fixed.Point) error {
+func (s *Simulator) modifyPosition(id common.PositionId, stopLoss, takeProfit fixed.Point) error {
 
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
@@ -227,7 +228,7 @@ func (s *Simulator) modifyPosition(id model.PositionId, stopLoss, takeProfit fix
 	return fmt.Errorf("position with id %d not found", id)
 }
 
-func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick model.Tick) bool {
+func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick) bool {
 
 	// For long limit: trigger when Ask <= limit price
 	if size.Gt(fixed.Zero) && tick.Ask.Lte(price) {
@@ -240,7 +241,7 @@ func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick model.Tick)
 	return false
 }
 
-func (s *Simulator) shouldClosePosition(position model.Position, tick model.Tick) bool {
+func (s *Simulator) shouldClosePosition(position common.Position, tick common.Tick) bool {
 
 	if position.IsLong() {
 		// Long, check if take profit or stop loss has been reached
@@ -258,8 +259,8 @@ func (s *Simulator) shouldClosePosition(position model.Position, tick model.Tick
 	return false
 }
 
-func (s *Simulator) processPendingChanges(tick model.Tick) {
-	tmpOpenPositions := make([]*model.Position, 0, len(s.openPositions))
+func (s *Simulator) processPendingChanges(tick common.Tick) {
+	tmpOpenPositions := make([]*common.Position, 0, len(s.openPositions))
 	s.equity = s.balance
 
 	for idx := range s.openPositions {
@@ -277,16 +278,16 @@ func (s *Simulator) processPendingChanges(tick model.Tick) {
 		}
 
 		switch position.State {
-		case model.PendingOpen:
-			position.State = model.Opened
+		case common.PendingOpen:
+			position.State = common.Opened
 			position.OpenPrice = openPrice
 			position.OpenTime = time.Unix(0, tick.TimeStamp)
 			if err := s.router.Post(bus.PositionOpenedEvent, *position); err != nil {
 				s.logger.Warn("unable to post position opened event", zap.Error(err))
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
-		case model.PendingClose:
-			position.State = model.Closed
+		case common.PendingClose:
+			position.State = common.Closed
 			position.ClosePrice = closePrice
 			position.CloseTime = time.Unix(0, tick.TimeStamp)
 			s.calcPositionProfits(position, closePrice)
@@ -308,7 +309,7 @@ func (s *Simulator) processPendingChanges(tick model.Tick) {
 	s.openPositions = tmpOpenPositions
 }
 
-func (s *Simulator) calcPositionProfits(position *model.Position, closePrice fixed.Point) {
+func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
 	var pipPnL fixed.Point
 
 	if position.IsLong() {

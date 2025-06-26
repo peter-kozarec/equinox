@@ -2,8 +2,9 @@ package simulation
 
 import (
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"go.uber.org/zap"
 	"time"
 )
@@ -18,7 +19,7 @@ type Executor struct {
 	idx  int64
 
 	binaryTick mapper.BinaryTick
-	tick       model.Tick
+	tick       common.Tick
 	lastErr    error
 }
 

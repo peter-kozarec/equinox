@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -18,13 +19,13 @@ type State struct {
 	router *bus.Router
 	logger *zap.Logger
 
-	instrument model.Instrument
+	instrument common.Instrument
 	barPeriod  time.Duration
 
-	lastTick model.Tick
-	lastBar  model.Bar
+	lastTick common.Tick
+	lastBar  common.Bar
 
-	openPositions []model.Position
+	openPositions []common.Position
 
 	balanceMu   sync.Mutex
 	postBalance bool
@@ -32,7 +33,7 @@ type State struct {
 	equity      fixed.Point
 }
 
-func NewState(router *bus.Router, logger *zap.Logger, instrument model.Instrument, barPeriod time.Duration) *State {
+func NewState(router *bus.Router, logger *zap.Logger, instrument common.Instrument, barPeriod time.Duration) *State {
 	return &State{
 		router:      router,
 		logger:      logger,
@@ -51,7 +52,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 		return
 	}
 
-	internalTick := model.Tick{}
+	internalTick := common.Tick{}
 	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.instrument.Digits)
 	internalTick.Bid = fixed.FromUint(v.GetBid(), state.instrument.Digits)
 	internalTick.TimeStamp = v.GetTimestamp() * 1000
@@ -96,7 +97,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 		}
 	}
 
-	var internalBar model.Bar
+	var internalBar common.Bar
 	internalBar.Period = state.barPeriod
 	internalBar.TimeStamp = lastBarTimeStamp
 	internalBar.Low = fixed.New(lastBar.GetLow(), state.instrument.Digits)
@@ -129,7 +130,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 			if internalPosition.Id.Int64() == position.GetPositionId() {
 
-				internalPosition.State = model.Closed
+				internalPosition.State = common.Closed
 				internalPosition.CloseTime = time.UnixMilli(int64(*position.TradeData.CloseTimestamp))
 
 				// This is just approximation - not real closing price
@@ -156,12 +157,12 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 	} else if position.GetPositionStatus() == openapi.ProtoOAPositionStatus_POSITION_STATUS_OPEN {
 		// This can be only open
-		var internalPosition model.Position
+		var internalPosition common.Position
 
-		internalPosition.Id = model.PositionId(position.GetPositionId())
+		internalPosition.Id = common.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
 		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
-		internalPosition.State = model.PendingOpen
+		internalPosition.State = common.PendingOpen
 		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
 		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)
@@ -188,12 +189,12 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 
 	for _, position := range openPositions {
 
-		var internalPosition model.Position
+		var internalPosition common.Position
 
-		internalPosition.Id = model.PositionId(position.GetPositionId())
+		internalPosition.Id = common.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
 		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
-		internalPosition.State = model.Opened
+		internalPosition.State = common.Opened
 		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
 		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)

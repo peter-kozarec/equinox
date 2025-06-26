@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 )
@@ -27,14 +27,14 @@ func NewTelemetry(logger *zap.Logger) *Telemetry {
 }
 
 func (t *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick model.Tick) {
+	return func(tick common.Tick) {
 		t.tickEventCounter++
 		handler(tick)
 	}
 }
 
 func (t *Telemetry) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar model.Bar) {
+	return func(bar common.Bar) {
 		t.barEventCounter++
 		handler(bar)
 	}
@@ -55,28 +55,28 @@ func (t *Telemetry) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHa
 }
 
 func (t *Telemetry) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		t.positionOpenedEventCounter++
 		handler(position)
 	}
 }
 
 func (t *Telemetry) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		t.positionClosedEventCounter++
 		handler(position)
 	}
 }
 
 func (t *Telemetry) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		t.positionPnLUpdatedEventCounter++
 		handler(position)
 	}
 }
 
 func (t *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order model.Order) {
+	return func(order common.Order) {
 		t.orderEventCounter++
 		handler(order)
 	}

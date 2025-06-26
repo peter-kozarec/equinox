@@ -1,9 +1,9 @@
 package simulation
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/model"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"github.com/peter-kozarec/equinox/pkg/utility/math"
 	"go.uber.org/zap"
@@ -21,7 +21,7 @@ type Audit struct {
 	minSnapshotInterval time.Duration
 
 	accountSnapshots []accountSnapshot
-	closedPositions  []model.Position
+	closedPositions  []common.Position
 }
 
 func NewAudit(logger *zap.Logger, minSnapshotInterval time.Duration) *Audit {
@@ -38,7 +38,7 @@ func (a *Audit) AddAccountSnapshot(balance, equity fixed.Point, t time.Time) {
 	}
 }
 
-func (a *Audit) AddClosedPosition(position model.Position) {
+func (a *Audit) AddClosedPosition(position common.Position) {
 	a.closedPositions = append(a.closedPositions, position)
 }
 

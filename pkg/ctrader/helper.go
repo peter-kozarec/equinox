@@ -3,11 +3,12 @@ package ctrader
 import (
 	"context"
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"go.uber.org/zap"
 )
 
@@ -42,7 +43,7 @@ func InitTradeSession(
 	accountId int64,
 	symbol string,
 	period time.Duration,
-	router *bus.Router) (func(model.Order), error) {
+	router *bus.Router) (func(common.Order), error) {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
 	defer symbolInfoCancel()
@@ -103,15 +104,15 @@ func InitTradeSession(
 	client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Second*10))
 
 	// Return callback for making orders
-	return func(order model.Order) {
-		if order.Command == model.CmdClose {
+	return func(order common.Order) {
+		if order.Command == common.CmdClose {
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)
 			defer closeCancel()
 
 			if err := client.ClosePosition(closeContext, accountId, order.PositionId.Int64(), order.Size); err != nil {
 				client.logger.Warn("unable to close position", zap.Error(err))
 			}
-		} else if order.Command == model.CmdOpen {
+		} else if order.Command == common.CmdOpen {
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 

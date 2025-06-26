@@ -1,8 +1,9 @@
 package simulation
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"math/rand"
@@ -48,7 +49,7 @@ type MonteCarloExecutor struct {
 	lastPrice     fixed.Point
 	currentSpread fixed.Point
 
-	tick model.Tick
+	tick common.Tick
 
 	normPriceDigits  int
 	normVolumeDigits int

@@ -1,10 +1,11 @@
 package middleware
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 )
@@ -29,7 +30,7 @@ func NewPerformance(logger *zap.Logger) *Performance {
 }
 
 func (p *Performance) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick model.Tick) {
+	return func(tick common.Tick) {
 		startTime := time.Now()
 		handler(tick) // Call the original handler
 		p.totalTickHandlerDur += time.Since(startTime)
@@ -37,7 +38,7 @@ func (p *Performance) WithTick(handler bus.TickEventHandler) bus.TickEventHandle
 }
 
 func (p *Performance) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar model.Bar) {
+	return func(bar common.Bar) {
 		startTime := time.Now()
 		handler(bar) // Call the original handler
 		p.totalBarHandlerDur += time.Since(startTime)
@@ -61,7 +62,7 @@ func (p *Performance) WithEquity(handler bus.EquityEventHandler) bus.EquityEvent
 }
 
 func (p *Performance) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		startTime := time.Now()
 		handler(position) // Call the original handler
 		p.totalPosOpenHandlerDur += time.Since(startTime)
@@ -69,7 +70,7 @@ func (p *Performance) WithPositionOpened(handler bus.PositionOpenedEventHandler)
 }
 
 func (p *Performance) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		startTime := time.Now()
 		handler(position) // Call the original handler
 		p.totalPosClosHandlerDur += time.Since(startTime)
@@ -77,7 +78,7 @@ func (p *Performance) WithPositionClosed(handler bus.PositionClosedEventHandler)
 }
 
 func (p *Performance) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position model.Position) {
+	return func(position common.Position) {
 		startTime := time.Now()
 		handler(position) // Call the original handler
 		p.totalPosUpdtHandlerDur += time.Since(startTime)
@@ -85,7 +86,7 @@ func (p *Performance) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEvent
 }
 
 func (p *Performance) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order model.Order) {
+	return func(order common.Order) {
 		startTime := time.Now()
 		handler(order) // Call the original handler
 		p.totalOrderHandlerDur += time.Since(startTime)

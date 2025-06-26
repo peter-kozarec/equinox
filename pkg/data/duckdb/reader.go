@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/marcboeker/go-duckdb"
-	"github.com/peter-kozarec/equinox/pkg/model"
+
 	"time"
 )
 
@@ -34,7 +34,7 @@ func (r *Reader) Close() {
 	_ = r.db.Close()
 }
 
-func (r *Reader) LoadTicks(ctx context.Context, symbol string, from, to time.Time, handler func(tick model.Tick) error) error {
+func (r *Reader) LoadTicks(ctx context.Context, symbol string, from, to time.Time, handler func(tick common.Tick) error) error {
 
 	query := fmt.Sprintf(`SELECT ts, ask, bid, ask_volume, bid_volume FROM %s_ticks WHERE ts BETWEEN ? AND ?`, symbol)
 
@@ -50,7 +50,7 @@ func (r *Reader) LoadTicks(ctx context.Context, symbol string, from, to time.Tim
 	}(rows)
 
 	for rows.Next() {
-		var tick model.Tick
+		var tick common.Tick
 		timeStamp := time.Time{}
 		err := rows.Scan(&timeStamp, &tick.Ask, &tick.Bid, &tick.AskVolume, &tick.BidVolume)
 		tick.TimeStamp = timeStamp.UnixNano()

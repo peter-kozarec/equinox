@@ -2,7 +2,8 @@ package strategy
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"github.com/peter-kozarec/equinox/pkg/utility/math"
@@ -19,7 +20,7 @@ type Advisor struct {
 	logger *zap.Logger
 	router *bus.Router
 
-	lastTick model.Tick
+	lastTick common.Tick
 	closes   *circular.Buffer[fixed.Point]
 	zScores  *circular.Buffer[fixed.Point]
 
@@ -36,11 +37,11 @@ func NewAdvisor(logger *zap.Logger, router *bus.Router) *Advisor {
 	}
 }
 
-func (a *Advisor) NewTick(t model.Tick) {
+func (a *Advisor) NewTick(t common.Tick) {
 	a.lastTick = t
 }
 
-func (a *Advisor) NewBar(b model.Bar) {
+func (a *Advisor) NewBar(b common.Bar) {
 
 	a.closes.Push(b.Close)
 
@@ -61,18 +62,18 @@ func (a *Advisor) NewBar(b model.Bar) {
 
 	if !a.posOpen && a.canTrade() {
 		if z.Gte(Three) {
-			_ = a.router.Post(bus.OrderEvent, model.Order{
-				Command:    model.CmdOpen,
-				OrderType:  model.Market,
+			_ = a.router.Post(bus.OrderEvent, common.Order{
+				Command:    common.CmdOpen,
+				OrderType:  common.Market,
 				Size:       fixed.New(1, 2).Neg(),
 				StopLoss:   b.Close.Add(b.Close.Sub(mean)),
 				TakeProfit: mean,
 			})
 			a.posOpen = true
 		} else if z.Lte(NegativeThree) {
-			_ = a.router.Post(bus.OrderEvent, model.Order{
-				Command:    model.CmdOpen,
-				OrderType:  model.Market,
+			_ = a.router.Post(bus.OrderEvent, common.Order{
+				Command:    common.CmdOpen,
+				OrderType:  common.Market,
 				Size:       fixed.New(1, 2),
 				StopLoss:   b.Close.Sub(mean.Sub(b.Close)),
 				TakeProfit: mean,
@@ -82,7 +83,7 @@ func (a *Advisor) NewBar(b model.Bar) {
 	}
 }
 
-func (a *Advisor) PositionClosed(_ model.Position) {
+func (a *Advisor) PositionClosed(_ common.Position) {
 	a.posOpen = false
 }
 

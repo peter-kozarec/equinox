@@ -1,18 +1,18 @@
 package middleware
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/model"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 //goland:noinspection ALL
 var (
-	NoopTickHdl    = func(model.Tick) {}
-	NoopBarHdl     = func(model.Bar) {}
+	NoopTickHdl    = func(common.Tick) {}
+	NoopBarHdl     = func(common.Bar) {}
 	NoopEquityHdl  = func(fixed.Point) {}
 	NoopBalanceHdl = func(fixed.Point) {}
-	NoopPosOpnHdl  = func(model.Position) {}
-	NoopPosUpdHdl  = func(model.Position) {}
-	NoopPosClsHdl  = func(model.Position) {}
-	NoopOrderHdl   = func(model.Order) {}
+	NoopPosOpnHdl  = func(common.Position) {}
+	NoopPosUpdHdl  = func(common.Position) {}
+	NoopPosClsHdl  = func(common.Position) {}
+	NoopOrderHdl   = func(common.Order) {}
 )

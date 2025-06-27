@@ -3,8 +3,9 @@ package ctrader
 import (
 	"context"
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
@@ -105,20 +106,22 @@ func InitTradeSession(
 
 	// Return callback for making orders
 	return func(order common.Order) {
-		if order.Command == common.CmdClose {
+		switch order.Command {
+		case common.CmdClose:
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)
 			defer closeCancel()
 
 			if err := client.ClosePosition(closeContext, accountId, order.PositionId.Int64(), order.Size); err != nil {
 				client.logger.Warn("unable to close position", zap.Error(err))
 			}
-		} else if order.Command == common.CmdOpen {
+		case common.CmdOpen:
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 
 			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.OrderType); err != nil {
 				client.logger.Warn("unable to open position", zap.Error(err))
 			}
+		default:
 		}
 	}, nil
 }

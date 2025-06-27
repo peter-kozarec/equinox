@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	PositionNotFound = errors.New("position is not found")
+	ErrPosNotFound = errors.New("position is not found")
 )
 
 type Holdings struct {
@@ -51,5 +51,5 @@ func (h *Holdings) Find(id common.PositionId) (common.Position, error) {
 			return position, nil
 		}
 	}
-	return common.Position{}, PositionNotFound
+	return common.Position{}, ErrPosNotFound
 }

@@ -4,10 +4,11 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 	"math/rand"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"go.uber.org/zap"
 )
 
 var (
@@ -225,7 +226,7 @@ func (e *MonteCarloExecutor) SetSpreadDynamics(
 
 func (e *MonteCarloExecutor) DoOnce() error {
 	if e.t >= e.steps {
-		return mapper.EOF
+		return mapper.ErrEof
 	}
 
 	// Generate next price using Geometric Brownian Motion

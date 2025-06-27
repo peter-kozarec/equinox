@@ -79,7 +79,7 @@ func main() {
 	defer sim.PrintDetails()
 
 	if err := <-router.Done(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.EOF) {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
 			logger.Fatal("unexpected error during execution", zap.Error(err))
 		}
 	}

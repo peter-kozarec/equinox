@@ -2,12 +2,13 @@ package arima
 
 import (
 	"errors"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 var (
-	ModelNotEstimatedYet = errors.New("not enough data points")
+	ErrModelNotEstimated = errors.New("not enough data points")
 )
 
 type Model struct {
@@ -38,19 +39,19 @@ func NewModel(p, d, q, winSize uint) *Model {
 
 func (m *Model) PredictNextPoint() (fixed.Point, error) {
 	if !m.aR.B.IsEmpty() || !m.mA.B.IsEmpty() {
-		return fixed.Point{}, ModelNotEstimatedYet
+		return fixed.Point{}, ErrModelNotEstimated
 	}
 
 	mean := m.diffData.Mean()
 	forecast := mean
 
 	// AR component
-	for i := uint(0); i < m.p && m.aR.B.Size()-i-1 >= 0; i++ {
+	for i := uint(0); i < m.p; i++ {
 		forecast = forecast.Add(m.aR.B.Get(m.aR.B.Size() - i - 1).Mul(m.diffData.B.Get(i).Sub(mean)))
 	}
 
 	// MA component
-	for i := uint(0); i < m.q && m.residuals.B.Size()-i-1 >= 0; i++ {
+	for i := uint(0); i < m.q; i++ {
 		forecast = forecast.Add(m.mA.B.Get(m.mA.B.Size() - i - 1).Mul(m.residuals.B.Get(i)))
 	}
 

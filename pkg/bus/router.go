@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"time"
 )
 
 type event struct {
@@ -222,7 +223,7 @@ func (router *Router) dispatch(ev event) error {
 			router.logger.Debug("order handler is nil")
 		}
 	default:
-		return errors.New(fmt.Sprintf("unsupported event id: %v", ev.id))
+		return fmt.Errorf("unsupported event id: %v", ev.id)
 	}
 	return nil
 }

@@ -2,11 +2,13 @@ package simulation
 
 import (
 	"fmt"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type Executor struct {
@@ -84,7 +86,7 @@ func (e *Executor) DoOnce() error {
 	}
 
 	if e.binaryTick.TimeStamp > e.to {
-		return mapper.EOF
+		return mapper.ErrEof
 	}
 
 	e.binaryTick.ToModelTick(&e.tick)

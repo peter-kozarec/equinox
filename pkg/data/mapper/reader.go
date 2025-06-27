@@ -3,14 +3,15 @@ package mapper
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/exp/mmap"
 	"io"
 	"os"
 	"sync"
 	"unsafe"
+
+	"golang.org/x/exp/mmap"
 )
 
-var EOF = errors.New("EOF")
+var ErrEof = errors.New("EOF")
 
 type Reader[T any] struct {
 	dataSourceName string
@@ -54,7 +55,7 @@ func (r *Reader[T]) Read(index int64, data *T) error {
 		return fmt.Errorf("unable to read: %w", err)
 	}
 	if n < len(*buffer) {
-		return EOF
+		return ErrEof
 	}
 
 	*data = *(*T)(unsafe.Pointer(&(*buffer)[0])) // Unsafe casting, for performance, T must not be padded
@@ -66,7 +67,7 @@ func (r *Reader[T]) EntryCount() (int64, error) {
 	var entry T
 	entrySize := int64(unsafe.Sizeof(entry))
 	if entrySize == 0 {
-		return 0, fmt.Errorf("T size is zero")
+		return 0, fmt.Errorf("size of T is zero")
 	}
 
 	fileInfo, err := os.Stat(r.dataSourceName)

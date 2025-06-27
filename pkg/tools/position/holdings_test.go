@@ -69,7 +69,7 @@ func TestHoldings_OnPositionUpdate(t *testing.T) {
 func TestHoldings_FindNotFound(t *testing.T) {
 	h := NewHoldings()
 	_, err := h.Find(999)
-	if !errors.Is(err, PositionNotFound) {
+	if !errors.Is(err, ErrPosNotFound) {
 		t.Errorf("TestFindNotFound: expected PositionNotFound error, got %v", err)
 	}
 }

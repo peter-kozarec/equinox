@@ -4,15 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/gorilla/websocket"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 
+	"strings"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
-	"strings"
-	"time"
 )
 
 type Client struct {
@@ -89,7 +91,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	var instrument common.Instrument
 
 	for _, s := range resp.GetSymbol() {
-		if strings.ToUpper(s.GetSymbolName()) == strings.ToUpper(symbol) {
+		if strings.EqualFold(s.GetSymbolName(), symbol) {
 			instrument.Id = s.GetSymbolId()
 			break
 		}

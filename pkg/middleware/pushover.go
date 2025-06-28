@@ -63,7 +63,9 @@ func sendPushoverNotification(ctx context.Context, token, user, device, title, m
 	if err != nil {
 		return fmt.Errorf("pushover post failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)

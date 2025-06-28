@@ -707,7 +707,7 @@ func (m *Model) solveYuleWalkerEquations(gamma []fixed.Point) error {
 func (m *Model) initializeParameters() {
 	// Initialize AR parameters using Yule-Walker if possible
 	if m.p > 0 {
-		m.estimateARByYuleWalker()
+		_ = m.estimateARByYuleWalker()
 	}
 
 	// Initialize MA parameters to small values

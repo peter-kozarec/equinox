@@ -54,9 +54,18 @@ func main() {
 		0.0698081590,    // Your sigma
 	)
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	//db, err := psql.Connect(ctx, "", "", "", "", "")
+	//if err != nil {
+	//	logger.Fatal("unable to connect to postgres", zap.Error(err))
+	//}
+
 	telemetry := middleware.NewTelemetry(logger)
 	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed)
 	performance := middleware.NewPerformance(logger)
+	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 
 	advisor := strategy.NewAdvisor(logger, router)
 	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(advisor.NewTick)
@@ -67,9 +76,6 @@ func main() {
 	router.PositionPnLUpdatedHandler = middleware.Chain(telemetry.WithPositionPnLUpdated, monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.EquityHandler = middleware.Chain(telemetry.WithEquity, monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
 	router.BalanceHandler = middleware.Chain(telemetry.WithBalance, monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
 
 	go router.ExecLoop(ctx, exec.DoOnce)
 

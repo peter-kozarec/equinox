@@ -1,0 +1,17 @@
+CREATE TABLE public.fx_positions
+(
+    position_id bigint,
+    app_id bigint,
+    account_id bigint,
+    open_time timestamp with time zone,
+    close_time timestamp with time zone,
+    size double precision,
+    open_price double precision,
+    close_price double precision,
+    gross_profit double precision,
+    net_profit double precision,
+    PRIMARY KEY (position_id, app_id, account_id)
+);
+
+ALTER TABLE IF EXISTS public.fx_positions
+    OWNER to postgres;

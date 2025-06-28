@@ -5,7 +5,8 @@ import (
 )
 
 type PointBuffer struct {
-	B *Buffer[fixed.Point]
+	B        *Buffer[fixed.Point]
+	capacity uint
 
 	mean       fixed.Point
 	stdDev     fixed.Point
@@ -16,7 +17,8 @@ type PointBuffer struct {
 
 func NewPointBuffer(capacity uint) *PointBuffer {
 	return &PointBuffer{
-		B: NewBuffer[fixed.Point](capacity),
+		capacity: capacity,
+		B:        NewBuffer[fixed.Point](capacity),
 	}
 }
 
@@ -43,6 +45,17 @@ func (p *PointBuffer) PushUpdate(v fixed.Point) {
 	} else {
 		p.stdDev = fixed.Zero
 	}
+}
+
+func (p *PointBuffer) Clear() {
+	p.B = nil
+	p.B = NewBuffer[fixed.Point](p.capacity)
+
+	p.mean = fixed.Zero
+	p.stdDev = fixed.Zero
+	p.sum = fixed.Zero
+	p.sumSquares = fixed.Zero
+	p.variance = fixed.Zero
 }
 
 func (p *PointBuffer) Mean() fixed.Point {

@@ -1496,9 +1496,12 @@ func solveLinearSystem(A [][]fixed.Point, b []fixed.Point) []fixed.Point {
 		return nil
 	}
 
-	// Create augmented matrix
+	// Create augmented matrix [A | b]
 	augmented := make([][]fixed.Point, n)
 	for i := 0; i < n; i++ {
+		if len(A[i]) != n {
+			return nil // ensure A is square
+		}
 		augmented[i] = make([]fixed.Point, n+1)
 		for j := 0; j < n; j++ {
 			augmented[i][j] = A[i][j]
@@ -1507,8 +1510,8 @@ func solveLinearSystem(A [][]fixed.Point, b []fixed.Point) []fixed.Point {
 	}
 
 	// Gaussian elimination with partial pivoting
-	for k := 0; k < n-1; k++ {
-		// Find pivot
+	for k := 0; k < n; k++ {
+		// Find row with largest absolute pivot
 		maxRow := k
 		for i := k + 1; i < n; i++ {
 			if augmented[i][k].Abs().Gt(augmented[maxRow][k].Abs()) {
@@ -1516,20 +1519,20 @@ func solveLinearSystem(A [][]fixed.Point, b []fixed.Point) []fixed.Point {
 			}
 		}
 
-		// Swap rows
+		// Swap rows if needed
 		if maxRow != k {
 			augmented[k], augmented[maxRow] = augmented[maxRow], augmented[k]
 		}
 
 		// Check for singular matrix
-		if augmented[k][k].Abs().Lt(fixed.FromFloat(1e-12)) {
+		if augmented[k][k].IsZero() {
 			return nil
 		}
 
-		// Eliminate column
+		// Eliminate below
 		for i := k + 1; i < n; i++ {
 			factor := augmented[i][k].Div(augmented[k][k])
-			for j := k; j <= n; j++ {
+			for j := k; j < n+1; j++ {
 				augmented[i][j] = augmented[i][j].Sub(factor.Mul(augmented[k][j]))
 			}
 		}
@@ -1538,14 +1541,14 @@ func solveLinearSystem(A [][]fixed.Point, b []fixed.Point) []fixed.Point {
 	// Back substitution
 	x := make([]fixed.Point, n)
 	for i := n - 1; i >= 0; i-- {
-		x[i] = augmented[i][n]
+		sum := augmented[i][n]
 		for j := i + 1; j < n; j++ {
-			x[i] = x[i].Sub(augmented[i][j].Mul(x[j]))
+			sum = sum.Sub(augmented[i][j].Mul(x[j]))
 		}
-		if augmented[i][i].Abs().Lt(fixed.FromFloat(1e-12)) {
+		if augmented[i][i].IsZero() {
 			return nil
 		}
-		x[i] = x[i].Div(augmented[i][i])
+		x[i] = sum.Div(augmented[i][i])
 	}
 
 	return x

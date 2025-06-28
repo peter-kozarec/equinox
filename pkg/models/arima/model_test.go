@@ -33,7 +33,7 @@ func Test_SolveLinearSystem(t *testing.T) {
 			name: "Singular matrix",
 			A: [][]fixed.Point{
 				{fixed.New(1, 0), fixed.New(2, 0)},
-				{fixed.New(2, 0), fixed.New(4, 0)}, // Linear dependent
+				{fixed.New(2, 0), fixed.New(4, 0)},
 			},
 			b: []fixed.Point{
 				fixed.New(5, 0),
@@ -41,6 +41,48 @@ func Test_SolveLinearSystem(t *testing.T) {
 			},
 			expected: nil,
 			nilOut:   true,
+		},
+		{
+			name: "Zero row matrix",
+			A: [][]fixed.Point{
+				{fixed.New(1, 0), fixed.New(2, 0)},
+				{fixed.Zero, fixed.Zero},
+			},
+			b:        []fixed.Point{fixed.New(3, 0), fixed.Zero},
+			expected: nil,
+			nilOut:   true,
+		},
+		{
+			name: "3x3 system",
+			A: [][]fixed.Point{
+				{fixed.New(2, 0), fixed.New(1, 0), fixed.New(-1, 0)},
+				{fixed.New(-3, 0), fixed.New(-1, 0), fixed.New(2, 0)},
+				{fixed.New(-2, 0), fixed.New(1, 0), fixed.New(2, 0)},
+			},
+			b: []fixed.Point{
+				fixed.New(8, 0),
+				fixed.New(-11, 0),
+				fixed.New(-3, 0),
+			},
+			expected: []fixed.Point{
+				fixed.New(2, 0),
+				fixed.New(3, 0),
+				fixed.New(-1, 0),
+			},
+			nilOut: false,
+		},
+		{
+			name: "Identity matrix",
+			A: [][]fixed.Point{
+				{fixed.One, fixed.Zero},
+				{fixed.Zero, fixed.One},
+			},
+			b: []fixed.Point{fixed.New(7, 0), fixed.New(-3, 0)},
+			expected: []fixed.Point{
+				fixed.New(7, 0),
+				fixed.New(-3, 0),
+			},
+			nilOut: false,
 		},
 	}
 
@@ -55,6 +97,10 @@ func Test_SolveLinearSystem(t *testing.T) {
 					t.Errorf("expected nil, got %v", got)
 				}
 				return
+			}
+
+			if got == nil {
+				t.Fatalf("unexpected nil output")
 			}
 
 			if len(got) != len(tt.expected) {
@@ -72,25 +118,72 @@ func Test_SolveLinearSystem(t *testing.T) {
 }
 
 func Test_SolveNormalEquations(t *testing.T) {
-	// Model: y = 2x + 1
-	X := [][]fixed.Point{
-		{fixed.One, fixed.New(1, 0)},
-		{fixed.One, fixed.New(2, 0)},
-		{fixed.One, fixed.New(3, 0)},
-	}
-	y := []fixed.Point{
-		fixed.New(3, 0),
-		fixed.New(5, 0),
-		fixed.New(7, 0),
+	tests := []struct {
+		name string
+		X    [][]fixed.Point
+		y    []fixed.Point
+		want []fixed.Point
+	}{
+		{
+			name: "Linear model y=2x+1",
+			X: [][]fixed.Point{
+				{fixed.One, fixed.New(1, 0)},
+				{fixed.One, fixed.New(2, 0)},
+				{fixed.One, fixed.New(3, 0)},
+			},
+			y: []fixed.Point{
+				fixed.New(3, 0),
+				fixed.New(5, 0),
+				fixed.New(7, 0),
+			},
+			want: []fixed.Point{fixed.New(1, 0), fixed.New(2, 0)},
+		},
+		{
+			name: "Quadratic model y=1+2x+3x^2",
+			X: [][]fixed.Point{
+				{fixed.One, fixed.New(0, 0), fixed.New(0, 0)},
+				{fixed.One, fixed.New(1, 0), fixed.New(1, 0)},
+				{fixed.One, fixed.New(2, 0), fixed.New(4, 0)},
+			},
+			y: []fixed.Point{
+				fixed.New(1, 0),
+				fixed.New(6, 0),
+				fixed.New(17, 0),
+			},
+			want: []fixed.Point{fixed.New(1, 0), fixed.New(2, 0), fixed.New(3, 0)},
+		},
+		{
+			name: "Constant model y=5",
+			X: [][]fixed.Point{
+				{fixed.One},
+				{fixed.One},
+				{fixed.One},
+			},
+			y: []fixed.Point{
+				fixed.New(5, 0),
+				fixed.New(5, 0),
+				fixed.New(5, 0),
+			},
+			want: []fixed.Point{fixed.New(5, 0)},
+		},
 	}
 
-	got := solveNormalEquations(X, y)
-	want := []fixed.Point{fixed.New(1, 0), fixed.New(2, 0)} // intercept=1, slope=2
+	tolerance := fixed.New(1, 6)
 
-	for i := range want {
-		if !got[i].Sub(want[i]).Abs().Lte(fixed.New(1, 6)) {
-			t.Errorf("beta[%d] = %s; want %s", i, got[i].String(), want[i].String())
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := solveNormalEquations(tt.X, tt.y)
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("length mismatch: got %d, want %d", len(got), len(tt.want))
+			}
+
+			for i := range got {
+				if got[i].Sub(tt.want[i]).Abs().Gt(tolerance) {
+					t.Errorf("beta[%d] = %s; want %s", i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }
 
@@ -107,12 +200,16 @@ func Test_BinomialCoefficient(t *testing.T) {
 		{5, 5, fixed.One},
 		{6, 2, fixed.New(15, 0)},
 		{0, 1, fixed.Zero},
+		{20, 10, fixed.New(184756, 0)},
+		{3, 5, fixed.Zero},
 	}
 
 	for _, tt := range tests {
-		got := binomialCoefficient(tt.n, tt.k)
-		if !got.Eq(tt.expected) {
-			t.Errorf("binomialCoefficient(%d, %d) = %s, want %s", tt.n, tt.k, got.String(), tt.expected.String())
-		}
+		t.Run("", func(t *testing.T) {
+			got := binomialCoefficient(tt.n, tt.k)
+			if !got.Eq(tt.expected) {
+				t.Errorf("binomialCoefficient(%d, %d) = %s, want %s", tt.n, tt.k, got, tt.expected)
+			}
+		})
 	}
 }

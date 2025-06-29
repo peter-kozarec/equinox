@@ -143,10 +143,7 @@ func WithSeasonal(period uint) ModelOption {
 	}
 }
 
-// Main Model Methods
-
-// AddPoint adds a new observation to the model
-func (m *Model) AddPoint(p fixed.Point) error {
+func (m *Model) AddPoint(p fixed.Point) {
 	m.rawData.PushUpdate(p)
 	m.ptCounter++
 
@@ -155,16 +152,52 @@ func (m *Model) AddPoint(p fixed.Point) error {
 		diff := m.differenceLatest()
 		m.diffData.PushUpdate(diff)
 	}
+}
 
-	// Check if we should re-estimate
-	if m.shouldReestimate() {
-		return m.estimate()
+func (m *Model) ShouldReestimate() bool {
+	// Re-estimate when we have enough data and either:
+	// 1. Model hasn't been estimated yet
+	// 2. We've collected a full window of new data
+	return m.diffData.B.Size() >= m.minObservations &&
+		(!m.estimated || m.ptCounter >= m.winSize)
+}
+
+func (m *Model) Estimate() error {
+	if m.diffData.B.Size() < m.minObservations {
+		return ErrInsufficientData
 	}
 
+	m.ptCounter = 0
+
+	if !m.checkStationarity() {
+		return ErrNonStationarity
+	}
+
+	var err error
+	switch m.method {
+	case MaximumLikelihood:
+		err = m.estimateByMaximumLikelihood()
+	case ConditionalLeastSquares:
+		err = m.estimateByConditionalLS()
+	case UnconditionalLeastSquares:
+		err = m.estimateByUnconditionalLS()
+	case YuleWalker:
+		err = m.estimateByYuleWalker()
+	default:
+		err = m.estimateByMaximumLikelihood()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	m.calculateResiduals()
+	m.calculateDiagnostics()
+
+	m.estimated = true
 	return nil
 }
 
-// Forecast generates h-step ahead forecasts
 func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
 	if !m.estimated {
 		return nil, ErrModelNotEstimated
@@ -173,7 +206,6 @@ func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
 	results := make([]ForecastResult, steps)
 	m.forecastCache = make([]fixed.Point, 0, steps)
 
-	// Initialize forecast state
 	state := m.initializeForecastState()
 
 	for step := uint(0); step < steps; step++ {
@@ -191,89 +223,10 @@ func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
 	return results, nil
 }
 
-// Public Getter Methods
-
-// GetDiagnostics returns model diagnostics
 func (m *Model) GetDiagnostics() ModelDiagnostics {
 	return m.diagnostics
 }
 
-// GetParameters returns the estimated AR parameters, MA parameters, and constant
-func (m *Model) GetParameters() ([]fixed.Point, []fixed.Point, fixed.Point) {
-	arCopy := make([]fixed.Point, len(m.arParams))
-	copy(arCopy, m.arParams)
-
-	maCopy := make([]fixed.Point, len(m.maParams))
-	copy(maCopy, m.maParams)
-
-	return arCopy, maCopy, m.constant
-}
-
-// GetResiduals returns the model residuals in oldest-to-newest order
-func (m *Model) GetResiduals() []fixed.Point {
-	if m.residuals.B.Size() == 0 {
-		return []fixed.Point{}
-	}
-
-	data := m.residuals.B.Data()
-	result := make([]fixed.Point, len(data))
-
-	// Reverse to get oldest to newest order
-	for i := 0; i < len(data); i++ {
-		result[i] = data[len(data)-1-i]
-	}
-
-	return result
-}
-
-// GetStandardizedResiduals returns standardized residuals in oldest-to-newest order
-func (m *Model) GetStandardizedResiduals() []fixed.Point {
-	if m.standardizedResiduals.B.Size() == 0 {
-		return []fixed.Point{}
-	}
-
-	data := m.standardizedResiduals.B.Data()
-	result := make([]fixed.Point, len(data))
-
-	// Reverse to get oldest to newest order
-	for i := 0; i < len(data); i++ {
-		result[i] = data[len(data)-1-i]
-	}
-
-	return result
-}
-
-// IsEstimated returns whether the model has been estimated
-func (m *Model) IsEstimated() bool {
-	return m.estimated
-}
-
-// GetVariance returns the estimated error variance
-func (m *Model) GetVariance() fixed.Point {
-	return m.variance
-}
-
-// GetFittedValues returns fitted values from the model
-func (m *Model) GetFittedValues() []fixed.Point {
-	series := m.getDiffSeriesInOrder()
-	startIdx := max(m.p, m.q)
-
-	if uint(len(series)) <= startIdx {
-		return []fixed.Point{}
-	}
-
-	fitted := make([]fixed.Point, len(series)-int(startIdx))
-	residuals := m.calculateCurrentResiduals()
-
-	for i := 0; i < len(fitted) && i < len(residuals); i++ {
-		actual := series[int(startIdx)+i]
-		fitted[i] = actual.Sub(residuals[i])
-	}
-
-	return fitted
-}
-
-// ValidateModel performs validation checks on the estimated model
 func (m *Model) ValidateModel() error {
 	if !m.estimated {
 		return ErrModelNotEstimated
@@ -292,7 +245,6 @@ func (m *Model) ValidateModel() error {
 	return nil
 }
 
-// Reset clears all model state
 func (m *Model) Reset() {
 	m.rawData.Clear()
 	m.diffData.Clear()
@@ -313,8 +265,6 @@ func (m *Model) Reset() {
 	m.ptCounter = 0
 	m.forecastCache = make([]fixed.Point, 0)
 }
-
-// Private Methods - Differencing
 
 func (m *Model) differenceLatest() fixed.Point {
 	if m.rawData.B.Size() <= m.d {
@@ -384,55 +334,6 @@ func (m *Model) undifferenceWithState(diffValue fixed.Point, state *forecastStat
 	}
 
 	return result
-}
-
-// Private Methods - Estimation
-
-func (m *Model) shouldReestimate() bool {
-	// Re-estimate when we have enough data and either:
-	// 1. Model hasn't been estimated yet
-	// 2. We've collected a full window of new data
-	return m.diffData.B.Size() >= m.minObservations &&
-		(!m.estimated || m.ptCounter >= m.winSize)
-}
-
-func (m *Model) estimate() error {
-	if m.diffData.B.Size() < m.minObservations {
-		return ErrInsufficientData
-	}
-
-	m.ptCounter = 0
-
-	// Check stationarity
-	if !m.checkStationarity() {
-		return ErrNonStationarity
-	}
-
-	// Estimate parameters based on selected method
-	var err error
-	switch m.method {
-	case MaximumLikelihood:
-		err = m.estimateByMaximumLikelihood()
-	case ConditionalLeastSquares:
-		err = m.estimateByConditionalLS()
-	case UnconditionalLeastSquares:
-		err = m.estimateByUnconditionalLS()
-	case YuleWalker:
-		err = m.estimateByYuleWalker()
-	default:
-		err = m.estimateByMaximumLikelihood()
-	}
-
-	if err != nil {
-		return err
-	}
-
-	// Calculate residuals and diagnostics
-	m.calculateResiduals()
-	m.calculateDiagnostics()
-
-	m.estimated = true
-	return nil
 }
 
 func (m *Model) checkStationarity() bool {

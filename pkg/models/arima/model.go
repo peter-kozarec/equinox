@@ -80,7 +80,7 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 		return nil, ErrInvalidParameters
 	}
 
-	minObs := max(p+d+q+10, MinDataPoints)
+	minObs := max(p+d+q+10, MinDataPoints-d)
 
 	m := &Model{
 		p:                     p,
@@ -160,6 +160,10 @@ func (m *Model) ShouldReestimate() bool {
 	// 2. We've collected a full window of new data
 	return m.diffData.B.Size() >= m.minObservations &&
 		(!m.estimated || m.ptCounter >= m.winSize)
+}
+
+func (m *Model) IsEstimated() bool {
+	return m.estimated
 }
 
 func (m *Model) Estimate() error {

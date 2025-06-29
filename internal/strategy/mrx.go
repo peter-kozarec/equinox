@@ -16,6 +16,7 @@ var (
 	NegativeThree = fixed.New(-3, 0)
 )
 
+// MrxAdvisor is a test strategy, not meant for production
 type MrxAdvisor struct {
 	logger *zap.Logger
 	router *bus.Router

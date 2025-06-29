@@ -1025,7 +1025,8 @@ func (m *Model) ljungBoxTest(residuals []fixed.Point) fixed.Point {
 		return fixed.One
 	}
 
-	// Calculate autocorrelations
+	// Calculate autocorrelations and Ljung-Box statistic
+	nf := fixed.FromUint(uint64(n), 0)
 	for lag := 1; lag <= maxLag; lag++ {
 		var autocovariance fixed.Point
 		count := n - lag
@@ -1036,19 +1037,54 @@ func (m *Model) ljungBoxTest(residuals []fixed.Point) fixed.Point {
 			autocovariance = autocovariance.Add(val1.Mul(val2))
 		}
 
+		// Sample autocorrelation
 		autocorr := autocovariance.DivInt(count).Div(variance)
-		contribution := autocorr.Mul(autocorr).Div(fixed.FromUint(uint64(n-lag), 0))
+
+		// Ljung-Box statistic contribution: rho²/(n-lag)
+		lagf := fixed.FromUint(uint64(lag), 0)
+		contribution := autocorr.Mul(autocorr).Div(nf.Sub(lagf))
 		testStat = testStat.Add(contribution)
 	}
 
-	testStat = testStat.Mul(fixed.FromUint(uint64(n), 0).Mul(fixed.FromUint(uint64(n+2), 0)))
+	// Final Ljung-Box statistic: n(n+2) * sum
+	nPlus2 := nf.Add(fixed.FromFloat(2.0))
+	testStat = testStat.Mul(nf).Mul(nPlus2)
 
-	// Approximate p-value
-	if testStat.Lt(fixed.FromFloat(15.51)) {
-		return fixed.FromFloat(0.1)
-	} else {
-		return fixed.FromFloat(0.01)
+	// Convert to p-value using chi-squared distribution approximation
+	// Degrees of freedom = maxLag
+	testStatFloat := testStat.Float64()
+	df := float64(maxLag)
+
+	// Use Wilson-Hilferty transformation for chi-squared to normal
+	// This gives a rough approximation of the p-value
+	z := math.Pow(testStatFloat/df, 1.0/3.0) - (1.0 - 2.0/(9.0*df))
+	z = z / math.Sqrt(2.0/(9.0*df))
+
+	// Approximate p-value using standard normal CDF
+	// Using the complementary error function
+	pValue := 0.5 * math.Erfc(z/math.Sqrt(2))
+
+	// For better accuracy at common significance levels, adjust based on known critical values
+	if df == 10 {
+		// Chi-squared critical values for df=10:
+		// p=0.10: 15.987, p=0.05: 18.307, p=0.01: 23.209
+		if testStatFloat < 15.987 {
+			// High p-value region, use the approximation
+			pValue = math.Max(pValue, 0.10)
+		} else if testStatFloat > 23.209 {
+			// Low p-value region
+			pValue = math.Min(pValue, 0.01)
+		}
 	}
+
+	// Ensure p-value is in valid range
+	if pValue > 1.0 {
+		pValue = 1.0
+	} else if pValue < 0.001 {
+		pValue = 0.001
+	}
+
+	return fixed.FromFloat(pValue)
 }
 
 func (m *Model) jarqueBeraTest(residuals []fixed.Point) fixed.Point {
@@ -1094,12 +1130,51 @@ func (m *Model) jarqueBeraTest(residuals []fixed.Point) fixed.Point {
 	jb := nf.Div(fixed.FromFloat(6.0))
 	jb = jb.Mul(skewness.Mul(skewness).Add(kurtosis.Mul(kurtosis).Div(fixed.FromFloat(4.0))))
 
-	// Approximate p-value
-	if jb.Lt(fixed.FromFloat(5.99)) {
-		return fixed.FromFloat(0.1)
+	// Convert JB statistic to p-value
+	// JB follows chi-squared distribution with 2 degrees of freedom
+	jbFloat := jb.Float64()
+
+	// Chi-squared(2) critical values:
+	// p=0.99: 0.020, p=0.95: 0.103, p=0.90: 0.211, p=0.50: 1.386
+	// p=0.10: 4.605, p=0.05: 5.991, p=0.01: 9.210, p=0.001: 13.816
+
+	var pValue float64
+
+	if jbFloat < 0.020 {
+		pValue = 0.99
+	} else if jbFloat < 0.103 {
+		// Interpolate between 0.99 and 0.95
+		pValue = 0.99 - (jbFloat-0.020)/(0.103-0.020)*0.04
+	} else if jbFloat < 0.211 {
+		// Interpolate between 0.95 and 0.90
+		pValue = 0.95 - (jbFloat-0.103)/(0.211-0.103)*0.05
+	} else if jbFloat < 1.386 {
+		// Interpolate between 0.90 and 0.50
+		pValue = 0.90 - (jbFloat-0.211)/(1.386-0.211)*0.40
+	} else if jbFloat < 4.605 {
+		// Interpolate between 0.50 and 0.10
+		pValue = 0.50 - (jbFloat-1.386)/(4.605-1.386)*0.40
+	} else if jbFloat < 5.991 {
+		// Interpolate between 0.10 and 0.05
+		pValue = 0.10 - (jbFloat-4.605)/(5.991-4.605)*0.05
+	} else if jbFloat < 9.210 {
+		// Interpolate between 0.05 and 0.01
+		pValue = 0.05 - (jbFloat-5.991)/(9.210-5.991)*0.04
+	} else if jbFloat < 13.816 {
+		// Interpolate between 0.01 and 0.001
+		pValue = 0.01 - (jbFloat-9.210)/(13.816-9.210)*0.009
 	} else {
-		return fixed.FromFloat(0.01)
+		pValue = 0.001
 	}
+
+	// Ensure p-value is in valid range
+	if pValue > 1.0 {
+		pValue = 1.0
+	} else if pValue < 0.001 {
+		pValue = 0.001
+	}
+
+	return fixed.FromFloat(pValue)
 }
 
 func (m *Model) checkParameterValidity() error {

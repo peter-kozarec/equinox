@@ -16,7 +16,7 @@ var (
 	NegativeThree = fixed.New(-3, 0)
 )
 
-type Advisor struct {
+type MrxAdvisor struct {
 	logger *zap.Logger
 	router *bus.Router
 
@@ -27,8 +27,8 @@ type Advisor struct {
 	posOpen bool
 }
 
-func NewAdvisor(logger *zap.Logger, router *bus.Router) *Advisor {
-	return &Advisor{
+func NewMrxAdvisor(logger *zap.Logger, router *bus.Router) *MrxAdvisor {
+	return &MrxAdvisor{
 		logger:  logger,
 		router:  router,
 		closes:  circular.NewBuffer[fixed.Point](60),
@@ -37,11 +37,11 @@ func NewAdvisor(logger *zap.Logger, router *bus.Router) *Advisor {
 	}
 }
 
-func (a *Advisor) NewTick(t common.Tick) {
+func (a *MrxAdvisor) NewTick(t common.Tick) {
 	a.lastTick = t
 }
 
-func (a *Advisor) NewBar(b common.Bar) {
+func (a *MrxAdvisor) NewBar(b common.Bar) {
 
 	a.closes.Push(b.Close)
 
@@ -83,11 +83,11 @@ func (a *Advisor) NewBar(b common.Bar) {
 	}
 }
 
-func (a *Advisor) PositionClosed(_ common.Position) {
+func (a *MrxAdvisor) PositionClosed(_ common.Position) {
 	a.posOpen = false
 }
 
-func (a *Advisor) canTrade() bool {
+func (a *MrxAdvisor) canTrade() bool {
 
 	if a.lastTick.TimeStamp == 0 {
 		return false

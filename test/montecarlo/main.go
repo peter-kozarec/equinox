@@ -67,7 +67,7 @@ func main() {
 	performance := middleware.NewPerformance(logger)
 	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 
-	advisor := strategy.NewAdvisor(logger, router)
+	advisor := strategy.NewMrxAdvisor(logger, router)
 	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(advisor.NewTick)
 	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar, performance.WithBar)(advisor.NewBar)
 	router.OrderHandler = middleware.Chain(telemetry.WithOrder, monitor.WithOrder, performance.WithOrder)(sim.OnOrder)

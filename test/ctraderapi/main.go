@@ -44,7 +44,7 @@ func main() {
 
 	monitor := middleware.NewMonitor(logger, middleware.MonitorOrders|middleware.MonitorPositionsClosed|middleware.MonitorPositionsOpened|middleware.MonitorBars)
 	telemetry := middleware.NewTelemetry(logger)
-	advisor := strategy.NewAdvisor(logger, router)
+	advisor := strategy.NewMrxAdvisor(logger, router)
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		logger.Fatal("unable to authenticate", zap.Error(err))

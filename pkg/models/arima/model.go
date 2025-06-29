@@ -77,7 +77,7 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 	}
 
 	if winSize < MinDataPoints {
-		winSize = MinDataPoints
+		return nil, ErrInvalidParameters
 	}
 
 	minObs := max(p+d+q+10, MinDataPoints)
@@ -185,7 +185,7 @@ func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
 		m.forecastCache = append(m.forecastCache, result.PointForecast)
 
 		// Update forecast state for next step
-		m.updateForecastState(state, result.PointForecast, step)
+		m.appendZeroResidual(state)
 	}
 
 	return results, nil
@@ -1239,8 +1239,6 @@ func (m *Model) checkResidualProperties() error {
 	return nil
 }
 
-// Private Methods - Forecasting
-
 func (m *Model) initializeForecastState() *forecastState {
 	state := &forecastState{
 		diffSeries:      make([]fixed.Point, 0),
@@ -1399,10 +1397,12 @@ func (m *Model) calculatePsiWeights(maxLag uint) []fixed.Point {
 
 		// AR contribution
 		for i := uint(0); i < m.p && i <= j && i < uint(len(m.arParams)); i++ {
-			if i == 0 && j > 0 {
-				psiJ = psiJ.Add(m.arParams[i].Mul(psi[j-1]))
-			} else if j >= i && i > 0 {
-				psiJ = psiJ.Add(m.arParams[i].Mul(psi[j-i]))
+			if j == i {
+				// When j-i = 0, we need ψ₀ which is implicitly 1
+				psiJ = psiJ.Add(m.arParams[i])
+			} else if j > i {
+				// Access previous psi values: psi[j-i-1] represents ψⱼ₋ᵢ
+				psiJ = psiJ.Add(m.arParams[i].Mul(psi[j-i-1]))
 			}
 		}
 
@@ -1417,27 +1417,17 @@ func (m *Model) calculatePsiWeights(maxLag uint) []fixed.Point {
 	return psi
 }
 
-func (m *Model) updateForecastState(state *forecastState, forecast fixed.Point, step uint) {
+func (m *Model) appendZeroResidual(state *forecastState) {
 	// For residuals, we assume zero for forecasted periods
 	state.residuals = append(state.residuals, fixed.Zero)
 }
-
-// Private Helper Methods
 
 func (m *Model) getDiffSeriesInOrder() []fixed.Point {
 	if m.diffData.B.Size() == 0 {
 		return []fixed.Point{}
 	}
 
-	data := m.diffData.B.Data()
-	result := make([]fixed.Point, len(data))
-
-	// Reverse the data since Get(0) returns most recent
-	for i := 0; i < len(data); i++ {
-		result[i] = data[len(data)-1-i]
-	}
-
-	return result
+	return m.diffData.B.Data()
 }
 
 func (m *Model) getRawSeriesInOrder() []fixed.Point {
@@ -1445,13 +1435,5 @@ func (m *Model) getRawSeriesInOrder() []fixed.Point {
 		return []fixed.Point{}
 	}
 
-	data := m.rawData.B.Data()
-	result := make([]fixed.Point, len(data))
-
-	// Reverse the data
-	for i := 0; i < len(data); i++ {
-		result[i] = data[len(data)-1-i]
-	}
-
-	return result
+	return m.rawData.B.Data()
 }

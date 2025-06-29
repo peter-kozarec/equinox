@@ -26,8 +26,8 @@ type Manager struct {
 	balance fixed.Point
 	equity  fixed.Point
 
-	avgAtr fixed.Point
-	curAtr fixed.Point
+	//avgAtr fixed.Point
+	//curAtr fixed.Point
 }
 
 func NewManager(logger *zap.Logger, minPosSize, maxPosSize fixed.Point, sizeScale int, options ...ManagerOption) *Manager {
@@ -67,11 +67,11 @@ func (m *Manager) OnEquity(equity fixed.Point) {
 	m.equity = equity
 }
 
-func clamp(base, min, max fixed.Point) fixed.Point {
-	if base.Lt(min) {
-		return min
-	} else if base.Gt(max) {
-		return max
-	}
-	return base
-}
+//func clamp(base, min, max fixed.Point) fixed.Point {
+//	if base.Lt(min) {
+//		return min
+//	} else if base.Gt(max) {
+//		return max
+//	}
+//	return base
+//}

@@ -55,12 +55,8 @@ func (a *Atr) OnBar(b common.Bar) {
 	a.lastAtr = a.currentAtr
 }
 
-func (a *Atr) AverageTrueRange() fixed.Point {
+func (a *Atr) Value() fixed.Point {
 	return a.currentAtr
-}
-
-func (a *Atr) TrueRange() fixed.Point {
-	return a.currentTr
 }
 
 func (a *Atr) Ready() bool {

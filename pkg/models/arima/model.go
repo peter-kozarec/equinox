@@ -2,9 +2,10 @@ package arima
 
 import (
 	"errors"
+	"math"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"math"
 )
 
 var (
@@ -69,8 +70,6 @@ type forecastState struct {
 	forecastedDiffs []fixed.Point
 }
 
-type ModelOption func(*Model)
-
 func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 	if p == 0 && q == 0 {
 		return nil, ErrInvalidParameters
@@ -118,29 +117,6 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 	}
 
 	return m, nil
-}
-
-// Model Options
-
-func WithEstimationMethod(method EstimationMethod) ModelOption {
-	return func(m *Model) {
-		m.method = method
-	}
-}
-
-func WithConstant(include bool) ModelOption {
-	return func(m *Model) {
-		m.includeConstant = include
-	}
-}
-
-func WithSeasonal(period uint) ModelOption {
-	return func(m *Model) {
-		if period > 1 {
-			m.seasonal = true
-			m.seasonalPeriod = period
-		}
-	}
 }
 
 func (m *Model) AddPoint(p fixed.Point) {

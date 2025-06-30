@@ -21,6 +21,7 @@ type Performance struct {
 	totalPosUpdtHandlerDur time.Duration
 	totalPosClosHandlerDur time.Duration
 	totalOrderHandlerDur   time.Duration
+	totalSignalHandlerDur  time.Duration
 }
 
 func NewPerformance(logger *zap.Logger) *Performance {
@@ -90,6 +91,14 @@ func (p *Performance) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHan
 		startTime := time.Now()
 		handler(order) // Call the original handler
 		p.totalOrderHandlerDur += time.Since(startTime)
+	}
+}
+
+func (p *Performance) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
+	return func(signal common.Signal) {
+		startTime := time.Now()
+		handler(signal) // Call the original handler
+		p.totalSignalHandlerDur += time.Since(startTime)
 	}
 }
 
@@ -186,6 +195,16 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 				zap.Duration("order_avg_duration", avgOrder),
 				zap.Duration("order_total_duration", p.totalOrderHandlerDur),
 			)
+		}
+	}
+
+	// Signal events
+	if t.signalEventCounter > 0 {
+		avgSignal := p.totalSignalHandlerDur / time.Duration(t.signalEventCounter)
+		if avgSignal > 0 {
+			fields = append(fields,
+				zap.Duration("signal_avg_duration", avgSignal),
+				zap.Duration("signal_total_duration", p.totalSignalHandlerDur))
 		}
 	}
 

@@ -2,7 +2,6 @@ package bus
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/common"
-
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -17,6 +16,7 @@ const (
 	PositionClosedEvent
 	PositionPnLUpdatedEvent
 	OrderEvent
+	SignalEvent
 )
 
 type TickEventHandler func(common.Tick)
@@ -27,3 +27,4 @@ type PositionOpenedEventHandler func(common.Position)
 type PositionClosedEventHandler func(common.Position)
 type PositionPnLUpdatedEventHandler func(common.Position)
 type OrderEventHandler func(common.Order)
+type SignalEventHandler func(common.Signal)

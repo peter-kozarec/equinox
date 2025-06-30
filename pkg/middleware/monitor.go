@@ -21,6 +21,7 @@ const (
 	MonitorPositionsClosed
 	MonitorPositionsPnLUpdated
 	MonitorOrders
+	MonitorSignals
 )
 
 type Monitor struct {
@@ -104,5 +105,14 @@ func (m *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler
 			m.logger.Info("event", zap.Any("order", order.Fields()))
 		}
 		handler(order)
+	}
+}
+
+func (m *Monitor) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
+	return func(signal common.Signal) {
+		if m.flags&MonitorSignals != 0 {
+			m.logger.Info("event", zap.Any("signal", signal.Fields()))
+		}
+		handler(signal)
 	}
 }

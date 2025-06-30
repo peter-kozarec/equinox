@@ -18,6 +18,7 @@ type Telemetry struct {
 	positionClosedEventCounter     uint64
 	positionPnLUpdatedEventCounter uint64
 	orderEventCounter              uint64
+	signalEventCounter             uint64
 }
 
 func NewTelemetry(logger *zap.Logger) *Telemetry {
@@ -82,6 +83,13 @@ func (t *Telemetry) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandl
 	}
 }
 
+func (t *Telemetry) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
+	return func(signal common.Signal) {
+		t.signalEventCounter++
+		handler(signal)
+	}
+}
+
 func (t *Telemetry) PrintStatistics() {
 	t.logger.Info("event statistics",
 		zap.Uint64("tick_events", t.tickEventCounter),
@@ -91,5 +99,6 @@ func (t *Telemetry) PrintStatistics() {
 		zap.Uint64("position_opened_events", t.positionOpenedEventCounter),
 		zap.Uint64("position_closed_events", t.positionClosedEventCounter),
 		zap.Uint64("position_pnl_updated_events", t.positionPnLUpdatedEventCounter),
-		zap.Uint64("order_events", t.orderEventCounter))
+		zap.Uint64("order_events", t.orderEventCounter),
+		zap.Uint64("signal_events", t.signalEventCounter))
 }

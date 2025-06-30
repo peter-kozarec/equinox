@@ -15,4 +15,5 @@ var (
 	NoopPosUpdHdl  = func(common.Position) {}
 	NoopPosClsHdl  = func(common.Position) {}
 	NoopOrderHdl   = func(common.Order) {}
+	NoopSignalHdl  = func(common.Signal) {}
 )

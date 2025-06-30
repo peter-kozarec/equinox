@@ -32,6 +32,7 @@ type Router struct {
 	PositionClosedHandler     PositionClosedEventHandler
 	PositionPnLUpdatedHandler PositionPnLUpdatedEventHandler
 	OrderHandler              OrderEventHandler
+	SignalHandler             SignalEventHandler
 
 	// Statistics
 	runTime       time.Duration
@@ -221,6 +222,16 @@ func (router *Router) dispatch(ev event) error {
 			router.OrderHandler(order)
 		} else {
 			router.logger.Debug("order handler is nil")
+		}
+	case SignalEvent:
+		sig, ok := ev.data.(common.Signal)
+		if !ok {
+			return errors.New("invalid type assertion for signal event")
+		}
+		if router.SignalHandler != nil {
+			router.SignalHandler(sig)
+		} else {
+			router.logger.Debug("signal handler is nil")
 		}
 	default:
 		return fmt.Errorf("unsupported event id: %v", ev.id)

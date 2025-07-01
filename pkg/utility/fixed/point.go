@@ -71,6 +71,47 @@ func (p Point) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
+func ClampPoint(val, min, max Point) Point {
+	if val.Lt(min) {
+		return min
+	} else if val.Gt(max) {
+		return max
+	}
+	return val
+}
+
+func MaxPoint(points ...Point) Point {
+	if len(points) == 0 {
+		panic("there must be some points")
+	}
+
+	maxPoint := points[0]
+
+	for _, point := range points[1:] {
+		if point.Gt(maxPoint) {
+			maxPoint = point
+		}
+	}
+
+	return maxPoint
+}
+
+func MinPoint(points ...Point) Point {
+	if len(points) == 0 {
+		panic("there must be some points")
+	}
+
+	minPoint := points[0]
+
+	for _, point := range points[1:] {
+		if point.Lt(minPoint) {
+			minPoint = point
+		}
+	}
+
+	return minPoint
+}
+
 // internal helper
 func must(decimal decimal.Decimal, err error) decimal.Decimal {
 	if err != nil {

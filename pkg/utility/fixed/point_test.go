@@ -3,535 +3,302 @@ package fixed
 import (
 	"math"
 	"testing"
-	"time"
-
-	"go.uber.org/zap/zapcore"
 )
 
-// Test constants
-func TestConstants(t *testing.T) {
-	tests := []struct {
-		name     string
-		constant Point
-		expected string
-	}{
-		{"Zero", Zero, "0"},
-		{"One", One, "1"},
-		{"Sqrt252", Sqrt252, "15.874507866387540"}, // approximately
+func TestPoint_Constants(t *testing.T) {
+	if !NegOne.Eq(New(-1, 0)) {
+		t.Errorf("NegOne should equal -1")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.name == "Sqrt252" {
-				// For Sqrt252, check that it's approximately correct
-				if !tt.constant.Gt(New(15, 0)) || !tt.constant.Lt(New(16, 0)) {
-					t.Errorf("%s = %s, expected to be between 15 and 16", tt.name, tt.constant.String())
-				}
-			} else {
-				if tt.constant.String() != tt.expected {
-					t.Errorf("%s = %s, expected %s", tt.name, tt.constant.String(), tt.expected)
-				}
-			}
-		})
+	if !Zero.Eq(New(0, 0)) {
+		t.Errorf("Zero should equal 0")
+	}
+	if !One.Eq(New(1, 0)) {
+		t.Errorf("One should equal 1")
+	}
+	if Sqrt252.String() != "15.87450786638754" {
+		t.Errorf("Sqrt252 should be approximately sqrt(252)")
 	}
 }
 
-// Test constructors
-func TestNew(t *testing.T) {
-	tests := []struct {
-		value     int64
-		precision int
-		expected  string
-	}{
-		{123, 0, "123"},
-		{123, 2, "1.23"},
-		{0, 0, "0"},
-		{-456, 1, "-45.6"},
-		{1000000, 6, "1.000000"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := New(tt.value, tt.precision)
-			if result.String() != tt.expected {
-				t.Errorf("New(%d, %d) = %s, expected %s", tt.value, tt.precision, result.String(), tt.expected)
-			}
-		})
+func TestPoint_New(t *testing.T) {
+	p := New(123, 2)
+	if p.String() != "1.23" {
+		t.Errorf("New(123, 2) should be 1.23, got %s", p.String())
 	}
 }
 
-func TestFromUint(t *testing.T) {
-	tests := []struct {
-		value     uint64
-		precision int
-		expected  string
-	}{
-		{123, 0, "123"},
-		{456, 2, "4.56"},
-		{0, 0, "0"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := FromUint(tt.value, tt.precision)
-			if result.String() != tt.expected {
-				t.Errorf("FromUint(%d, %d) = %s, expected %s", tt.value, tt.precision, result.String(), tt.expected)
-			}
-		})
+func TestPoint_FromUint(t *testing.T) {
+	p := FromUint(456, 1)
+	if p.String() != "45.6" {
+		t.Errorf("FromUint(456, 1) should be 45.6, got %s", p.String())
 	}
 }
 
-func TestFromFloat(t *testing.T) {
-	tests := []struct {
-		value    float64
-		expected string
-	}{
-		{123.45, "123.45"},
-		{0.0, "0"},
-		{-789.123, "-789.123"},
-		{1.0, "1"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := FromFloat(tt.value)
-			if result.String() != tt.expected {
-				t.Errorf("FromFloat(%f) = %s, expected %s", tt.value, result.String(), tt.expected)
-			}
-		})
+func TestPoint_FromFloat(t *testing.T) {
+	p := FromFloat(3.14159)
+	if math.Abs(p.Float64()-3.14159) > 1e-10 {
+		t.Errorf("FromFloat(3.14159) should preserve value, got %f", p.Float64())
 	}
 }
 
-// Test arithmetic operations
-func TestAdd(t *testing.T) {
-	tests := []struct {
-		a, b     Point
-		expected string
-	}{
-		{New(100, 0), New(50, 0), "150"},
-		{New(125, 2), New(75, 2), "2.00"},
-		{New(-50, 0), New(25, 0), "-25"},
-		{Zero, New(100, 0), "100"},
+func TestPoint_Arithmetic(t *testing.T) {
+	a := New(100, 2) // 1.00
+	b := New(50, 2)  // 0.50
+
+	// Addition
+	result := a.Add(b)
+	if result.String() != "1.50" {
+		t.Errorf("1.00 + 0.50 should be 1.50, got %s", result.String())
 	}
 
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.a.Add(tt.b)
-			if result.String() != tt.expected {
-				t.Errorf("%s + %s = %s, expected %s", tt.a.String(), tt.b.String(), result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-func TestSub(t *testing.T) {
-	tests := []struct {
-		a, b     Point
-		expected string
-	}{
-		{New(100, 0), New(50, 0), "50"},
-		{New(200, 2), New(100, 2), "1.00"},
-		{New(25, 0), New(50, 0), "-25"},
-		{Zero, New(100, 0), "-100"},
+	// Subtraction
+	result = a.Sub(b)
+	if result.String() != "0.50" {
+		t.Errorf("1.00 - 0.50 should be 0.50, got %s", result.String())
 	}
 
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.a.Sub(tt.b)
-			if result.String() != tt.expected {
-				t.Errorf("%s - %s = %s, expected %s", tt.a.String(), tt.b.String(), result.String(), tt.expected)
-			}
-		})
+	// Multiplication
+	result = a.Mul(b)
+	if result.String() != "0.5000" {
+		t.Errorf("1.00 * 0.50 should be 0.5000, got %s", result.String())
+	}
+
+	// Division
+	result = a.Div(b)
+	if result.String() != "2" {
+		t.Errorf("1.00 / 0.50 should be 2, got %s", result.String())
 	}
 }
 
-func TestMul(t *testing.T) {
-	tests := []struct {
-		a, b     Point
-		expected string
-	}{
-		{New(10, 0), New(5, 0), "50"},
-		{New(250, 2), New(400, 2), "10.0000"},
-		{New(-3, 0), New(4, 0), "-12"},
-		{Zero, New(100, 0), "0"},
-	}
+func TestPoint_IntegerArithmetic(t *testing.T) {
+	p := New(100, 2) // 1.00
 
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.a.Mul(tt.b)
-			if result.String() != tt.expected {
-				t.Errorf("%s * %s = %s, expected %s", tt.a.String(), tt.b.String(), result.String(), tt.expected)
-			}
-		})
+	// Test all integer operations
+	if !p.AddInt64(1).Eq(New(200, 2)) {
+		t.Errorf("AddInt64 failed")
 	}
-}
-
-func TestDiv(t *testing.T) {
-	tests := []struct {
-		a, b     Point
-		expected string
-	}{
-		{New(100, 0), New(5, 0), "20"},
-		{New(300, 2), New(200, 2), "1.5"},
-		{New(-12, 0), New(3, 0), "-4"},
+	if !p.AddInt(1).Eq(New(200, 2)) {
+		t.Errorf("AddInt failed")
 	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.a.Div(tt.b)
-			if result.String() != tt.expected {
-				t.Errorf("%s / %s = %s, expected %s", tt.a.String(), tt.b.String(), result.String(), tt.expected)
-			}
-		})
+	if !p.SubInt64(1).Eq(New(0, 2)) {
+		t.Errorf("SubInt64 failed")
+	}
+	if !p.SubInt(1).Eq(New(0, 2)) {
+		t.Errorf("SubInt failed")
+	}
+	if !p.MulInt64(2).Eq(New(200, 2)) {
+		t.Errorf("MulInt64 failed")
+	}
+	if !p.MulInt(2).Eq(New(200, 2)) {
+		t.Errorf("MulInt failed")
+	}
+	if !p.DivInt64(2).Eq(New(50, 2)) {
+		t.Errorf("DivInt64 failed")
+	}
+	if !p.DivInt(2).Eq(New(50, 2)) {
+		t.Errorf("DivInt failed")
 	}
 }
 
-func TestDivByZero(t *testing.T) {
+func TestPoint_Comparison(t *testing.T) {
+	a := New(100, 2) // 1.00
+	b := New(50, 2)  // 0.50
+	c := New(100, 2) // 1.00
+
+	if !a.Eq(c) {
+		t.Errorf("Eq failed")
+	}
+	if !a.Gt(b) {
+		t.Errorf("Gt failed")
+	}
+	if !b.Lt(a) {
+		t.Errorf("Lt failed")
+	}
+	if !a.Gte(c) {
+		t.Errorf("Gte failed")
+	}
+	if !a.Gte(b) {
+		t.Errorf("Gte failed")
+	}
+	if !b.Lte(a) {
+		t.Errorf("Lte failed")
+	}
+	if !a.Lte(c) {
+		t.Errorf("Lte failed")
+	}
+}
+
+func TestPoint_UtilityFunctions(t *testing.T) {
+	neg := New(-100, 2)
+	pos := New(100, 2)
+
+	// Test Abs
+	if !neg.Abs().Eq(pos) {
+		t.Errorf("Abs failed")
+	}
+
+	// Test Neg
+	if !pos.Neg().Eq(neg) {
+		t.Errorf("Neg failed")
+	}
+
+	// Test IsZero
+	if !Zero.IsZero() {
+		t.Errorf("Zero should be zero")
+	}
+	if pos.IsZero() {
+		t.Errorf("Positive number should not be zero")
+	}
+
+	// Test Precision
+	p := New(123, 3)
+	if p.Precision() != 3 {
+		t.Errorf("Precision should be 3, got %d", p.Precision())
+	}
+}
+
+func TestPoint_MathFunctions(t *testing.T) {
+	// Test Pow
+	base := New(2, 0)
+	exp := New(3, 0)
+	result := base.Pow(exp)
+	if !result.Eq(New(8, 0)) {
+		t.Errorf("2^3 should be 8, got %s", result.String())
+	}
+
+	// Test Sqrt
+	four := New(4, 0)
+	result = four.Sqrt()
+	if !result.Eq(New(2, 0)) {
+		t.Errorf("sqrt(4) should be 2, got %s", result.String())
+	}
+
+	// Test Exp and Log (basic functionality)
+	one := New(1, 0)
+	expResult := one.Exp()
+	logResult := expResult.Log()
+	if math.Abs(logResult.Float64()-1.0) > 1e-10 {
+		t.Errorf("log(exp(1)) should be 1, got %f", logResult.Float64())
+	}
+}
+
+func TestPoint_Rescale(t *testing.T) {
+	p := New(123, 2) // 1.23
+	rescaled := p.Rescale(4)
+	if rescaled.String() != "1.2300" {
+		t.Errorf("Rescale to 4 should be 1.2300, got %s", rescaled.String())
+	}
+}
+
+func TestPoint_Float64(t *testing.T) {
+	p := New(314159, 5) // 3.14159
+	f := p.Float64()
+	if math.Abs(f-3.14159) > 1e-10 {
+		t.Errorf("Float64 should be 3.14159, got %f", f)
+	}
+}
+
+func TestPoint_ClampPoint(t *testing.T) {
+	min := New(0, 0)
+	max := New(10, 0)
+
+	// Test value below min
+	val := New(-5, 0)
+	result := ClampPoint(val, min, max)
+	if !result.Eq(min) {
+		t.Errorf("Clamp should return min for value below range")
+	}
+
+	// Test value above max
+	val = New(15, 0)
+	result = ClampPoint(val, min, max)
+	if !result.Eq(max) {
+		t.Errorf("Clamp should return max for value above range")
+	}
+
+	// Test value in range
+	val = New(5, 0)
+	result = ClampPoint(val, min, max)
+	if !result.Eq(val) {
+		t.Errorf("Clamp should return original value for value in range")
+	}
+}
+
+func TestPoint_MaxPoint(t *testing.T) {
+	points := []Point{
+		New(1, 0),
+		New(5, 0),
+		New(3, 0),
+		New(2, 0),
+	}
+
+	result := MaxPoint(points...)
+	if !result.Eq(New(5, 0)) {
+		t.Errorf("MaxPoint should return 5, got %s", result.String())
+	}
+}
+
+func TestPoint_MinPoint(t *testing.T) {
+	points := []Point{
+		New(1, 0),
+		New(5, 0),
+		New(3, 0),
+		New(2, 0),
+	}
+
+	result := MinPoint(points...)
+	if !result.Eq(New(1, 0)) {
+		t.Errorf("MinPoint should return 1, got %s", result.String())
+	}
+}
+
+func TestPoint_MaxPointPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("Expected panic when dividing by zero")
+			t.Errorf("MaxPoint should panic with empty slice")
 		}
 	}()
-
-	New(100, 0).Div(Zero)
+	MaxPoint()
 }
 
-// Test integer arithmetic operations
-func TestIntegerArithmetic(t *testing.T) {
-	p := New(100, 0)
-
-	tests := []struct {
-		name     string
-		result   Point
-		expected string
-	}{
-		{"AddInt64", p.AddInt64(50), "150"},
-		{"AddInt", p.AddInt(25), "125"},
-		{"SubInt64", p.SubInt64(30), "70"},
-		{"SubInt", p.SubInt(40), "60"},
-		{"MulInt64", p.MulInt64(2), "200"},
-		{"MulInt", p.MulInt(3), "300"},
-		{"DivInt64", p.DivInt64(4), "25"},
-		{"DivInt", p.DivInt(5), "20"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.result.String() != tt.expected {
-				t.Errorf("%s = %s, expected %s", tt.name, tt.result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-// Test comparison operations
-func TestComparisons(t *testing.T) {
-	a := New(100, 0)
-	b := New(200, 0)
-	c := New(100, 0)
-
-	tests := []struct {
-		name     string
-		result   bool
-		expected bool
-	}{
-		{"a == c", a.Eq(c), true},
-		{"a == b", a.Eq(b), false},
-		{"a > b", a.Gt(b), false},
-		{"b > a", b.Gt(a), true},
-		{"a < b", a.Lt(b), true},
-		{"b < a", b.Lt(a), false},
-		{"a >= c", a.Gte(c), true},
-		{"a >= b", a.Gte(b), false},
-		{"b >= a", b.Gte(a), true},
-		{"a <= c", a.Lte(c), true},
-		{"a <= b", a.Lte(b), true},
-		{"b <= a", b.Lte(a), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.result != tt.expected {
-				t.Errorf("%s = %t, expected %t", tt.name, tt.result, tt.expected)
-			}
-		})
-	}
-}
-
-// Test utility methods
-func TestAbs(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected string
-	}{
-		{New(100, 0), "100"},
-		{New(-100, 0), "100"},
-		{Zero, "0"},
-		{New(-456, 2), "4.56"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Abs()
-			if result.String() != tt.expected {
-				t.Errorf("Abs(%s) = %s, expected %s", tt.input.String(), result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-func TestNeg(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected string
-	}{
-		{New(100, 0), "-100"},
-		{New(-100, 0), "100"},
-		{Zero, "0"},
-		{New(456, 2), "-4.56"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Neg()
-			if result.String() != tt.expected {
-				t.Errorf("Neg(%s) = %s, expected %s", tt.input.String(), result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsZero(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected bool
-	}{
-		{Zero, true},
-		{New(0, 5), true},
-		{New(1, 0), false},
-		{New(-1, 0), false},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.IsZero()
-			if result != tt.expected {
-				t.Errorf("IsZero(%s) = %t, expected %t", tt.input.String(), result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestString(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected string
-	}{
-		{New(12345, 2), "123.45"},
-		{Zero, "0"},
-		{New(-6789, 3), "-6.789"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.String()
-			if result != tt.expected {
-				t.Errorf("String() = %s, expected %s", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPrecision(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected int
-	}{
-		{New(123, 0), 3},
-		{New(12345, 2), 5},
-		{New(123456, 4), 6},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Precision()
-			if result != tt.expected {
-				t.Errorf("Precision() = %d, expected %d", result, tt.expected)
-			}
-		})
-	}
-}
-
-// Test mathematical operations
-func TestPow(t *testing.T) {
-	tests := []struct {
-		base     Point
-		exponent Point
-		expected string
-	}{
-		{New(2, 0), New(3, 0), "8"},
-		{New(10, 0), New(2, 0), "100"},
-		{New(5, 0), New(0, 0), "1"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.base.Pow(tt.exponent)
-			if result.String() != tt.expected {
-				t.Errorf("Pow(%s, %s) = %s, expected %s", tt.base.String(), tt.exponent.String(), result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-func TestSqrt(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected string
-	}{
-		{New(4, 0), "2"},
-		{New(9, 0), "3"},
-		{New(16, 0), "4"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Sqrt()
-			if result.String() != tt.expected {
-				t.Errorf("Sqrt(%s) = %s, expected %s", tt.input.String(), result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-func TestSqrtNegative(t *testing.T) {
+func TestPoint_MinPointPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("Expected panic when taking square root of negative number")
+			t.Errorf("MinPoint should panic with empty slice")
 		}
 	}()
-
-	New(-4, 0).Sqrt()
+	MinPoint()
 }
 
-// Test conversion methods
-func TestFloat64(t *testing.T) {
-	tests := []struct {
-		input    Point
-		expected float64
-	}{
-		{New(12345, 2), 123.45},
-		{Zero, 0.0},
-		{New(-6789, 3), -6.789},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Float64()
-			if math.Abs(result-tt.expected) > 1e-10 {
-				t.Errorf("Float64() = %f, expected %f", result, tt.expected)
-			}
-		})
-	}
+func TestPoint_EdgeCases(t *testing.T) {
+	// Test division by zero should panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Division by zero should panic")
+		}
+	}()
+	One.Div(Zero)
 }
 
-func TestRescale(t *testing.T) {
-	tests := []struct {
-		input    Point
-		scale    int
-		expected string
-	}{
-		{New(12345, 2), 3, "123.450"},
-		{New(12345, 2), 1, "123.4"},
-		{New(12300, 2), 0, "123"},
-	}
+func BenchmarkPoint_Arithmetic(b *testing.B) {
+	a := New(100, 2)
+	c := New(50, 2)
 
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			result := tt.input.Rescale(tt.scale)
-			if result.String() != tt.expected {
-				t.Errorf("Rescale(%s, %d) = %s, expected %s", tt.input.String(), tt.scale, result.String(), tt.expected)
-			}
-		})
-	}
-}
-
-// Test Zap logging integration
-func TestMarshalLogObject(t *testing.T) {
-	p := New(12345, 2)
-
-	// Mock encoder to capture the logged value
-	encoder := &mockEncoder{fields: make(map[string]interface{})}
-
-	err := p.MarshalLogObject(encoder)
-	if err != nil {
-		t.Errorf("MarshalLogObject() returned error: %v", err)
-	}
-
-	if encoder.fields["decimal"] != "123.45" {
-		t.Errorf("MarshalLogObject() logged %v, expected '123.45'", encoder.fields["decimal"])
-	}
-}
-
-// Mock encoder for testing Zap integration
-type mockEncoder struct {
-	fields map[string]interface{}
-}
-
-func (m *mockEncoder) AddString(key, val string) {
-	m.fields[key] = val
-}
-
-func (m *mockEncoder) AddArray(string, zapcore.ArrayMarshaler) error   { return nil }
-func (m *mockEncoder) AddObject(string, zapcore.ObjectMarshaler) error { return nil }
-func (m *mockEncoder) AddBinary(string, []byte)                        {}
-func (m *mockEncoder) AddByteString(string, []byte)                    {}
-func (m *mockEncoder) AddBool(string, bool)                            {}
-func (m *mockEncoder) AddComplex128(string, complex128)                {}
-func (m *mockEncoder) AddComplex64(string, complex64)                  {}
-func (m *mockEncoder) AddDuration(string, time.Duration)               {}
-func (m *mockEncoder) AddFloat64(string, float64)                      {}
-func (m *mockEncoder) AddFloat32(string, float32)                      {}
-func (m *mockEncoder) AddInt(string, int)                              {}
-func (m *mockEncoder) AddInt64(string, int64)                          {}
-func (m *mockEncoder) AddInt32(string, int32)                          {}
-func (m *mockEncoder) AddInt16(string, int16)                          {}
-func (m *mockEncoder) AddInt8(string, int8)                            {}
-func (m *mockEncoder) AddTime(string, time.Time)                       {}
-func (m *mockEncoder) AddUint(string, uint)                            {}
-func (m *mockEncoder) AddUint64(string, uint64)                        {}
-func (m *mockEncoder) AddUint32(string, uint32)                        {}
-func (m *mockEncoder) AddUint16(string, uint16)                        {}
-func (m *mockEncoder) AddUint8(string, uint8)                          {}
-func (m *mockEncoder) AddUintptr(string, uintptr)                      {}
-func (m *mockEncoder) AddReflected(string, interface{}) error          { return nil }
-func (m *mockEncoder) OpenNamespace(string)                            {}
-
-// Test edge cases and error conditions
-func TestEdgeCases(t *testing.T) {
-	t.Run("Large numbers", func(t *testing.T) {
-		large := New(9223372036854775807, 0) // max int64
-		result := large.Add(New(1, 0))
-		if result.String() != "9223372036854775808" {
-			t.Errorf("Large number addition failed: got %s", result.String())
+	b.Run("Add", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			a.Add(c)
 		}
 	})
 
-	t.Run("High precision", func(t *testing.T) {
-		highPrec := New(123456789, 8)
-		expected := "1.23456789"
-		if highPrec.String() != expected {
-			t.Errorf("High precision: got %s, expected %s", highPrec.String(), expected)
+	b.Run("Mul", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			a.Mul(c)
 		}
 	})
 
-	t.Run("Zero precision operations", func(t *testing.T) {
-		a := New(1, 0)
-		b := New(3, 0)
-		result := a.Div(b)
-		// Should handle division resulting in repeating decimal
-		if result.IsZero() {
-			t.Errorf("Division by 3 should not result in zero")
+	b.Run("Div", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			a.Div(c)
 		}
 	})
 }

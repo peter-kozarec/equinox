@@ -30,6 +30,8 @@ func FromFloat(v float64) Point {
 	return Point{true, must(decimal.NewFromFloat64(v))}
 }
 
+func (p Point) IsSet() bool { return p.set }
+
 func (p Point) Add(o Point) Point { return Point{true, must(p.v.Add(o.v))} }
 func (p Point) Sub(o Point) Point { return Point{true, must(p.v.Sub(o.v))} }
 func (p Point) Mul(o Point) Point { return Point{true, must(p.v.Mul(o.v))} }

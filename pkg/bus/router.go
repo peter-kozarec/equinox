@@ -162,7 +162,6 @@ func (router *Router) dispatch(ev event) error {
 		} else {
 			router.logger.Debug("bar handler is nil")
 		}
-
 	case EquityEvent:
 		eq, ok := ev.data.(fixed.Point)
 		if !ok {

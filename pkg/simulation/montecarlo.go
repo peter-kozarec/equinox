@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	pointFive = fixed.New(5, 1)
+	pointFive = fixed.FromInt64(5, 1)
 )
 
 type MonteCarloExecutor struct {
@@ -73,7 +73,7 @@ func NewMonteCarloExecutor(
 
 		startTime:  startTime,
 		startPrice: startPrice,
-		baseSpread: fullSpread.DivInt(2), // Half spread for bid/ask calculation
+		baseSpread: fullSpread.DivInt64(2), // Half spread for bid/ask calculation
 		mu:         mu,
 		sigma:      sigma,
 		deltaT:     deltaT,
@@ -84,13 +84,13 @@ func NewMonteCarloExecutor(
 		tickVariability: 0.3, // 30% variation in tick timing
 
 		// Volume parameters - more realistic volume simulation
-		avgVolume:      fixed.New(100, 0), // Average 100 units
-		volumeVariance: 0.5,               // 50% variance in volume
+		avgVolume:      fixed.FromInt64(100, 0), // Average 100 units
+		volumeVariance: 0.5,                     // 50% variance in volume
 
 		// Spread dynamics
 		spreadVolatility: 0.1,
-		minSpread:        fullSpread.Mul(fixed.New(5, 1)),  // 50% of base spread
-		maxSpread:        fullSpread.Mul(fixed.New(15, 1)), // 150% of base spread
+		minSpread:        fullSpread.Mul(fixed.FromInt64(5, 1)),  // 50% of base spread
+		maxSpread:        fullSpread.Mul(fixed.FromInt64(15, 1)), // 150% of base spread
 
 		// Pre-calculated values for GBM
 		deltaLogPre1: mu.Sub(sigma.Mul(sigma).Mul(pointFive)).Mul(deltaT),
@@ -98,7 +98,7 @@ func NewMonteCarloExecutor(
 
 		lastTime:      startTime,
 		lastPrice:     startPrice,
-		currentSpread: fullSpread.DivInt(2),
+		currentSpread: fullSpread.DivInt64(2),
 	}
 }
 func NewEurUsdMonteCarloTickSimulator(
@@ -142,17 +142,17 @@ func NewEurUsdMonteCarloTickSimulator(
 
 	// Time delta for price model (convert to fraction of year)
 	secondsPerYear := 365.25 * 24 * 3600
-	deltaT := fixed.FromFloat(avgTickIntervalSeconds / secondsPerYear)
+	deltaT := fixed.FromFloat64(avgTickIntervalSeconds / secondsPerYear)
 
 	// Convert price and spread to fixed point
-	startPrice := fixed.FromFloat(eurUsdStartPrice)
-	fullSpread := fixed.FromFloat(eurUsdTypicalSpread)
-	minSpread := fixed.FromFloat(eurUsdMinSpread)
-	maxSpread := fixed.FromFloat(eurUsdMaxSpread)
+	startPrice := fixed.FromFloat64(eurUsdStartPrice)
+	fullSpread := fixed.FromFloat64(eurUsdTypicalSpread)
+	minSpread := fixed.FromFloat64(eurUsdMinSpread)
+	maxSpread := fixed.FromFloat64(eurUsdMaxSpread)
 
 	// Convert mu and sigma to fixed point
-	muFixed := fixed.FromFloat(mu)
-	sigmaFixed := fixed.FromFloat(sigma)
+	muFixed := fixed.FromFloat64(mu)
+	sigmaFixed := fixed.FromFloat64(sigma)
 
 	// Create the base Monte Carlo executor
 	executor := NewMonteCarloExecutor(
@@ -172,7 +172,7 @@ func NewEurUsdMonteCarloTickSimulator(
 	executor.SetTickParameters(
 		avgTickInterval,
 		tickTimingVariability,
-		fixed.New(int64(avgVolumeUnits), 0),
+		fixed.FromInt64(int64(avgVolumeUnits), 0),
 		volumeVariability,
 	)
 
@@ -231,7 +231,7 @@ func (e *MonteCarloExecutor) DoOnce() error {
 
 	// Generate next price using Geometric Brownian Motion
 	z := e.rng.NormFloat64()
-	deltaLog := e.deltaLogPre1.Add(e.deltaLogPre2.Mul(fixed.FromFloat(z)))
+	deltaLog := e.deltaLogPre1.Add(e.deltaLogPre2.Mul(fixed.FromFloat64(z)))
 	e.lastPrice = e.lastPrice.Mul(deltaLog.Exp())
 
 	// Dynamic spread based on volatility
@@ -276,7 +276,7 @@ func (e *MonteCarloExecutor) updateSpread() {
 
 	// Spread tends to widen during high volatility
 	spreadChange := e.rng.NormFloat64() * e.spreadVolatility
-	newSpread := e.currentSpread.Mul(fixed.FromFloat(1.0 + spreadChange))
+	newSpread := e.currentSpread.Mul(fixed.FromFloat64(1.0 + spreadChange))
 
 	// Clamp spread within bounds
 	if newSpread.Lt(e.minSpread) {
@@ -318,8 +318,8 @@ func (e *MonteCarloExecutor) generateVolumes() (askVol, bidVol fixed.Point) {
 	askVariation := e.rng.NormFloat64() * e.volumeVariance
 	bidVariation := e.rng.NormFloat64() * e.volumeVariance
 
-	askMultiplier := fixed.FromFloat(1.0 + askVariation).Exp()
-	bidMultiplier := fixed.FromFloat(1.0 + bidVariation).Exp()
+	askMultiplier := fixed.FromFloat64(1.0 + askVariation).Exp()
+	bidMultiplier := fixed.FromFloat64(1.0 + bidVariation).Exp()
 
 	askVol = e.avgVolume.Mul(askMultiplier)
 	bidVol = e.avgVolume.Mul(bidMultiplier)
@@ -338,17 +338,17 @@ func (e *MonteCarloExecutor) generateVolumes() (askVol, bidVol fixed.Point) {
 // addTickNoise adds small random variations to simulate market microstructure
 func (e *MonteCarloExecutor) addTickNoise() {
 	// Small random adjustments to bid/ask to simulate order book dynamics
-	tickSize := e.currentSpread.DivInt(10) // Minimum tick size
+	tickSize := e.currentSpread.DivInt64(10) // Minimum tick size
 
-	askNoise := fixed.FromFloat(e.rng.NormFloat64() * 0.1).Mul(tickSize)
-	bidNoise := fixed.FromFloat(e.rng.NormFloat64() * 0.1).Mul(tickSize)
+	askNoise := fixed.FromFloat64(e.rng.NormFloat64() * 0.1).Mul(tickSize)
+	bidNoise := fixed.FromFloat64(e.rng.NormFloat64() * 0.1).Mul(tickSize)
 
 	e.tick.Ask = e.tick.Ask.Add(askNoise)
 	e.tick.Bid = e.tick.Bid.Add(bidNoise)
 
 	// Ensure bid < ask
 	if e.tick.Bid.Gte(e.tick.Ask) {
-		mid := e.tick.Bid.Add(e.tick.Ask).DivInt(2)
+		mid := e.tick.Bid.Add(e.tick.Ask).DivInt64(2)
 		e.tick.Bid = mid.Sub(tickSize)
 		e.tick.Ask = mid.Add(tickSize)
 	}

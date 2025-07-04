@@ -1,0 +1,41 @@
+package fixed
+
+var (
+	NegTen   = FromInt64(-10, 0)
+	NegNine  = FromInt64(-9, 0)
+	NegEight = FromInt64(-8, 0)
+	NegSeven = FromInt64(-7, 0)
+	NegSix   = FromInt64(-6, 0)
+	NegFive  = FromInt64(-5, 0)
+	NegFour  = FromInt64(-4, 0)
+	NegThree = FromInt64(-3, 0)
+	NegTwo   = FromInt64(-2, 0)
+	NegOne   = FromInt64(-1, 0)
+	Zero     = FromInt64(0, 0)
+	One      = FromInt64(1, 0)
+	Two      = FromInt64(2, 0)
+	Three    = FromInt64(3, 0)
+	Four     = FromInt64(4, 0)
+	Five     = FromInt64(5, 0)
+	Six      = FromInt64(6, 0)
+	Seven    = FromInt64(7, 0)
+	Eight    = FromInt64(8, 0)
+	Nine     = FromInt64(9, 0)
+	Ten      = FromInt64(10, 0)
+)
+
+var (
+	PointOne   = FromInt64(1, 1)
+	PointTwo   = FromInt64(2, 1)
+	PointThree = FromInt64(3, 1)
+	PointFour  = FromInt64(4, 1)
+	PointFive  = FromInt64(5, 1)
+	PointSix   = FromInt64(6, 1)
+	PointSeven = FromInt64(7, 1)
+	PointEight = FromInt64(8, 1)
+	PointNine  = FromInt64(9, 1)
+)
+
+var (
+	Sqrt252 = FromInt64(1587450786638754, 14)
+)

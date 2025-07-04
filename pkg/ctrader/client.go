@@ -111,7 +111,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	for _, s := range symbolResp.GetSymbol() {
 		if s.GetSymbolId() == instrument.Id {
 			instrument.Digits = int(s.GetDigits())
-			instrument.LotSize = fixed.New(s.GetLotSize(), 2) // Lot Size is in cents
+			instrument.LotSize = fixed.FromInt64(s.GetLotSize(), 2) // Lot Size is in cents
 			instrument.DenominationUnit = s.GetMeasurementUnits()
 			return instrument, nil
 		}
@@ -141,7 +141,7 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 		return fixed.Point{}, fmt.Errorf("unable to perform trader request: %w", err)
 	}
 
-	return fixed.New(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
+	return fixed.FromInt64(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
 func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument common.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
@@ -184,12 +184,13 @@ func (client *Client) GetOpenPositions(ctx context.Context, accountId int64) ([]
 
 func (client *Client) ClosePosition(ctx context.Context, accountId, positionId int64, size fixed.Point) error {
 
-	vol := int64(size.Abs().MulInt(100).Float64())
+	vol, _ := size.Abs().MulInt(100).Float64()
+	volume := int64(vol)
 
 	req := &openapi.ProtoOAClosePositionReq{
 		CtidTraderAccountId: &accountId,
 		PositionId:          &positionId,
-		Volume:              &vol,
+		Volume:              &volume,
 	}
 
 	return send(ctx, client.conn, req)
@@ -210,7 +211,7 @@ func (client *Client) OpenPosition(
 		ot = openapi.ProtoOAOrderType_MARKET
 	case common.Limit:
 		ot = openapi.ProtoOAOrderType_LIMIT
-		price := openPrice.Float64()
+		price, _ := openPrice.Float64()
 		limitPrice = &price
 	}
 
@@ -221,14 +222,15 @@ func (client *Client) OpenPosition(
 		ts = openapi.ProtoOATradeSide_SELL
 	}
 
-	vol := int64(size.Abs().MulInt(100).Float64())
+	vol, _ := size.Abs().MulInt(100).Float64()
+	volume := int64(vol)
 
 	if !stopLoss.IsZero() {
-		slF := stopLoss.Float64()
+		slF, _ := stopLoss.Float64()
 		sl = &slF
 	}
 	if !takeProfit.IsZero() {
-		tpF := takeProfit.Float64()
+		tpF, _ := takeProfit.Float64()
 		tp = &tpF
 	}
 
@@ -239,7 +241,7 @@ func (client *Client) OpenPosition(
 		TakeProfit:          tp,
 		TradeSide:           &ts,
 		OrderType:           &ot,
-		Volume:              &vol,
+		Volume:              &volume,
 		LimitPrice:          limitPrice,
 	}
 

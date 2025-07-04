@@ -15,8 +15,8 @@ type BinaryTick struct {
 
 func (binaryTick BinaryTick) ToModelTick(tick *common.Tick) {
 	tick.TimeStamp = binaryTick.TimeStamp
-	tick.Ask = fixed.FromFloat(binaryTick.Ask)
-	tick.Bid = fixed.FromFloat(binaryTick.Bid)
-	tick.AskVolume = fixed.FromFloat(binaryTick.AskVolume)
-	tick.BidVolume = fixed.FromFloat(binaryTick.BidVolume)
+	tick.Ask = fixed.FromFloat64(binaryTick.Ask)
+	tick.Bid = fixed.FromFloat64(binaryTick.Bid)
+	tick.AskVolume = fixed.FromFloat64(binaryTick.AskVolume)
+	tick.BidVolume = fixed.FromFloat64(binaryTick.BidVolume)
 }

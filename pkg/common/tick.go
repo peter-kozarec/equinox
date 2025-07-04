@@ -14,7 +14,7 @@ type Tick struct {
 }
 
 func (t Tick) Average() fixed.Point {
-	return t.Ask.Add(t.Bid).DivInt(2)
+	return t.Ask.Add(t.Bid).DivInt64(2)
 }
 
 func (t Tick) AggregatedVolume() fixed.Point {

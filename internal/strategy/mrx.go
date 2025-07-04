@@ -6,14 +6,13 @@ import (
 
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"github.com/peter-kozarec/equinox/pkg/utility/math"
 	"go.uber.org/zap"
 	"time"
 )
 
 var (
-	Three         = fixed.New(3, 0)
-	NegativeThree = fixed.New(-3, 0)
+	Three         = fixed.FromInt64(3, 0)
+	NegativeThree = fixed.FromInt64(-3, 0)
 )
 
 // MrxAdvisor is a test strategy, not meant for production
@@ -51,8 +50,8 @@ func (a *MrxAdvisor) NewBar(b common.Bar) {
 	}
 
 	closes := a.closes.Data()
-	mean := math.Mean(closes)
-	stdDev := math.StandardDeviation(closes, mean)
+	mean := fixed.Mean(closes)
+	stdDev := fixed.StdDev(closes, mean)
 	z := b.Close.Sub(mean).Div(stdDev)
 
 	a.zScores.Push(z)
@@ -66,7 +65,7 @@ func (a *MrxAdvisor) NewBar(b common.Bar) {
 			_ = a.router.Post(bus.OrderEvent, common.Order{
 				Command:    common.CmdOpen,
 				OrderType:  common.Market,
-				Size:       fixed.New(1, 2).Neg(),
+				Size:       fixed.FromInt64(1, 2).Neg(),
 				StopLoss:   b.Close.Add(b.Close.Sub(mean)),
 				TakeProfit: mean,
 			})
@@ -75,7 +74,7 @@ func (a *MrxAdvisor) NewBar(b common.Bar) {
 			_ = a.router.Post(bus.OrderEvent, common.Order{
 				Command:    common.CmdOpen,
 				OrderType:  common.Market,
-				Size:       fixed.New(1, 2),
+				Size:       fixed.FromInt64(1, 2),
 				StopLoss:   b.Close.Sub(mean.Sub(b.Close)),
 				TakeProfit: mean,
 			})

@@ -39,6 +39,31 @@ func InsertPosition(ctx context.Context, db *sql.DB, appId, accountId int64, pos
 	ON CONFLICT (position_id, app_id, account_id) DO NOTHING;
 	`
 
+	size, ok := position.Size.Float64()
+	if !ok {
+		return fmt.Errorf("invalid position size")
+	}
+
+	openPrice, ok := position.OpenPrice.Float64()
+	if !ok {
+		return fmt.Errorf("invalid position open price")
+	}
+
+	closePrice, ok := position.ClosePrice.Float64()
+	if !ok {
+		return fmt.Errorf("invalid position close price")
+	}
+
+	grossProfit, ok := position.GrossProfit.Float64()
+	if !ok {
+		return fmt.Errorf("invalid gross profit")
+	}
+
+	netProfit, ok := position.NetProfit.Float64()
+	if !ok {
+		return fmt.Errorf("invalid net profit")
+	}
+
 	_, err := db.ExecContext(
 		ctx,
 		query,
@@ -47,11 +72,11 @@ func InsertPosition(ctx context.Context, db *sql.DB, appId, accountId int64, pos
 		accountId,
 		position.OpenTime,
 		position.CloseTime,
-		position.Size.Float64(),
-		position.OpenPrice.Float64(),
-		position.ClosePrice.Float64(),
-		position.GrossProfit.Float64(),
-		position.NetProfit.Float64(),
+		size,
+		openPrice,
+		closePrice,
+		grossProfit,
+		netProfit,
 	)
 
 	return err

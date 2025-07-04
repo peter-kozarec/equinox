@@ -53,8 +53,8 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := common.Tick{}
-	internalTick.Ask = fixed.FromUint(v.GetAsk(), state.instrument.Digits)
-	internalTick.Bid = fixed.FromUint(v.GetBid(), state.instrument.Digits)
+	internalTick.Ask = fixed.FromInt64(int64(v.GetAsk()), state.instrument.Digits)
+	internalTick.Bid = fixed.FromInt64(int64(v.GetBid()), state.instrument.Digits)
 	internalTick.TimeStamp = v.GetTimestamp() * 1000
 
 	if internalTick.Ask.Eq(fixed.Zero) {
@@ -100,11 +100,11 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	var internalBar common.Bar
 	internalBar.Period = state.barPeriod
 	internalBar.TimeStamp = lastBarTimeStamp
-	internalBar.Low = fixed.New(lastBar.GetLow(), state.instrument.Digits)
-	internalBar.High = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaHigh(), state.instrument.Digits))
-	internalBar.Close = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaClose(), state.instrument.Digits))
-	internalBar.Open = internalBar.Low.Add(fixed.FromUint(lastBar.GetDeltaOpen(), state.instrument.Digits))
-	internalBar.Volume = fixed.New(lastBar.GetVolume(), 0)
+	internalBar.Low = fixed.FromInt64(lastBar.GetLow(), state.instrument.Digits)
+	internalBar.High = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaHigh()), state.instrument.Digits))
+	internalBar.Close = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaClose()), state.instrument.Digits))
+	internalBar.Open = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaOpen()), state.instrument.Digits))
+	internalBar.Volume = fixed.FromInt64(lastBar.GetVolume(), 0)
 	state.lastBar = internalBar
 }
 
@@ -161,11 +161,11 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 		internalPosition.Id = common.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
-		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
+		internalPosition.OpenPrice = fixed.FromFloat64(position.GetPrice())
 		internalPosition.State = common.PendingOpen
-		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
-		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
-		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)
+		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
+		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
@@ -193,11 +193,11 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 
 		internalPosition.Id = common.PositionId(position.GetPositionId())
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
-		internalPosition.OpenPrice = fixed.FromFloat(position.GetPrice())
+		internalPosition.OpenPrice = fixed.FromFloat64(position.GetPrice())
 		internalPosition.State = common.Opened
-		internalPosition.StopLoss = fixed.FromFloat(position.GetStopLoss())
-		internalPosition.TakeProfit = fixed.FromFloat(position.GetTakeProfit())
-		internalPosition.Size = fixed.New(position.TradeData.GetVolume(), 2)
+		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
+		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)

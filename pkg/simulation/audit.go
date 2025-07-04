@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"github.com/peter-kozarec/equinox/pkg/utility/math"
 	"go.uber.org/zap"
 )
 
@@ -47,7 +46,7 @@ func (a *Audit) GenerateReport() Report {
 	report := Report{}
 
 	auditedDays := a.dayCount()
-	year := fixed.New(36500, 2)
+	year := fixed.FromInt64(36500, 2)
 
 	report.InitialEquity = a.accountSnapshots[0].equity
 	report.StartDate = a.accountSnapshots[0].t
@@ -55,11 +54,11 @@ func (a *Audit) GenerateReport() Report {
 	report.EndDate = a.accountSnapshots[len(a.accountSnapshots)-1].t
 
 	// --- Return Metrics ---
-	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).SubInt(1).MulInt(100).Rescale(2)
+	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).Sub(fixed.One).MulInt64(100).Rescale(2)
 	if auditedDays > 0 && report.InitialEquity.Gt(fixed.Zero) && report.FinalEquity.Gt(fixed.Zero) {
 		ratio := report.FinalEquity.Div(report.InitialEquity)
-		exponent := year.DivInt(auditedDays)
-		report.AnnualizedReturn = ratio.Pow(exponent).SubInt64(1).MulInt64(100).Rescale(2)
+		exponent := year.DivInt64(int64(auditedDays))
+		report.AnnualizedReturn = ratio.Pow(exponent).Sub(fixed.One).MulInt64(100).Rescale(2)
 	} else {
 		report.AnnualizedReturn = fixed.Zero // or some error/NaN marker
 	}
@@ -102,10 +101,10 @@ func (a *Audit) GenerateReport() Report {
 
 	// --- Averages & Ratios ---
 	if report.WinningTrades > 0 {
-		report.AverageWin = totalProfit.DivInt(report.WinningTrades)
+		report.AverageWin = totalProfit.DivInt64(int64(report.WinningTrades))
 	}
 	if report.LosingTrades > 0 {
-		report.AverageLoss = totalLoss.DivInt(report.LosingTrades)
+		report.AverageLoss = totalLoss.DivInt64(int64(report.LosingTrades))
 	}
 	if totalLoss.Gt(fixed.Zero) {
 		report.ProfitFactor = totalProfit.Div(totalLoss)
@@ -114,24 +113,24 @@ func (a *Audit) GenerateReport() Report {
 		report.RiskRewardRatio = report.AverageWin.Div(report.AverageLoss)
 	}
 	if report.TotalTrades > 0 {
-		report.Expectancy = totalProfit.Sub(totalLoss).DivInt(report.TotalTrades)
+		report.Expectancy = totalProfit.Sub(totalLoss).DivInt64(int64(report.TotalTrades))
 		report.AverageTradeDuration = totalDuration / time.Duration(report.TotalTrades)
-		report.WinRate = fixed.New(int64(report.WinningTrades), 0).DivInt(report.TotalTrades).MulInt(100).Rescale(2)
+		report.WinRate = fixed.FromInt64(int64(report.WinningTrades), 0).DivInt64(int64(report.TotalTrades)).MulInt64(100).Rescale(2)
 	}
 	if report.MaxDrawdown.Gt(fixed.Zero) {
 		report.RecoveryFactor = report.TotalProfit.Div(report.MaxDrawdown)
 	}
-	report.MaxDrawdown = report.MaxDrawdown.MulInt(100).Rescale(2)
+	report.MaxDrawdown = report.MaxDrawdown.MulInt64(100).Rescale(2)
 
 	// --- Risk Metrics: Volatility, Sharpe, Sortino ---
 	dailyReturns := a.dailyReturns()
-	meanReturn := math.Mean(dailyReturns)
-	vol := math.StandardDeviation(dailyReturns, meanReturn)
+	meanReturn := fixed.Mean(dailyReturns)
+	vol := fixed.StdDev(dailyReturns, meanReturn)
 
 	if !meanReturn.IsZero() && !vol.IsZero() {
-		report.AnnualizedVolatility = vol.Mul(fixed.Sqrt252).MulInt(100).Rescale(2)
-		report.SharpeRatio = math.SharpeRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
-		report.SortinoRatio = math.SortinoRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
+		report.AnnualizedVolatility = vol.Mul(fixed.Sqrt252).MulInt64(100).Rescale(2)
+		report.SharpeRatio = fixed.SharpeRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
+		report.SortinoRatio = fixed.SortinoRatio(dailyReturns, fixed.Zero).Mul(fixed.Sqrt252).Rescale(5)
 	}
 
 	return report
@@ -169,7 +168,7 @@ func (a *Audit) dailyReturns() []fixed.Point {
 		currDate := snapshot.t.Truncate(24 * time.Hour)
 
 		if currDate.After(prevDate) {
-			ret := snapshot.equity.Div(prevEquity).SubInt(1)
+			ret := snapshot.equity.Div(prevEquity).Sub(fixed.One)
 			dailyReturns = append(dailyReturns, ret)
 
 			prevDate = currDate

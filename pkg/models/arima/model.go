@@ -338,7 +338,7 @@ func (m *Model) checkStationarity() bool {
 	if denominator.Gt(fixed.Zero) {
 		rho := numerator.Div(denominator)
 		// Simple stationarity check: |rho| < threshold
-		return rho.Abs().Lt(fixed.FromFloat(StationarityThreshold))
+		return rho.Abs().Lt(fixed.FromFloat64(StationarityThreshold))
 	}
 
 	return true
@@ -562,7 +562,7 @@ func (m *Model) initializeParameters() {
 	// Initialize MA parameters to small values
 	for i := uint(0); i < m.q; i++ {
 		// Small initial values to ensure invertibility
-		initVal := fixed.FromFloat(0.1 * (0.5 - float64(i%2)))
+		initVal := fixed.FromFloat64(0.1 * (0.5 - float64(i%2)))
 		if i < uint(len(m.maParams)) {
 			m.maParams[i] = initVal
 		}
@@ -587,13 +587,13 @@ func (m *Model) initializeParameters() {
 func (m *Model) logLikelihood() fixed.Point {
 	n := m.diffData.B.Size()
 	if n == 0 || m.variance.Lte(fixed.Zero) {
-		return fixed.FromFloat(-math.Inf(1))
+		return fixed.FromFloat64(-math.Inf(1))
 	}
 
 	// Calculate residuals
 	residuals := m.calculateCurrentResiduals()
 	if len(residuals) == 0 {
-		return fixed.FromFloat(-math.Inf(1))
+		return fixed.FromFloat64(-math.Inf(1))
 	}
 
 	// Log-likelihood for Gaussian errors
@@ -602,8 +602,8 @@ func (m *Model) logLikelihood() fixed.Point {
 		sumSquares = sumSquares.Add(r.Mul(r))
 	}
 
-	nf := fixed.FromUint(uint64(len(residuals)), 0)
-	ll := nf.Mul(fixed.FromFloat(-0.5 * math.Log(2*math.Pi)))
+	nf := fixed.FromInt(len(residuals), 0)
+	ll := nf.Mul(fixed.FromFloat64(-0.5 * math.Log(2*math.Pi)))
 	ll = ll.Sub(nf.Mul(m.variance.Log()).DivInt(2))
 	ll = ll.Sub(sumSquares.Div(m.variance.MulInt(2)))
 
@@ -664,7 +664,7 @@ func (m *Model) calculateGradient() []fixed.Point {
 	numParams := m.getParameterCount()
 	gradient := make([]fixed.Point, numParams)
 
-	epsilon := fixed.FromFloat(1e-6)
+	epsilon := fixed.FromFloat64(1e-6)
 	params := m.getParameterVector()
 
 	for i := 0; i < numParams; i++ {
@@ -698,7 +698,7 @@ func (m *Model) calculateHessian() [][]fixed.Point {
 		hessian[i] = make([]fixed.Point, numParams)
 	}
 
-	epsilon := fixed.FromFloat(1e-4)
+	epsilon := fixed.FromFloat64(1e-4)
 	params := m.getParameterVector()
 
 	// Calculate diagonal elements only (simplified)
@@ -786,7 +786,7 @@ func (m *Model) updateParameters(delta []fixed.Point) {
 	params := m.getParameterVector()
 
 	// Apply update with step size control
-	stepSize := fixed.FromFloat(0.1)
+	stepSize := fixed.FromFloat64(0.1)
 
 	for i := 0; i < len(params) && i < len(delta); i++ {
 		params[i] = params[i].Add(delta[i].Mul(stepSize))
@@ -809,18 +809,18 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 	arSum := fixed.Zero
 	for i := uint(0); i < m.p && idx < len(params); i++ {
 		// Bound individual AR coefficients
-		if params[idx].Gt(fixed.FromFloat(0.99)) {
-			params[idx] = fixed.FromFloat(0.99)
-		} else if params[idx].Lt(fixed.FromFloat(-0.99)) {
-			params[idx] = fixed.FromFloat(-0.99)
+		if params[idx].Gt(fixed.FromFloat64(0.99)) {
+			params[idx] = fixed.FromFloat64(0.99)
+		} else if params[idx].Lt(fixed.FromFloat64(-0.99)) {
+			params[idx] = fixed.FromFloat64(-0.99)
 		}
 		arSum = arSum.Add(params[idx].Abs())
 		idx++
 	}
 
 	// If sum of absolute AR coefficients > 1, scale them down
-	if arSum.Gt(fixed.FromFloat(0.99)) {
-		scale := fixed.FromFloat(0.99).Div(arSum)
+	if arSum.Gt(fixed.FromFloat64(0.99)) {
+		scale := fixed.FromFloat64(0.99).Div(arSum)
 		arIdx := 0
 		if m.includeConstant {
 			arIdx = 1
@@ -835,18 +835,18 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 	maSum := fixed.Zero
 	for i := uint(0); i < m.q && idx < len(params); i++ {
 		// Bound individual MA coefficients
-		if params[idx].Gt(fixed.FromFloat(0.99)) {
-			params[idx] = fixed.FromFloat(0.99)
-		} else if params[idx].Lt(fixed.FromFloat(-0.99)) {
-			params[idx] = fixed.FromFloat(-0.99)
+		if params[idx].Gt(fixed.FromFloat64(0.99)) {
+			params[idx] = fixed.FromFloat64(0.99)
+		} else if params[idx].Lt(fixed.FromFloat64(-0.99)) {
+			params[idx] = fixed.FromFloat64(-0.99)
 		}
 		maSum = maSum.Add(params[idx].Abs())
 		idx++
 	}
 
 	// If sum of absolute MA coefficients > 1, scale them down
-	if maSum.Gt(fixed.FromFloat(0.99)) {
-		scale := fixed.FromFloat(0.99).Div(maSum)
+	if maSum.Gt(fixed.FromFloat64(0.99)) {
+		scale := fixed.FromFloat64(0.99).Div(maSum)
 		maIdx := int(m.p)
 		if m.includeConstant {
 			maIdx++
@@ -864,7 +864,7 @@ func (m *Model) hasConverged(oldLL, newLL fixed.Point) bool {
 	}
 
 	diff := newLL.Sub(oldLL).Abs()
-	tolerance := fixed.FromFloat(ConvergenceTolerance)
+	tolerance := fixed.FromFloat64(ConvergenceTolerance)
 
 	return diff.Lt(tolerance)
 }
@@ -887,7 +887,7 @@ func (m *Model) calculateResiduals() {
 			sumSquares = sumSquares.Add(r.Mul(r))
 		}
 
-		residualStdDev := fixed.FromFloat(math.Sqrt(sumSquares.DivInt(len(residuals)).Float64()))
+		residualStdDev := sumSquares.DivInt(len(residuals)).Sqrt()
 
 		m.standardizedResiduals.Clear()
 		for _, r := range residuals {
@@ -911,8 +911,8 @@ func (m *Model) calculateDiagnostics() {
 	m.diagnostics.LogLikelihood = m.logLikelihood()
 
 	// Information criteria
-	numParams := fixed.FromUint(uint64(m.getParameterCount()), 0)
-	nf := fixed.FromUint(uint64(numResiduals), 0)
+	numParams := fixed.FromInt(m.getParameterCount(), 0)
+	nf := fixed.FromInt(numResiduals, 0)
 
 	// AIC = -2*log(L) + 2*k
 	m.diagnostics.AIC = m.diagnostics.LogLikelihood.MulInt(-2).Add(numParams.MulInt(2))
@@ -944,7 +944,7 @@ func (m *Model) calculateDiagnostics() {
 		// For MAPE
 		if int(startIdx)+i < len(series) {
 			actual := series[int(startIdx)+i]
-			if actual.Abs().Gt(fixed.FromFloat(1e-10)) {
+			if actual.Abs().Gt(fixed.FromFloat64(1e-10)) {
 				pctError := r.Abs().Div(actual.Abs()).MulInt(100)
 				sumPctError = sumPctError.Add(pctError)
 				validPctCount++
@@ -953,7 +953,7 @@ func (m *Model) calculateDiagnostics() {
 	}
 
 	// RMSE
-	m.diagnostics.RMSE = fixed.FromFloat(math.Sqrt(sumSquares.DivInt(numResiduals).Float64()))
+	m.diagnostics.RMSE = sumSquares.DivInt(numResiduals).Sqrt()
 
 	// MAE
 	m.diagnostics.MAE = sumAbs.DivInt(numResiduals)
@@ -1002,7 +1002,7 @@ func (m *Model) ljungBoxTest(residuals []fixed.Point) fixed.Point {
 	}
 
 	// Calculate autocorrelations and Ljung-Box statistic
-	nf := fixed.FromUint(uint64(n), 0)
+	nf := fixed.FromInt(n, 0)
 	for lag := 1; lag <= maxLag; lag++ {
 		var autocovariance fixed.Point
 		count := n - lag
@@ -1017,18 +1017,18 @@ func (m *Model) ljungBoxTest(residuals []fixed.Point) fixed.Point {
 		autocorr := autocovariance.DivInt(count).Div(variance)
 
 		// Ljung-Box statistic contribution: rho²/(n-lag)
-		lagf := fixed.FromUint(uint64(lag), 0)
+		lagf := fixed.FromInt(lag, 0)
 		contribution := autocorr.Mul(autocorr).Div(nf.Sub(lagf))
 		testStat = testStat.Add(contribution)
 	}
 
 	// Final Ljung-Box statistic: n(n+2) * sum
-	nPlus2 := nf.Add(fixed.FromFloat(2.0))
+	nPlus2 := nf.Add(fixed.FromFloat64(2.0))
 	testStat = testStat.Mul(nf).Mul(nPlus2)
 
 	// Convert to p-value using chi-squared distribution approximation
 	// Degrees of freedom = maxLag
-	testStatFloat := testStat.Float64()
+	testStatFloat, _ := testStat.Float64()
 	df := float64(maxLag)
 
 	// Use Wilson-Hilferty transformation for chi-squared to normal
@@ -1060,7 +1060,7 @@ func (m *Model) ljungBoxTest(residuals []fixed.Point) fixed.Point {
 		pValue = 0.001
 	}
 
-	return fixed.FromFloat(pValue)
+	return fixed.FromFloat64(pValue)
 }
 
 func (m *Model) jarqueBeraTest(residuals []fixed.Point) fixed.Point {
@@ -1098,17 +1098,17 @@ func (m *Model) jarqueBeraTest(residuals []fixed.Point) fixed.Point {
 	}
 
 	// Skewness and kurtosis
-	skewness := m3.Div(fixed.FromFloat(math.Pow(m2.Float64(), 1.5)))
-	kurtosis := m4.Div(m2.Mul(m2)).Sub(fixed.FromFloat(3.0))
+	skewness := m3.Div(m2.Pow(fixed.FromInt(15, 1)))
+	kurtosis := m4.Div(m2.Mul(m2)).Sub(fixed.FromFloat64(3.0))
 
 	// JB statistic
-	nf := fixed.FromUint(uint64(n), 0)
-	jb := nf.Div(fixed.FromFloat(6.0))
-	jb = jb.Mul(skewness.Mul(skewness).Add(kurtosis.Mul(kurtosis).Div(fixed.FromFloat(4.0))))
+	nf := fixed.FromInt(n, 0)
+	jb := nf.Div(fixed.FromFloat64(6.0))
+	jb = jb.Mul(skewness.Mul(skewness).Add(kurtosis.Mul(kurtosis).Div(fixed.FromFloat64(4.0))))
 
 	// Convert JB statistic to p-value
 	// JB follows chi-squared distribution with 2 degrees of freedom
-	jbFloat := jb.Float64()
+	jbFloat, _ := jb.Float64()
 
 	// Chi-squared(2) critical values:
 	// p=0.99: 0.020, p=0.95: 0.103, p=0.90: 0.211, p=0.50: 1.386
@@ -1150,7 +1150,7 @@ func (m *Model) jarqueBeraTest(residuals []fixed.Point) fixed.Point {
 		pValue = 0.001
 	}
 
-	return fixed.FromFloat(pValue)
+	return fixed.FromFloat64(pValue)
 }
 
 func (m *Model) checkParameterValidity() error {
@@ -1188,7 +1188,7 @@ func (m *Model) checkResidualProperties() error {
 	}
 
 	// Check for autocorrelation
-	if m.diagnostics.LjungBoxPValue.Lt(fixed.FromFloat(0.05)) {
+	if m.diagnostics.LjungBoxPValue.Lt(fixed.FromFloat64(0.05)) {
 		return errors.New("residuals show significant autocorrelation")
 	}
 
@@ -1291,14 +1291,14 @@ func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult
 
 	// Calculate forecast variance and confidence intervals
 	forecastVar := m.calculateForecastVariance(step + 1)
-	standardError := fixed.FromFloat(math.Sqrt(forecastVar.Float64()))
+	standardError := forecastVar.Sqrt()
 
 	result.PointForecast = originalForecast
 	result.StandardError = standardError
 
 	// Confidence intervals (normal approximation)
-	z95 := fixed.FromFloat(1.96)
-	z80 := fixed.FromFloat(1.282)
+	z95 := fixed.FromFloat64(1.96)
+	z80 := fixed.FromFloat64(1.282)
 
 	margin95 := z95.Mul(standardError)
 	margin80 := z80.Mul(standardError)
@@ -1310,7 +1310,7 @@ func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult
 
 	// Prediction intervals (include model uncertainty)
 	predVar := forecastVar.Add(m.variance)
-	predStdErr := fixed.FromFloat(math.Sqrt(predVar.Float64()))
+	predStdErr := predVar.Sqrt()
 
 	predMargin95 := z95.Mul(predStdErr)
 	predMargin80 := z80.Mul(predStdErr)

@@ -324,7 +324,7 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 	pips := pipPnL.Div(s.cfg.PipSize)
 
 	// Use average price for more accurate lot value
-	avgPrice := position.OpenPrice.Add(closePrice).DivInt(2)
+	avgPrice := position.OpenPrice.Add(closePrice).DivInt64(2)
 	currentLotValue := s.cfg.PipSize.Mul(s.cfg.ContractSize).Mul(avgPrice)
 
 	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(currentLotValue)

@@ -35,11 +35,11 @@ func main() {
 
 	simConf := simulation.Configuration{
 		BarPeriod:        time.Minute,
-		PipSize:          fixed.New(1, 4),
-		ContractSize:     fixed.New(100000, 0),
-		CommissionPerLot: fixed.New(3, 0),
-		StartBalance:     fixed.New(10000, 0),
-		PipSlippage:      fixed.New(10, 5),
+		PipSize:          fixed.FromInt(1, 4),
+		ContractSize:     fixed.FromInt(100000, 0),
+		CommissionPerLot: fixed.FromInt(3, 0),
+		StartBalance:     fixed.FromInt(10000, 0),
+		PipSlippage:      fixed.FromInt(10, 5),
 	}
 
 	audit := simulation.NewAudit(logger, time.Minute)

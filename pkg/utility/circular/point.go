@@ -38,8 +38,8 @@ func (p *PointBuffer) PushUpdate(v fixed.Point) {
 		p.sumSquares = p.sumSquares.Sub(toBeRemoved.Mul(toBeRemoved)).Add(v.Mul(v))
 	}
 
-	p.mean = p.sum.Div(fixed.FromUint(uint64(p.B.Size()), 0))
-	p.variance = p.sumSquares.Div(fixed.FromUint(uint64(p.B.Size()), 0)).Sub(p.mean.Mul(p.mean))
+	p.mean = p.sum.Div(fixed.FromInt64(int64(p.B.Size()), 0))
+	p.variance = p.sumSquares.Div(fixed.FromInt64(int64(p.B.Size()), 0)).Sub(p.mean.Mul(p.mean))
 	if p.variance.Gt(fixed.Zero) {
 		p.stdDev = p.variance.Sqrt()
 	} else {

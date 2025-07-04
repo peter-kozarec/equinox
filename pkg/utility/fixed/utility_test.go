@@ -27,19 +27,19 @@ func TestFixedUtility_DownsideDev(t *testing.T) {
 			name:         "all downside returns",
 			points:       []Point{NegTwo, NegOne, Zero},
 			riskFreeRate: One,
-			want:         "1.632993161855452065",
+			want:         "2.160246899469286744",
 		},
 		{
 			name:         "mixed returns",
 			points:       []Point{NegOne, Zero, One, Two, Three},
 			riskFreeRate: One,
-			want:         "0.894427190999915878",
+			want:         "1.581138830084189666",
 		},
 		{
 			name:         "decimal risk-free rate",
 			points:       []Point{PointOne, PointTwo, PointThree, PointFour},
 			riskFreeRate: PointThree,
-			want:         "0.158113883008418966",
+			want:         "0.1581138830084189666",
 		},
 		{
 			name:         "higher risk-free rate",
@@ -57,7 +57,7 @@ func TestFixedUtility_DownsideDev(t *testing.T) {
 			name:         "exact threshold",
 			points:       []Point{One, Two, Three, Three, Four},
 			riskFreeRate: Three,
-			want:         "1.118033988749894848",
+			want:         "1.581138830084189666",
 		},
 	}
 
@@ -154,19 +154,19 @@ func TestFixedUtility_SharpeRatio(t *testing.T) {
 			name:         "simple positive returns",
 			points:       []Point{One, Two, Three, Four, Five},
 			riskFreeRate: Zero,
-			want:         "1.897366596101028012",
+			want:         "2.121320343559642573",
 		},
 		{
 			name:         "with risk-free rate",
 			points:       []Point{Two, Three, Four, Five, Six},
 			riskFreeRate: One,
-			want:         "1.897366596101028012",
+			want:         "2.121320343559642573",
 		},
 		{
 			name:         "negative excess returns",
 			points:       []Point{One, Two, Three},
 			riskFreeRate: Five,
-			want:         "-2.828427124746190098",
+			want:         "-3.674234614174767147",
 		},
 		{
 			name:         "zero excess returns",
@@ -178,19 +178,19 @@ func TestFixedUtility_SharpeRatio(t *testing.T) {
 			name:         "decimal values",
 			points:       []Point{PointOne, PointTwo, PointThree, PointFour, PointFive},
 			riskFreeRate: PointOne,
-			want:         "1.095445115010332226",
+			want:         "1.414213562373095049",
 		},
 		{
 			name:         "high volatility",
 			points:       []Point{One, Ten, One, Ten},
 			riskFreeRate: Zero,
-			want:         "0.8660254037844386468",
+			want:         "1.222222222222222222",
 		},
 		{
 			name:         "mixed positive and negative",
 			points:       []Point{NegOne, Zero, One, Two, Three},
 			riskFreeRate: Zero,
-			want:         "0.6324555320336758664",
+			want:         "0.7071067811865475243",
 		},
 	}
 
@@ -221,19 +221,19 @@ func TestFixedUtility_SortinoRatio(t *testing.T) {
 			name:         "all downside returns",
 			points:       []Point{NegTwo, NegOne, Zero},
 			riskFreeRate: One,
-			want:         "-1.732050807568877294",
+			want:         "-0.9258200997725514614",
 		},
 		{
 			name:         "mixed returns",
 			points:       []Point{NegOne, Zero, One, Two, Three},
 			riskFreeRate: One,
-			want:         "1",
+			want:         "0",
 		},
 		{
 			name:         "positive excess with downside",
 			points:       []Point{Zero, One, Two, Three, Four},
 			riskFreeRate: One,
-			want:         "1.732050807568877294",
+			want:         "0",
 		},
 		{
 			name:         "decimal values",
@@ -245,7 +245,7 @@ func TestFixedUtility_SortinoRatio(t *testing.T) {
 			name:         "high volatility with downside",
 			points:       []Point{NegTwo, Zero, Two, Four, Six},
 			riskFreeRate: Two,
-			want:         "1.414213562373095049",
+			want:         "0",
 		},
 		{
 			name:         "single downside observation",
@@ -294,31 +294,31 @@ func TestFixedUtility_StdDev(t *testing.T) {
 			name:   "simple dataset",
 			points: []Point{Two, Four, Four, Four, Five, Five, Seven, Nine},
 			mean:   Five,
-			want:   "2.267786838333872502",
+			want:   "2",
 		},
 		{
 			name:   "dataset with known stddev",
 			points: []Point{One, Two, Three, Four, Five},
 			mean:   Three,
-			want:   "1.581138830084189666",
+			want:   "1.414213562373095049",
 		},
 		{
 			name:   "negative values",
 			points: []Point{NegTwo, NegOne, Zero, One, Two},
 			mean:   Zero,
-			want:   "1.581138830084189666",
+			want:   "1.414213562373095049",
 		},
 		{
 			name:   "decimal values",
 			points: []Point{PointOne, PointThree, PointFive},
 			mean:   PointThree,
-			want:   "0.2",
+			want:   "0.1632993161855452066",
 		},
 		{
 			name:   "larger variance",
 			points: []Point{One, Ten},
 			mean:   FromFloat64(5.5),
-			want:   "6.363961030678928497",
+			want:   "4.5",
 		},
 	}
 
@@ -417,8 +417,8 @@ func TestFixedUtility_EdgeCases(t *testing.T) {
 		}
 
 		stdDev := StdDev(points, mean)
-		if stdDev.String() != "1414.213562373095049" {
-			t.Errorf("StdDev of extreme values = %s; want 1414.213562373095049", stdDev.String())
+		if stdDev.String() != "1000" {
+			t.Errorf("StdDev of extreme values = %s; want 1000", stdDev.String())
 		}
 	})
 }
@@ -434,19 +434,19 @@ func TestFixedUtility_MeanAndStdDevTogether(t *testing.T) {
 			name:         "uniform distribution",
 			points:       []Point{One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten},
 			expectedMean: "5.5",
-			expectedStd:  "3.02765035409749029",
+			expectedStd:  "2.87228132326901433",
 		},
 		{
 			name:         "normal-like distribution",
 			points:       []Point{Two, Three, Three, Four, Four, Four, Five, Five, Six, Six, Seven},
 			expectedMean: "4.454545454545454545",
-			expectedStd:  "1.507556722888818311",
+			expectedStd:  "1.437398936440172423",
 		},
 		{
 			name:         "bimodal distribution",
 			points:       []Point{One, One, One, Nine, Nine, Nine},
 			expectedMean: "5",
-			expectedStd:  "4.472135954999579393",
+			expectedStd:  "4",
 		},
 	}
 

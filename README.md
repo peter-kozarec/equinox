@@ -5,4 +5,4 @@
 
 ## ⚠️ Warning
 
-This project is in active development. **Breaking changes will appear often** - use at your own risk.
+This project is in active development. **Breaking changes will appear often**

@@ -92,7 +92,7 @@ func (c *connection) read() {
 				continue
 			}
 
-			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType)
+			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType) // #nosec G115
 			_, isStream := streamMessageTypes[payloadType]
 
 			c.logger.Debug("read",
@@ -131,7 +131,7 @@ func (c *connection) write() {
 			}
 
 			c.logger.Debug("write",
-				zap.String("type", openapi.ProtoOAPayloadType(*msg.PayloadType).String()),
+				zap.String("type", openapi.ProtoOAPayloadType(msg.GetPayloadType()).String()), // #nosec G115
 				zap.String("payload", hex.EncodeToString(msg.GetPayload())))
 
 			data, err := proto.Marshal(msg)

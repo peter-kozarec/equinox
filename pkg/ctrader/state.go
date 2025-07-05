@@ -7,6 +7,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
@@ -53,8 +54,8 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := common.Tick{}
-	internalTick.Ask = fixed.FromInt64(int64(v.GetAsk()), state.instrument.Digits)
-	internalTick.Bid = fixed.FromInt64(int64(v.GetBid()), state.instrument.Digits)
+	internalTick.Ask = fixed.FromUint64(v.GetAsk(), state.instrument.Digits)
+	internalTick.Bid = fixed.FromUint64(v.GetBid(), state.instrument.Digits)
 	internalTick.TimeStamp = v.GetTimestamp() * 1000
 
 	if internalTick.Ask.Eq(fixed.Zero) {
@@ -101,9 +102,9 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	internalBar.Period = state.barPeriod
 	internalBar.TimeStamp = lastBarTimeStamp
 	internalBar.Low = fixed.FromInt64(lastBar.GetLow(), state.instrument.Digits)
-	internalBar.High = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaHigh()), state.instrument.Digits))
-	internalBar.Close = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaClose()), state.instrument.Digits))
-	internalBar.Open = internalBar.Low.Add(fixed.FromInt64(int64(lastBar.GetDeltaOpen()), state.instrument.Digits))
+	internalBar.High = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaHigh(), state.instrument.Digits))
+	internalBar.Close = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaClose(), state.instrument.Digits))
+	internalBar.Open = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaOpen(), state.instrument.Digits))
 	internalBar.Volume = fixed.FromInt64(lastBar.GetVolume(), 0)
 	state.lastBar = internalBar
 }
@@ -131,7 +132,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 			if internalPosition.Id.Int64() == position.GetPositionId() {
 
 				internalPosition.State = common.Closed
-				internalPosition.CloseTime = time.UnixMilli(int64(*position.TradeData.CloseTimestamp))
+				internalPosition.CloseTime = time.UnixMilli(utility.U64ToI64Unsafe(position.TradeData.GetCloseTimestamp()))
 
 				// This is just approximation - not real closing price
 				if internalPosition.IsLong() {

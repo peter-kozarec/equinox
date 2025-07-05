@@ -2,6 +2,7 @@ package fixed
 
 import (
 	"github.com/govalues/decimal"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 )
 
 // Point is an unsafe wrapper around decimal implementation. Caller must make sure the calculations
@@ -16,6 +17,10 @@ func FromInt(value int, scale int) Point {
 
 func FromInt64(value int64, scale int) Point {
 	return Point{must(decimal.New(value, scale))}
+}
+
+func FromUint64(value uint64, scale int) Point {
+	return Point{must(decimal.New(utility.U64ToI64Unsafe(value), scale))}
 }
 
 func FromFloat64(value float64) Point {

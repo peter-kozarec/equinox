@@ -10,15 +10,15 @@ import (
 type Telemetry struct {
 	logger *zap.Logger
 
-	tickEventCounter               uint64
-	barEventCounter                uint64
-	balanceEventCounter            uint64
-	equityEventCounter             uint64
-	positionOpenedEventCounter     uint64
-	positionClosedEventCounter     uint64
-	positionPnLUpdatedEventCounter uint64
-	orderEventCounter              uint64
-	signalEventCounter             uint64
+	tickEventCounter               int64
+	barEventCounter                int64
+	balanceEventCounter            int64
+	equityEventCounter             int64
+	positionOpenedEventCounter     int64
+	positionClosedEventCounter     int64
+	positionPnLUpdatedEventCounter int64
+	orderEventCounter              int64
+	signalEventCounter             int64
 }
 
 func NewTelemetry(logger *zap.Logger) *Telemetry {
@@ -92,13 +92,13 @@ func (t *Telemetry) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHa
 
 func (t *Telemetry) PrintStatistics() {
 	t.logger.Info("event statistics",
-		zap.Uint64("tick_events", t.tickEventCounter),
-		zap.Uint64("bar_events", t.barEventCounter),
-		zap.Uint64("balance_events", t.balanceEventCounter),
-		zap.Uint64("equity_events", t.equityEventCounter),
-		zap.Uint64("position_opened_events", t.positionOpenedEventCounter),
-		zap.Uint64("position_closed_events", t.positionClosedEventCounter),
-		zap.Uint64("position_pnl_updated_events", t.positionPnLUpdatedEventCounter),
-		zap.Uint64("order_events", t.orderEventCounter),
-		zap.Uint64("signal_events", t.signalEventCounter))
+		zap.Int64("tick_events", t.tickEventCounter),
+		zap.Int64("bar_events", t.barEventCounter),
+		zap.Int64("balance_events", t.balanceEventCounter),
+		zap.Int64("equity_events", t.equityEventCounter),
+		zap.Int64("position_opened_events", t.positionOpenedEventCounter),
+		zap.Int64("position_closed_events", t.positionClosedEventCounter),
+		zap.Int64("position_pnl_updated_events", t.positionPnLUpdatedEventCounter),
+		zap.Int64("order_events", t.orderEventCounter),
+		zap.Int64("signal_events", t.signalEventCounter))
 }

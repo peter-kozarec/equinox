@@ -1,1 +1,0 @@
-We lost together over 20k, nothing can stop us

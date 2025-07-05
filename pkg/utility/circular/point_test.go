@@ -7,12 +7,12 @@ import (
 )
 
 var (
-	zero  = fixed.New(0, 0)
-	one   = fixed.New(1, 0)
-	two   = fixed.New(2, 0)
-	three = fixed.New(3, 0)
-	four  = fixed.New(4, 0)
-	ten   = fixed.New(10, 0)
+	zero  = fixed.FromInt64(0, 0)
+	one   = fixed.FromInt64(1, 0)
+	two   = fixed.FromInt64(2, 0)
+	three = fixed.FromInt64(3, 0)
+	four  = fixed.FromInt64(4, 0)
+	ten   = fixed.FromInt64(10, 0)
 )
 
 func TestPoint_PushUpdate(t *testing.T) {
@@ -51,7 +51,7 @@ func Benchmark_PushUpdate(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		value := fixed.FromUint(uint64(i%100), 0)
+		value := fixed.FromInt(i%100, 0)
 		p.PushUpdate(value)
 	}
 }

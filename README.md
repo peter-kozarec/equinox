@@ -6,11 +6,3 @@
 ## ⚠️ Warning
 
 This project is in active development. **Breaking changes will appear often** - use at your own risk.
-
-## Quick Start
-
-```bash
-git clone https://github.com/peter-kozarec/equinox.git
-cd equinox
-go mod download
-```

@@ -40,9 +40,9 @@ func TestAtr_FirstBar(t *testing.T) {
 	atr := NewAtr(14)
 
 	bar := common.Bar{
-		High:  fixed.FromFloat(100.0),
-		Low:   fixed.FromFloat(95.0),
-		Close: fixed.FromFloat(98.0),
+		High:  fixed.FromFloat64(100.0),
+		Low:   fixed.FromFloat64(95.0),
+		Close: fixed.FromFloat64(98.0),
 	}
 
 	atr.OnBar(bar)
@@ -64,10 +64,10 @@ func TestAtr_MultipleBars(t *testing.T) {
 	atr := NewAtr(3)
 
 	bars := []common.Bar{
-		{High: fixed.FromFloat(100.0), Low: fixed.FromFloat(95.0), Close: fixed.FromFloat(98.0)},
-		{High: fixed.FromFloat(102.0), Low: fixed.FromFloat(97.0), Close: fixed.FromFloat(101.0)},
-		{High: fixed.FromFloat(104.0), Low: fixed.FromFloat(99.0), Close: fixed.FromFloat(102.0)},
-		{High: fixed.FromFloat(103.0), Low: fixed.FromFloat(100.0), Close: fixed.FromFloat(101.0)},
+		{High: fixed.FromFloat64(100.0), Low: fixed.FromFloat64(95.0), Close: fixed.FromFloat64(98.0)},
+		{High: fixed.FromFloat64(102.0), Low: fixed.FromFloat64(97.0), Close: fixed.FromFloat64(101.0)},
+		{High: fixed.FromFloat64(104.0), Low: fixed.FromFloat64(99.0), Close: fixed.FromFloat64(102.0)},
+		{High: fixed.FromFloat64(103.0), Low: fixed.FromFloat64(100.0), Close: fixed.FromFloat64(101.0)},
 	}
 
 	for _, bar := range bars {
@@ -78,7 +78,7 @@ func TestAtr_MultipleBars(t *testing.T) {
 		t.Error("Expected ATR to be ready")
 	}
 
-	expectedAtr := fixed.FromFloat(13.0).DivInt(3)
+	expectedAtr := fixed.FromFloat64(13.0).DivInt(3)
 	if !atr.Value().Eq(expectedAtr) {
 		t.Errorf("Expected final ATR %v, got %v", expectedAtr, atr.Value())
 	}
@@ -88,8 +88,8 @@ func TestAtr_Reset(t *testing.T) {
 	atr := NewAtr(14)
 
 	bars := []common.Bar{
-		{High: fixed.FromFloat(100.0), Low: fixed.FromFloat(95.0), Close: fixed.FromFloat(98.0)},
-		{High: fixed.FromFloat(102.0), Low: fixed.FromFloat(97.0), Close: fixed.FromFloat(101.0)},
+		{High: fixed.FromFloat64(100.0), Low: fixed.FromFloat64(95.0), Close: fixed.FromFloat64(98.0)},
+		{High: fixed.FromFloat64(102.0), Low: fixed.FromFloat64(97.0), Close: fixed.FromFloat64(101.0)},
 	}
 
 	for _, bar := range bars {

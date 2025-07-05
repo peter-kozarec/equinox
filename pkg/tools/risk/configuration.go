@@ -24,17 +24,17 @@ type Configuration struct {
 
 var (
 	DefaultConfiguration = Configuration{
-		BaseRiskPerTrade:                      fixed.New(1, 0),
-		MaxRiskPerTrade:                       fixed.New(2, 0),
-		MaxRiskForAllOpenTrades:               fixed.New(5, 0),
-		ValuePerLot:                           fixed.New(100000, 0),
+		BaseRiskPerTrade:                      fixed.FromInt64(1, 0),
+		MaxRiskPerTrade:                       fixed.FromInt64(2, 0),
+		MaxRiskForAllOpenTrades:               fixed.FromInt64(5, 0),
+		ValuePerLot:                           fixed.FromInt64(100000, 0),
 		SizeScale:                             2,
 		PriceScale:                            5,
 		AtrWindowSize:                         144,
-		LowVolatilityAtrThreshold:             fixed.New(10, 0),
-		HighVolatilityAtrThreshold:            fixed.New(20, 0),
-		LowVolatilityStopLossAtrMultiplier:    fixed.New(15, 1),
-		NormalVolatilityStopLossAtrMultiplier: fixed.New(1, 0),
-		HighVolatilityStopLossAtrMultiplier:   fixed.New(5, 1),
+		LowVolatilityAtrThreshold:             fixed.FromInt64(10, 0),
+		HighVolatilityAtrThreshold:            fixed.FromInt64(20, 0),
+		LowVolatilityStopLossAtrMultiplier:    fixed.FromInt64(15, 1),
+		NormalVolatilityStopLossAtrMultiplier: fixed.FromInt64(1, 0),
+		HighVolatilityStopLossAtrMultiplier:   fixed.FromInt64(5, 1),
 	}
 )

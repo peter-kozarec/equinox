@@ -80,35 +80,35 @@ func NewManager(logger *zap.Logger, router *bus.Router, configuration Configurat
 
 func (m *Manager) ProcessSignal(signal common.Signal) {
 
-	if !m.account.currentBalance.IsSet() {
+	if !m.account.currentBalance.IsZero() {
 		m.logger.Warn("current balance is not set")
 		return
 	}
 
-	stopLoss, err := m.calcStopLoss(signal.Entry, signal.Target)
-	if err != nil {
-		m.logger.Warn("unable to calculate stop loss", zap.Error(err))
-		return
-	}
+	//stopLoss, err := m.calcStopLoss(signal.Entry, signal.Target)
+	//if err != nil {
+	//	m.logger.Warn("unable to calculate stop loss", zap.Error(err))
+	//	return
+	//}
 
-	signalMul := m.getNormalizedSignalStrength(signal.Strength)
-	sessionMul := m.getFxSessionMultiplier()
-	drawdownMul := m.getDrawdownMultiplier()
-	volatilityMul := m.getVolatilityMultiplier()
+	//signalMul := m.getNormalizedSignalStrength(signal.Strength)
+	//sessionMul := m.getFxSessionMultiplier()
+	//drawdownMul := m.getDrawdownMultiplier()
+	//volatilityMul := m.getVolatilityMultiplier()
 
-	risk := stopLoss.Sub(signal.Entry).Abs()
-	baseSize := m.getBaseSize(risk)
-	maxSize := m.getMaxSize(risk)
-	size := baseSize.Mul(signalMul).Mul(sessionMul).Mul(drawdownMul).Mul(volatilityMul)
+	//risk := stopLoss.Sub(signal.Entry).Abs()
+	//baseSize := m.getBaseSize(risk)
+	//maxSize := m.getMaxSize(risk)
+	//size := baseSize.Mul(signalMul).Mul(sessionMul).Mul(drawdownMul).Mul(volatilityMul)
 
-	_ = fixed.ClampPoint(size, fixed.New(1, 2), maxSize).Rescale(m.configuration.SizeScale)
+	//_ = fixed.ClampPoint(size, fixed.New(1, 2), maxSize).Rescale(m.configuration.SizeScale)
 }
 
 func (m *Manager) ProcessBar(bar common.Bar) {
 	if m.volatility.atr != nil {
 		m.volatility.atr.OnBar(bar)
 
-		if m.volatility.lastClose.IsSet() {
+		if m.volatility.lastClose.IsZero() {
 			m.volatility.currentTrueRange = calcTrueRange(m.volatility.lastClose, bar)
 		}
 
@@ -119,11 +119,11 @@ func (m *Manager) ProcessBar(bar common.Bar) {
 func (m *Manager) UpdateBalance(balance fixed.Point) {
 	m.account.currentBalance = balance
 
-	if m.account.maxBalance.IsSet() || m.account.currentBalance.Gt(m.account.maxBalance) {
+	if m.account.maxBalance.IsZero() || m.account.currentBalance.Gt(m.account.maxBalance) {
 		m.account.maxBalance = balance
 	}
 
-	if m.account.minBalance.IsSet() || m.account.currentEquity.Lt(m.account.minBalance) {
+	if m.account.minBalance.IsZero() || m.account.currentEquity.Lt(m.account.minBalance) {
 		m.account.minBalance = balance
 	}
 }
@@ -131,18 +131,18 @@ func (m *Manager) UpdateBalance(balance fixed.Point) {
 func (m *Manager) UpdateEquity(equity fixed.Point) {
 	m.account.currentEquity = equity
 
-	if m.account.maxEquity.IsSet() || m.account.currentEquity.Gt(m.account.maxEquity) {
+	if m.account.maxEquity.IsZero() || m.account.currentEquity.Gt(m.account.maxEquity) {
 		m.account.maxEquity = equity
 	}
 
-	if m.account.minEquity.IsSet() || m.account.currentEquity.Lt(m.account.minEquity) {
+	if m.account.minEquity.IsZero() || m.account.currentEquity.Lt(m.account.minEquity) {
 		m.account.minEquity = equity
 	}
 
-	if m.account.maxBalance.IsSet() {
+	if m.account.maxBalance.IsZero() {
 		drawdown := fixed.One.Sub(m.account.currentEquity.Div(m.account.maxBalance)).MulInt(100)
 
-		if m.account.currentDrawdown.IsSet() || drawdown.Gt(m.account.currentDrawdown) {
+		if m.account.currentDrawdown.IsZero() || drawdown.Gt(m.account.currentDrawdown) {
 			m.account.currentDrawdown = drawdown
 		}
 	}
@@ -161,7 +161,7 @@ func (m *Manager) PositionUpdated(position common.Position) {
 }
 
 func (m *Manager) currentVolatility() volRegime {
-	if !m.volatility.currentTrueRange.IsSet() || !m.volatility.atr.Ready() {
+	if !m.volatility.currentTrueRange.IsZero() || !m.volatility.atr.Ready() {
 		return normVolRegime
 	}
 
@@ -178,11 +178,11 @@ func (m *Manager) currentVolatility() volRegime {
 }
 
 func (m *Manager) getNormalizedSignalStrength(signalStrength uint8) fixed.Point {
-	return fixed.FromFloat(float64(signalStrength / 100))
+	return fixed.FromFloat64(float64(signalStrength / 100))
 }
 
 func (m *Manager) getDrawdownMultiplier() fixed.Point {
-	if !m.account.currentDrawdown.IsSet() {
+	if !m.account.currentDrawdown.IsZero() {
 		return fixed.One
 	}
 
@@ -199,31 +199,31 @@ func (m *Manager) getFxSessionMultiplier() fixed.Point {
 
 	switch session.Session {
 	case SessionTokyo:
-		if m.fxSession.tokyoMultiplier.IsSet() {
+		if m.fxSession.tokyoMultiplier.IsZero() {
 			return m.fxSession.tokyoMultiplier
 		}
 	case SessionSydney:
-		if m.fxSession.sydneyMultiplier.IsSet() {
+		if m.fxSession.sydneyMultiplier.IsZero() {
 			return m.fxSession.sydneyMultiplier
 		}
 	case SessionLondon:
-		if m.fxSession.londonMultiplier.IsSet() {
+		if m.fxSession.londonMultiplier.IsZero() {
 			return m.fxSession.londonMultiplier
 		}
 	case SessionNewYork:
-		if m.fxSession.newYorkMultiplier.IsSet() {
+		if m.fxSession.newYorkMultiplier.IsZero() {
 			return m.fxSession.newYorkMultiplier
 		}
 	case SessionSydneyTokyo:
-		if m.fxSession.sydneyTokyoMultiplier.IsSet() {
+		if m.fxSession.sydneyTokyoMultiplier.IsZero() {
 			return m.fxSession.sydneyTokyoMultiplier
 		}
 	case SessionTokyoLondon:
-		if m.fxSession.tokyoLondonMultiplier.IsSet() {
+		if m.fxSession.tokyoLondonMultiplier.IsZero() {
 			return m.fxSession.tokyoLondonMultiplier
 		}
 	case SessionLondonNewYork:
-		if m.fxSession.londonNewYorkMultiplier.IsSet() {
+		if m.fxSession.londonNewYorkMultiplier.IsZero() {
 			return m.fxSession.londonNewYorkMultiplier
 		}
 	default:

@@ -53,16 +53,16 @@ type DrawdownMultiplierFunc func(currentDrawdown fixed.Point) fixed.Point
 func WithDefaultDrawdownMultiplier() ManagerOption {
 	return WithDrawdownMultiplier(func(currentDrawdown fixed.Point) fixed.Point {
 		switch {
-		case currentDrawdown.Lt(fixed.New(5, 0)):
+		case currentDrawdown.Lt(fixed.FromInt64(5, 0)):
 			return fixed.One
-		case currentDrawdown.Lt(fixed.New(10, 0)):
-			return fixed.FromFloat(0.8)
-		case currentDrawdown.Lt(fixed.New(15, 0)):
-			return fixed.FromFloat(0.6)
-		case currentDrawdown.Lt(fixed.New(20, 0)):
-			return fixed.FromFloat(0.4)
-		case currentDrawdown.Lt(fixed.New(25, 0)):
-			return fixed.FromFloat(0.2)
+		case currentDrawdown.Lt(fixed.FromInt64(10, 0)):
+			return fixed.FromFloat64(0.8)
+		case currentDrawdown.Lt(fixed.FromInt64(15, 0)):
+			return fixed.FromFloat64(0.6)
+		case currentDrawdown.Lt(fixed.FromInt64(20, 0)):
+			return fixed.FromFloat64(0.4)
+		case currentDrawdown.Lt(fixed.FromInt64(25, 0)):
+			return fixed.FromFloat64(0.2)
 		default:
 			return fixed.Zero
 		}

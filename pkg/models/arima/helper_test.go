@@ -16,28 +16,28 @@ func Test_SolveLinearSystem(t *testing.T) {
 		{
 			name: "2x2 system",
 			A: [][]fixed.Point{
-				{fixed.New(2, 0), fixed.New(1, 0)},
-				{fixed.New(5, 0), fixed.New(7, 0)},
+				{fixed.FromInt64(2, 0), fixed.FromInt64(1, 0)},
+				{fixed.FromInt64(5, 0), fixed.FromInt64(7, 0)},
 			},
 			b: []fixed.Point{
-				fixed.New(11, 0),
-				fixed.New(13, 0),
+				fixed.FromInt64(11, 0),
+				fixed.FromInt64(13, 0),
 			},
 			expected: []fixed.Point{
-				fixed.New(7111111, 6),
-				fixed.New(-3222222, 6),
+				fixed.FromInt64(7111111, 6),
+				fixed.FromInt64(-3222222, 6),
 			},
 			nilOut: false,
 		},
 		{
 			name: "Singular matrix",
 			A: [][]fixed.Point{
-				{fixed.New(1, 0), fixed.New(2, 0)},
-				{fixed.New(2, 0), fixed.New(4, 0)},
+				{fixed.FromInt64(1, 0), fixed.FromInt64(2, 0)},
+				{fixed.FromInt64(2, 0), fixed.FromInt64(4, 0)},
 			},
 			b: []fixed.Point{
-				fixed.New(5, 0),
-				fixed.New(10, 0),
+				fixed.FromInt64(5, 0),
+				fixed.FromInt64(10, 0),
 			},
 			expected: nil,
 			nilOut:   true,
@@ -45,29 +45,29 @@ func Test_SolveLinearSystem(t *testing.T) {
 		{
 			name: "Zero row matrix",
 			A: [][]fixed.Point{
-				{fixed.New(1, 0), fixed.New(2, 0)},
+				{fixed.FromInt64(1, 0), fixed.FromInt64(2, 0)},
 				{fixed.Zero, fixed.Zero},
 			},
-			b:        []fixed.Point{fixed.New(3, 0), fixed.Zero},
+			b:        []fixed.Point{fixed.FromInt64(3, 0), fixed.Zero},
 			expected: nil,
 			nilOut:   true,
 		},
 		{
 			name: "3x3 system",
 			A: [][]fixed.Point{
-				{fixed.New(2, 0), fixed.New(1, 0), fixed.New(-1, 0)},
-				{fixed.New(-3, 0), fixed.New(-1, 0), fixed.New(2, 0)},
-				{fixed.New(-2, 0), fixed.New(1, 0), fixed.New(2, 0)},
+				{fixed.FromInt64(2, 0), fixed.FromInt64(1, 0), fixed.FromInt64(-1, 0)},
+				{fixed.FromInt64(-3, 0), fixed.FromInt64(-1, 0), fixed.FromInt64(2, 0)},
+				{fixed.FromInt64(-2, 0), fixed.FromInt64(1, 0), fixed.FromInt64(2, 0)},
 			},
 			b: []fixed.Point{
-				fixed.New(8, 0),
-				fixed.New(-11, 0),
-				fixed.New(-3, 0),
+				fixed.FromInt64(8, 0),
+				fixed.FromInt64(-11, 0),
+				fixed.FromInt64(-3, 0),
 			},
 			expected: []fixed.Point{
-				fixed.New(2, 0),
-				fixed.New(3, 0),
-				fixed.New(-1, 0),
+				fixed.FromInt64(2, 0),
+				fixed.FromInt64(3, 0),
+				fixed.FromInt64(-1, 0),
 			},
 			nilOut: false,
 		},
@@ -77,16 +77,16 @@ func Test_SolveLinearSystem(t *testing.T) {
 				{fixed.One, fixed.Zero},
 				{fixed.Zero, fixed.One},
 			},
-			b: []fixed.Point{fixed.New(7, 0), fixed.New(-3, 0)},
+			b: []fixed.Point{fixed.FromInt64(7, 0), fixed.FromInt64(-3, 0)},
 			expected: []fixed.Point{
-				fixed.New(7, 0),
-				fixed.New(-3, 0),
+				fixed.FromInt64(7, 0),
+				fixed.FromInt64(-3, 0),
 			},
 			nilOut: false,
 		},
 	}
 
-	tolerance := fixed.FromFloat(1e-6)
+	tolerance := fixed.FromFloat64(1e-6)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,30 +127,30 @@ func Test_SolveNormalEquations(t *testing.T) {
 		{
 			name: "Linear model y=2x+1",
 			X: [][]fixed.Point{
-				{fixed.One, fixed.New(1, 0)},
-				{fixed.One, fixed.New(2, 0)},
-				{fixed.One, fixed.New(3, 0)},
+				{fixed.One, fixed.FromInt64(1, 0)},
+				{fixed.One, fixed.FromInt64(2, 0)},
+				{fixed.One, fixed.FromInt64(3, 0)},
 			},
 			y: []fixed.Point{
-				fixed.New(3, 0),
-				fixed.New(5, 0),
-				fixed.New(7, 0),
+				fixed.FromInt64(3, 0),
+				fixed.FromInt64(5, 0),
+				fixed.FromInt64(7, 0),
 			},
-			want: []fixed.Point{fixed.New(1, 0), fixed.New(2, 0)},
+			want: []fixed.Point{fixed.FromInt64(1, 0), fixed.FromInt64(2, 0)},
 		},
 		{
 			name: "Quadratic model y=1+2x+3x^2",
 			X: [][]fixed.Point{
-				{fixed.One, fixed.New(0, 0), fixed.New(0, 0)},
-				{fixed.One, fixed.New(1, 0), fixed.New(1, 0)},
-				{fixed.One, fixed.New(2, 0), fixed.New(4, 0)},
+				{fixed.One, fixed.FromInt64(0, 0), fixed.FromInt64(0, 0)},
+				{fixed.One, fixed.FromInt64(1, 0), fixed.FromInt64(1, 0)},
+				{fixed.One, fixed.FromInt64(2, 0), fixed.FromInt64(4, 0)},
 			},
 			y: []fixed.Point{
-				fixed.New(1, 0),
-				fixed.New(6, 0),
-				fixed.New(17, 0),
+				fixed.FromInt64(1, 0),
+				fixed.FromInt64(6, 0),
+				fixed.FromInt64(17, 0),
 			},
-			want: []fixed.Point{fixed.New(1, 0), fixed.New(2, 0), fixed.New(3, 0)},
+			want: []fixed.Point{fixed.FromInt64(1, 0), fixed.FromInt64(2, 0), fixed.FromInt64(3, 0)},
 		},
 		{
 			name: "Constant model y=5",
@@ -160,15 +160,15 @@ func Test_SolveNormalEquations(t *testing.T) {
 				{fixed.One},
 			},
 			y: []fixed.Point{
-				fixed.New(5, 0),
-				fixed.New(5, 0),
-				fixed.New(5, 0),
+				fixed.FromInt64(5, 0),
+				fixed.FromInt64(5, 0),
+				fixed.FromInt64(5, 0),
 			},
-			want: []fixed.Point{fixed.New(5, 0)},
+			want: []fixed.Point{fixed.FromInt64(5, 0)},
 		},
 	}
 
-	tolerance := fixed.New(1, 6)
+	tolerance := fixed.FromInt64(1, 6)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -193,14 +193,14 @@ func Test_BinomialCoefficient(t *testing.T) {
 		expected fixed.Point
 	}{
 		{5, 0, fixed.One},
-		{5, 1, fixed.New(5, 0)},
-		{5, 2, fixed.New(10, 0)},
-		{5, 3, fixed.New(10, 0)},
-		{5, 4, fixed.New(5, 0)},
+		{5, 1, fixed.FromInt64(5, 0)},
+		{5, 2, fixed.FromInt64(10, 0)},
+		{5, 3, fixed.FromInt64(10, 0)},
+		{5, 4, fixed.FromInt64(5, 0)},
 		{5, 5, fixed.One},
-		{6, 2, fixed.New(15, 0)},
+		{6, 2, fixed.FromInt64(15, 0)},
 		{0, 1, fixed.Zero},
-		{20, 10, fixed.New(184756, 0)},
+		{20, 10, fixed.FromInt64(184756, 0)},
 		{3, 5, fixed.Zero},
 	}
 

@@ -20,7 +20,7 @@ func assertRingBufferEqual(t *testing.T, rb *RingBuffer, expected []float64, msg
 	}
 }
 
-func TestFixedRing_NewRingBuffer(t *testing.T) {
+func TestFixedRingBuffer_NewRingBuffer(t *testing.T) {
 	tests := []struct {
 		name      string
 		capacity  int
@@ -78,7 +78,7 @@ func TestFixedRing_NewRingBuffer(t *testing.T) {
 	}
 }
 
-func TestFixedRing_Add(t *testing.T) {
+func TestFixedRingBuffer_Add(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	rb.Add(FromFloat64(1.0))
@@ -97,7 +97,7 @@ func TestFixedRing_Add(t *testing.T) {
 	assertRingBufferEqual(t, rb, []float64{5.0, 4.0, 3.0}, "after second wraparound")
 }
 
-func TestFixedRing_Get(t *testing.T) {
+func TestFixedRingBuffer_Get(t *testing.T) {
 	rb := NewRingBuffer(5)
 
 	t.Run("empty buffer panic", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestFixedRing_Get(t *testing.T) {
 	}
 }
 
-func TestFixedRing_IsEmpty(t *testing.T) {
+func TestFixedRingBuffer_IsEmpty(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	if !rb.IsEmpty() {
@@ -166,7 +166,7 @@ func TestFixedRing_IsEmpty(t *testing.T) {
 	}
 }
 
-func TestFixedRing_IsFull(t *testing.T) {
+func TestFixedRingBuffer_IsFull(t *testing.T) {
 	rb := NewRingBuffer(2)
 
 	if rb.IsFull() {
@@ -189,7 +189,7 @@ func TestFixedRing_IsFull(t *testing.T) {
 	}
 }
 
-func TestFixedRing_Latest(t *testing.T) {
+func TestFixedRingBuffer_Latest(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	t.Run("empty buffer panic", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestFixedRing_Latest(t *testing.T) {
 	}
 }
 
-func TestFixedRing_Oldest(t *testing.T) {
+func TestFixedRingBuffer_Oldest(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	t.Run("empty buffer panic", func(t *testing.T) {
@@ -241,51 +241,51 @@ func TestFixedRing_Oldest(t *testing.T) {
 	}
 }
 
-func TestFixedRing_Data(t *testing.T) {
+func TestFixedRingBuffer_Data(t *testing.T) {
 	rb := NewRingBuffer(3)
 
-	if data := rb.Data(); data != nil {
-		t.Error("Data() should return nil for empty buffer")
+	if data := rb.ToSliceLifo(); data != nil {
+		t.Error("ToSliceLifo() should return nil for empty buffer")
 	}
 
 	rb.Add(FromFloat64(1.0))
 	rb.Add(FromFloat64(2.0))
-	data := rb.Data()
+	data := rb.ToSliceLifo()
 	expected := []float64{2.0, 1.0}
 	for i, v := range expected {
 		if !data[i].Eq(FromFloat64(v)) {
-			t.Errorf("Data()[%d]: got %v, want %v", i, data[i], v)
+			t.Errorf("ToSliceLifo()[%d]: got %v, want %v", i, data[i], v)
 		}
 	}
 
 	rb.Add(FromFloat64(3.0))
 	rb.Add(FromFloat64(4.0))
-	data = rb.Data()
+	data = rb.ToSliceLifo()
 	expected = []float64{4.0, 3.0, 2.0}
 	for i, v := range expected {
 		if !data[i].Eq(FromFloat64(v)) {
-			t.Errorf("Data()[%d]: got %v, want %v", i, data[i], v)
+			t.Errorf("ToSliceLifo()[%d]: got %v, want %v", i, data[i], v)
 		}
 	}
 }
 
-func TestFixedRing_DataReversed(t *testing.T) {
+func TestFixedRingBuffer_DataReversed(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	rb.Add(FromFloat64(1.0))
 	rb.Add(FromFloat64(2.0))
 	rb.Add(FromFloat64(3.0))
 
-	data := rb.DataReversed()
+	data := rb.ToSliceFifo()
 	expected := []float64{1.0, 2.0, 3.0}
 	for i, v := range expected {
 		if !data[i].Eq(FromFloat64(v)) {
-			t.Errorf("DataReversed()[%d]: got %v, want %v", i, data[i], v)
+			t.Errorf("ToSliceFifo()[%d]: got %v, want %v", i, data[i], v)
 		}
 	}
 }
 
-func TestFixedRing_Mean(t *testing.T) {
+func TestFixedRingBuffer_Mean(t *testing.T) {
 	rb := NewRingBuffer(5)
 
 	if !rb.Mean().Eq(Zero) {
@@ -299,12 +299,11 @@ func TestFixedRing_Mean(t *testing.T) {
 
 	assertPointEqual(t, FromFloat64(3.0), rb.Mean(), 0.0001, "Mean calculation")
 
-	// After wraparound
 	rb.Add(FromFloat64(6.0))
 	assertPointEqual(t, FromFloat64(4.0), rb.Mean(), 0.0001, "Mean after wraparound")
 }
 
-func TestFixedRing_MinMax(t *testing.T) {
+func TestFixedRingBuffer_MinMax(t *testing.T) {
 	rb := NewRingBuffer(5)
 
 	t.Run("empty min panic", func(t *testing.T) {
@@ -350,10 +349,9 @@ func TestFixedRing_MinMax(t *testing.T) {
 	}
 }
 
-func TestFixedRing_Clear(t *testing.T) {
+func TestFixedRingBuffer_Clear(t *testing.T) {
 	rb := NewRingBuffer(3)
 
-	// Fill buffer
 	rb.Add(FromFloat64(1.0))
 	rb.Add(FromFloat64(2.0))
 	rb.Add(FromFloat64(3.0))
@@ -378,7 +376,7 @@ func TestFixedRing_Clear(t *testing.T) {
 	}
 }
 
-func TestFixedRing_ForEach(t *testing.T) {
+func TestFixedRingBuffer_ForEachLifo(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	rb.Add(FromFloat64(1.0))
@@ -386,7 +384,7 @@ func TestFixedRing_ForEach(t *testing.T) {
 	rb.Add(FromFloat64(3.0))
 
 	var collected []float64
-	rb.ForEach(func(p Point) {
+	rb.ForEachLifo(func(p Point) {
 		pf, _ := p.Float64()
 		collected = append(collected, pf)
 	})
@@ -394,12 +392,12 @@ func TestFixedRing_ForEach(t *testing.T) {
 	expected := []float64{3.0, 2.0, 1.0}
 	for i, v := range expected {
 		if collected[i] != v {
-			t.Errorf("ForEach[%d]: got %v, want %v", i, collected[i], v)
+			t.Errorf("ForEachLifo[%d]: got %v, want %v", i, collected[i], v)
 		}
 	}
 }
 
-func TestFixedRing_ForEachReversed(t *testing.T) {
+func TestFixedRingBuffer_ForEachFifo(t *testing.T) {
 	rb := NewRingBuffer(3)
 
 	rb.Add(FromFloat64(1.0))
@@ -407,7 +405,7 @@ func TestFixedRing_ForEachReversed(t *testing.T) {
 	rb.Add(FromFloat64(3.0))
 
 	var collected []float64
-	rb.ForEachReversed(func(p Point) {
+	rb.ForEachFifo(func(p Point) {
 		pf, _ := p.Float64()
 		collected = append(collected, pf)
 	})
@@ -415,12 +413,12 @@ func TestFixedRing_ForEachReversed(t *testing.T) {
 	expected := []float64{1.0, 2.0, 3.0}
 	for i, v := range expected {
 		if collected[i] != v {
-			t.Errorf("ForEachReversed[%d]: got %v, want %v", i, collected[i], v)
+			t.Errorf("ForEachFifo[%d]: got %v, want %v", i, collected[i], v)
 		}
 	}
 }
 
-func TestFixedRing_EdgeCases(t *testing.T) {
+func TestFixedRingBuffer_EdgeCases(t *testing.T) {
 	t.Run("single capacity buffer", func(t *testing.T) {
 		rb := NewRingBuffer(1)
 
@@ -455,7 +453,7 @@ func TestFixedRing_EdgeCases(t *testing.T) {
 	})
 }
 
-func BenchmarkFixedRing_Add(b *testing.B) {
+func BenchmarkFixedRingBuffer_Add(b *testing.B) {
 	rb := NewRingBuffer(100)
 	point := FromFloat64(3.14159)
 
@@ -465,7 +463,7 @@ func BenchmarkFixedRing_Add(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_Get(b *testing.B) {
+func BenchmarkFixedRingBuffer_Get(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -477,7 +475,7 @@ func BenchmarkFixedRing_Get(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_Mean(b *testing.B) {
+func BenchmarkFixedRingBuffer_Mean(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -489,7 +487,7 @@ func BenchmarkFixedRing_Mean(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_StdDev(b *testing.B) {
+func BenchmarkFixedRingBuffer_StdDev(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -501,7 +499,7 @@ func BenchmarkFixedRing_StdDev(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_Data(b *testing.B) {
+func BenchmarkFixedRingBuffer_SampleStdDev(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -509,11 +507,59 @@ func BenchmarkFixedRing_Data(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = rb.Data()
+		_ = rb.SampleStdDev()
 	}
 }
 
-func BenchmarkFixedRing_ForEach(b *testing.B) {
+func BenchmarkFixedRingBuffer_Variance(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.Variance()
+	}
+}
+
+func BenchmarkFixedRingBuffer_SampleVariance(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.SampleVariance()
+	}
+}
+
+func BenchmarkFixedRingBuffer_ToSliceLifo(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.ToSliceLifo()
+	}
+}
+
+func BenchmarkFixedRingBuffer_ToSliceFifo(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.ToSliceFifo()
+	}
+}
+
+func BenchmarkFixedRingBuffer_ForEachLifo(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -522,13 +568,52 @@ func BenchmarkFixedRing_ForEach(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sum := Zero
-		rb.ForEach(func(p Point) {
+		rb.ForEachLifo(func(p Point) {
 			sum = sum.Add(p)
 		})
 	}
 }
 
-func BenchmarkFixedRing_MinMax(b *testing.B) {
+func BenchmarkFixedRingBuffer_ForEachFifo(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sum := Zero
+		rb.ForEachFifo(func(p Point) {
+			sum = sum.Add(p)
+		})
+	}
+}
+
+func BenchmarkFixedRingBuffer_Min(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.Min()
+	}
+}
+
+func BenchmarkFixedRingBuffer_Max(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.Max()
+	}
+}
+
+func BenchmarkFixedRingBuffer_MinMax(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -541,7 +626,7 @@ func BenchmarkFixedRing_MinMax(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_Mean_ViaData(b *testing.B) {
+func BenchmarkFixedRingBuffer_Mean_ViaToSliceLifo(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -549,11 +634,23 @@ func BenchmarkFixedRing_Mean_ViaData(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Mean(rb.Data())
+		_ = Mean(rb.ToSliceLifo())
 	}
 }
 
-func BenchmarkFixedRing_Mean_Direct(b *testing.B) {
+func BenchmarkFixedRingBuffer_Mean_ViaToSliceFifo(b *testing.B) {
+	rb := NewRingBuffer(100)
+	for i := 0; i < 100; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Mean(rb.ToSliceFifo())
+	}
+}
+
+func BenchmarkFixedRingBuffer_Mean_Direct(b *testing.B) {
 	rb := NewRingBuffer(100)
 	for i := 0; i < 100; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -565,7 +662,7 @@ func BenchmarkFixedRing_Mean_Direct(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_Add_Large(b *testing.B) {
+func BenchmarkFixedRingBuffer_Add_Large(b *testing.B) {
 	rb := NewRingBuffer(10000)
 	point := FromFloat64(3.14159)
 
@@ -575,7 +672,7 @@ func BenchmarkFixedRing_Add_Large(b *testing.B) {
 	}
 }
 
-func BenchmarkFixedRing_StdDev_Large(b *testing.B) {
+func BenchmarkFixedRingBuffer_StdDev_Large(b *testing.B) {
 	rb := NewRingBuffer(10000)
 	for i := 0; i < 10000; i++ {
 		rb.Add(FromFloat64(float64(i)))
@@ -584,5 +681,41 @@ func BenchmarkFixedRing_StdDev_Large(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = rb.StdDev()
+	}
+}
+
+func BenchmarkFixedRingBuffer_SampleStdDev_Large(b *testing.B) {
+	rb := NewRingBuffer(10000)
+	for i := 0; i < 10000; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.SampleStdDev()
+	}
+}
+
+func BenchmarkFixedRingBuffer_Variance_Large(b *testing.B) {
+	rb := NewRingBuffer(10000)
+	for i := 0; i < 10000; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.Variance()
+	}
+}
+
+func BenchmarkFixedRingBuffer_SampleVariance_Large(b *testing.B) {
+	rb := NewRingBuffer(10000)
+	for i := 0; i < 10000; i++ {
+		rb.Add(FromFloat64(float64(i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = rb.SampleVariance()
 	}
 }

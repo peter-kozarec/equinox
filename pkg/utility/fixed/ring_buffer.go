@@ -19,6 +19,27 @@ func NewRingBuffer(capacity int) *RingBuffer {
 	}
 }
 
+func (r *RingBuffer) Size() int {
+	return r.size
+}
+
+func (r *RingBuffer) Capacity() int {
+	return r.capacity
+}
+
+func (r *RingBuffer) IsEmpty() bool {
+	return r.size == 0
+}
+
+func (r *RingBuffer) IsFull() bool {
+	return r.size == r.capacity
+}
+
+func (r *RingBuffer) Clear() {
+	r.size = 0
+	r.tail = 0
+}
+
 func (r *RingBuffer) Add(p Point) {
 	r.buffer[r.tail] = p
 	r.tail = (r.tail + 1) % r.capacity
@@ -59,7 +80,7 @@ func (r *RingBuffer) Oldest() Point {
 	return r.Get(r.size - 1)
 }
 
-func (r *RingBuffer) Data() []Point {
+func (r *RingBuffer) ToSliceLifo() []Point {
 	if r.size == 0 {
 		return nil
 	}
@@ -71,7 +92,7 @@ func (r *RingBuffer) Data() []Point {
 	return result
 }
 
-func (r *RingBuffer) DataReversed() []Point {
+func (r *RingBuffer) ToSliceFifo() []Point {
 	if r.size == 0 {
 		return nil
 	}
@@ -83,13 +104,13 @@ func (r *RingBuffer) DataReversed() []Point {
 	return result
 }
 
-func (r *RingBuffer) ForEach(f func(Point)) {
+func (r *RingBuffer) ForEachLifo(f func(Point)) {
 	for i := 0; i < r.size; i++ {
 		f(r.Get(i))
 	}
 }
 
-func (r *RingBuffer) ForEachReversed(f func(Point)) {
+func (r *RingBuffer) ForEachFifo(f func(Point)) {
 	for i := r.size - 1; i >= 0; i-- {
 		f(r.Get(i))
 	}
@@ -97,7 +118,7 @@ func (r *RingBuffer) ForEachReversed(f func(Point)) {
 
 func (r *RingBuffer) Sum() Point {
 	sum := Zero
-	r.ForEach(func(p Point) {
+	r.ForEachLifo(func(p Point) {
 		sum = sum.Add(p)
 	})
 	return sum
@@ -118,7 +139,7 @@ func (r *RingBuffer) StdDev() Point {
 	mean := r.Mean()
 	sumSquaredDiff := Zero
 
-	r.ForEach(func(p Point) {
+	r.ForEachFifo(func(p Point) {
 		diff := p.Sub(mean)
 		sumSquaredDiff = sumSquaredDiff.Add(diff.Mul(diff))
 	})
@@ -126,7 +147,6 @@ func (r *RingBuffer) StdDev() Point {
 	return sumSquaredDiff.DivInt(r.size).Sqrt()
 }
 
-// SampleStdDev calculates sample standard deviation without allocating
 func (r *RingBuffer) SampleStdDev() Point {
 	if r.size <= 1 {
 		return Zero
@@ -135,7 +155,7 @@ func (r *RingBuffer) SampleStdDev() Point {
 	mean := r.Mean()
 	sumSquaredDiff := Zero
 
-	r.ForEach(func(p Point) {
+	r.ForEachFifo(func(p Point) {
 		diff := p.Sub(mean)
 		sumSquaredDiff = sumSquaredDiff.Add(diff.Mul(diff))
 	})
@@ -151,12 +171,28 @@ func (r *RingBuffer) Variance() Point {
 	mean := r.Mean()
 	sumSquaredDiff := Zero
 
-	r.ForEach(func(p Point) {
+	r.ForEachFifo(func(p Point) {
 		diff := p.Sub(mean)
 		sumSquaredDiff = sumSquaredDiff.Add(diff.Mul(diff))
 	})
 
 	return sumSquaredDiff.DivInt(r.size)
+}
+
+func (r *RingBuffer) SampleVariance() Point {
+	if r.size <= 1 {
+		return Zero
+	}
+
+	mean := r.Mean()
+	sumSquaredDiff := Zero
+
+	r.ForEachFifo(func(p Point) {
+		diff := p.Sub(mean)
+		sumSquaredDiff = sumSquaredDiff.Add(diff.Mul(diff))
+	})
+
+	return sumSquaredDiff.DivInt(r.size - 1)
 }
 
 func (r *RingBuffer) Min() Point {
@@ -187,29 +223,4 @@ func (r *RingBuffer) Max() Point {
 		}
 	}
 	return maxVal
-}
-
-func (r *RingBuffer) Size() int {
-	return r.size
-}
-
-func (r *RingBuffer) Capacity() int {
-	return r.capacity
-}
-
-func (r *RingBuffer) IsEmpty() bool {
-	return r.size == 0
-}
-
-func (r *RingBuffer) IsFull() bool {
-	return r.size == r.capacity
-}
-
-func (r *RingBuffer) Clear() {
-	r.size = 0
-	r.tail = 0
-}
-
-func (r *RingBuffer) ToSlice() []Point {
-	return r.Data()
 }

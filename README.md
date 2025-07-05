@@ -1,4 +1,4 @@
-# Equinox
+# equinox
 
 [![CI](https://github.com/peter-kozarec/equinox/actions/workflows/ci.yml/badge.svg)](https://github.com/peter-kozarec/equinox/actions/workflows/ci.yml)
 

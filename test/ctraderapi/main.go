@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/internal/strategy"
+	"os"
+	"os/signal"
+	"strconv"
+
+	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"go.uber.org/zap"
-	"os"
-	"os/signal"
-	"strconv"
 
 	"syscall"
 	"time"

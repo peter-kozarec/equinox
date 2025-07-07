@@ -4,10 +4,11 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"go.uber.org/zap"
-	"time"
 )
 
 var (

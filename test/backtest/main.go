@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/peter-kozarec/equinox/internal/strategy"
+	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/middleware"

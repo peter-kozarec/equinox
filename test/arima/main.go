@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/models/arima"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/peter-kozarec/equinox/internal/strategy"
+	"github.com/peter-kozarec/equinox/pkg/models/arima"
+
+	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/middleware"

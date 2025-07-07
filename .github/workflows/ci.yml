@@ -102,7 +102,7 @@ jobs:
       - name: Run Gosec
         uses: securego/gosec@master
         with:
-          args: '-exclude-dir=./pkg/ctrader/openapi/ ./pkg/...'
+          args: '-exclude-generated ./pkg/...'
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

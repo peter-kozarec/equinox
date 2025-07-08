@@ -3,8 +3,10 @@ package ctrader
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -29,7 +31,7 @@ func send[InType proto.Message](
 	}
 
 	msgID := id.String()
-	reqType := uint32(payloadType)
+	reqType := utility.I32ToU32Unsafe(int32(payloadType))
 
 	msg := &openapi.ProtoMessage{
 		ClientMsgId: &msgID,
@@ -70,7 +72,7 @@ func sendReceive[InType proto.Message, OutType proto.Message](
 	}
 
 	msgID := id.String()
-	reqType := uint32(payloadType)
+	reqType := utility.I32ToU32Unsafe(int32(payloadType))
 
 	msg := &openapi.ProtoMessage{
 		ClientMsgId: &msgID,

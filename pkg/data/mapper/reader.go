@@ -58,7 +58,7 @@ func (r *Reader[T]) Read(index int64, data *T) error {
 		return ErrEof
 	}
 
-	*data = *(*T)(unsafe.Pointer(&(*buffer)[0])) // Unsafe casting, for performance, T must not be padded
+	*data = *(*T)(unsafe.Pointer(&(*buffer)[0])) // #nosec G103
 	return nil
 }
 

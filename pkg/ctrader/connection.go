@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -91,7 +92,7 @@ func (c *connection) read() {
 				continue
 			}
 
-			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType) // #nosec G115
+			payloadType := openapi.ProtoOAPayloadType(utility.U32ToI32Unsafe(msg.GetPayloadType()))
 			_, isStream := streamMessageTypes[payloadType]
 
 			slog.Debug("read",
@@ -130,7 +131,7 @@ func (c *connection) write() {
 			}
 
 			slog.Debug("write",
-				"type", openapi.ProtoOAPayloadType(msg.GetPayloadType()).String(), // #nosec G115
+				"type", openapi.ProtoOAPayloadType(utility.U32ToI32Unsafe(msg.GetPayloadType())).String(),
 				"payload", hex.EncodeToString(msg.GetPayload()))
 
 			data, err := proto.Marshal(msg)

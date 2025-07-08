@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -34,25 +33,25 @@ const (
 )
 
 type Model struct {
-	p, d, q         uint
+	p, d, q         int
 	includeConstant bool
 	seasonal        bool
-	seasonalPeriod  uint
+	seasonalPeriod  int
 
-	ptCounter       uint
-	winSize         uint
-	minObservations uint
+	ptCounter       int
+	winSize         int
+	minObservations int
 
-	rawData  *circular.PointBuffer
-	diffData *circular.PointBuffer
+	rawData  *fixed.RingBuffer
+	diffData *fixed.RingBuffer
 
 	arParams []fixed.Point
 	maParams []fixed.Point
 	constant fixed.Point
 	variance fixed.Point
 
-	residuals             *circular.PointBuffer
-	standardizedResiduals *circular.PointBuffer
+	residuals             *fixed.RingBuffer
+	standardizedResiduals *fixed.RingBuffer
 
 	estimated   bool
 	method      EstimationMethod
@@ -70,7 +69,7 @@ type forecastState struct {
 	forecastedDiffs []fixed.Point
 }
 
-func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
+func NewModel(p, d, q, winSize int, options ...ModelOption) (*Model, error) {
 	if p == 0 && q == 0 {
 		return nil, ErrInvalidParameters
 	}
@@ -90,10 +89,10 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 		ptCounter:             0,
 		winSize:               winSize,
 		minObservations:       minObs,
-		rawData:               circular.NewPointBuffer(winSize),
-		diffData:              circular.NewPointBuffer(winSize - d),
-		residuals:             circular.NewPointBuffer(winSize),
-		standardizedResiduals: circular.NewPointBuffer(winSize),
+		rawData:               fixed.NewRingBuffer(winSize),
+		diffData:              fixed.NewRingBuffer(winSize - d),
+		residuals:             fixed.NewRingBuffer(winSize),
+		standardizedResiduals: fixed.NewRingBuffer(winSize),
 		arParams:              make([]fixed.Point, p),
 		maParams:              make([]fixed.Point, q),
 		constant:              fixed.Zero,
@@ -104,10 +103,10 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 	}
 
 	// Initialize parameters to zero
-	for i := uint(0); i < p; i++ {
+	for i := 0; i < p; i++ {
 		m.arParams[i] = fixed.Zero
 	}
-	for i := uint(0); i < q; i++ {
+	for i := 0; i < q; i++ {
 		m.maParams[i] = fixed.Zero
 	}
 
@@ -120,13 +119,13 @@ func NewModel(p, d, q, winSize uint, options ...ModelOption) (*Model, error) {
 }
 
 func (m *Model) AddPoint(p fixed.Point) {
-	m.rawData.PushUpdate(p)
+	m.rawData.Add(p)
 	m.ptCounter++
 
 	// Perform differencing
-	if m.rawData.B.Size() > m.d {
+	if m.rawData.Size() > m.d {
 		diff := m.differenceLatest()
-		m.diffData.PushUpdate(diff)
+		m.diffData.Add(diff)
 	}
 }
 
@@ -134,7 +133,7 @@ func (m *Model) ShouldReestimate() bool {
 	// Re-estimate when we have enough data and either:
 	// 1. Model hasn't been estimated yet
 	// 2. We've collected a full window of new data
-	return m.diffData.B.Size() >= m.minObservations &&
+	return m.diffData.Size() >= m.minObservations &&
 		(!m.estimated || m.ptCounter >= m.winSize)
 }
 
@@ -143,7 +142,7 @@ func (m *Model) IsEstimated() bool {
 }
 
 func (m *Model) Estimate() error {
-	if m.diffData.B.Size() < m.minObservations {
+	if m.diffData.Size() < m.minObservations {
 		return ErrInsufficientData
 	}
 
@@ -178,7 +177,7 @@ func (m *Model) Estimate() error {
 	return nil
 }
 
-func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
+func (m *Model) Forecast(steps int) ([]ForecastResult, error) {
 	if !m.estimated {
 		return nil, ErrModelNotEstimated
 	}
@@ -188,7 +187,7 @@ func (m *Model) Forecast(steps uint) ([]ForecastResult, error) {
 
 	state := m.initializeForecastState()
 
-	for step := uint(0); step < steps; step++ {
+	for step := 0; step < steps; step++ {
 		result, err := m.forecastOneStep(state, step)
 		if err != nil {
 			return nil, err
@@ -247,7 +246,7 @@ func (m *Model) Reset() {
 }
 
 func (m *Model) differenceLatest() fixed.Point {
-	if m.rawData.B.Size() <= m.d {
+	if m.rawData.Size() <= m.d {
 		return fixed.Zero
 	}
 
@@ -256,21 +255,21 @@ func (m *Model) differenceLatest() fixed.Point {
 	result := fixed.Zero
 
 	for i, coeff := range coeffs {
-		if uint(i) < m.rawData.B.Size() {
+		if i < m.rawData.Size() {
 			// Get(0) is most recent, Get(1) is one lag back, etc.
-			result = result.Add(coeff.Mul(m.rawData.B.Get(uint(i))))
+			result = result.Add(coeff.Mul(m.rawData.Get(i)))
 		}
 	}
 
 	return result
 }
 
-func (m *Model) getDifferencingCoefficients(d uint) []fixed.Point {
+func (m *Model) getDifferencingCoefficients(d int) []fixed.Point {
 	// These are alternating binomial coefficients: (1, -d, d(d-1)/2, ...)
 	coeffs := make([]fixed.Point, d+1)
 	coeffs[0] = fixed.One
 
-	for k := uint(1); k <= d; k++ {
+	for k := 1; k <= d; k++ {
 		coeff := binomialCoefficient(d, k)
 		if k%2 == 1 {
 			coeff = coeff.Mul(fixed.NegOne)
@@ -281,7 +280,7 @@ func (m *Model) getDifferencingCoefficients(d uint) []fixed.Point {
 	return coeffs
 }
 
-func (m *Model) undifferenceWithState(diffValue fixed.Point, state *forecastState, step uint) fixed.Point {
+func (m *Model) undifferenceWithState(diffValue fixed.Point, state *forecastState, step int) fixed.Point {
 	if m.d == 0 {
 		return diffValue
 	}
@@ -305,8 +304,8 @@ func (m *Model) undifferenceWithState(diffValue fixed.Point, state *forecastStat
 		}
 	} else {
 		// For higher order differencing, sum the appropriate lagged values
-		for i := uint(0); i < m.d; i++ {
-			idx := len(fullSeries) - 1 - int(i)
+		for i := 0; i < m.d; i++ {
+			idx := len(fullSeries) - 1 - i
 			if idx >= 0 && idx < len(fullSeries) {
 				result = result.Add(fullSeries[idx])
 			}
@@ -317,7 +316,7 @@ func (m *Model) undifferenceWithState(diffValue fixed.Point, state *forecastStat
 }
 
 func (m *Model) checkStationarity() bool {
-	if m.diffData.B.Size() < 20 {
+	if m.diffData.Size() < 20 {
 		return true // Assume stationary for small samples
 	}
 
@@ -378,7 +377,7 @@ func (m *Model) estimateByMaximumLikelihood() error {
 }
 
 func (m *Model) estimateByConditionalLS() error {
-	n := m.diffData.B.Size()
+	n := m.diffData.Size()
 	if n <= m.p+m.q {
 		return ErrInsufficientData
 	}
@@ -399,7 +398,7 @@ func (m *Model) estimateByConditionalLS() error {
 	// Get data in proper order
 	diffSeries := m.getDiffSeriesInOrder()
 
-	for i := uint(0); i < numObs; i++ {
+	for i := 0; i < numObs; i++ {
 		X[i] = make([]fixed.Point, numParams)
 		obsIdx := startIdx + i
 
@@ -415,7 +414,7 @@ func (m *Model) estimateByConditionalLS() error {
 		}
 
 		// AR terms
-		for j := uint(1); j <= m.p; j++ {
+		for j := 1; j <= m.p; j++ {
 			if obsIdx >= j {
 				X[i][paramIdx] = diffSeries[obsIdx-j]
 				paramIdx++
@@ -423,7 +422,7 @@ func (m *Model) estimateByConditionalLS() error {
 		}
 
 		// MA terms (initially zero for conditional LS)
-		for j := uint(0); j < m.q; j++ {
+		for j := 0; j < m.q; j++ {
 			X[i][paramIdx] = fixed.Zero
 			paramIdx++
 		}
@@ -464,7 +463,7 @@ func (m *Model) estimateByYuleWalker() error {
 }
 
 func (m *Model) estimateARByYuleWalker() error {
-	n := m.diffData.B.Size()
+	n := m.diffData.Size()
 	if n <= m.p {
 		return ErrInsufficientData
 	}
@@ -476,11 +475,11 @@ func (m *Model) estimateARByYuleWalker() error {
 	// Get series in order
 	series := m.getDiffSeriesInOrder()
 
-	for lag := uint(0); lag <= m.p; lag++ {
+	for lag := 0; lag <= m.p; lag++ {
 		var covariance fixed.Point
 		count := n - lag
 
-		for i := uint(0); i < count; i++ {
+		for i := 0; i < count; i++ {
 			val1 := series[i].Sub(mean)
 			val2 := series[i+lag].Sub(mean)
 			covariance = covariance.Add(val1.Mul(val2))
@@ -509,11 +508,11 @@ func (m *Model) solveYuleWalkerEquations(gamma []fixed.Point) error {
 		var sigma2 = gamma[0].Mul(fixed.One.Sub(phi[0].Mul(phi[0])))
 
 		// Recursive steps
-		for k := uint(2); k <= m.p; k++ {
+		for k := 2; k <= m.p; k++ {
 			// Calculate reflection coefficient
 			var sum fixed.Point
-			for j := uint(1); j < k; j++ {
-				if int(k-j) < len(gamma) && j-1 < uint(len(phi)) {
+			for j := 1; j < k; j++ {
+				if k-j < len(gamma) && j-1 < len(phi) {
 					sum = sum.Add(phi[j-1].Mul(gamma[k-j]))
 				}
 			}
@@ -526,16 +525,16 @@ func (m *Model) solveYuleWalkerEquations(gamma []fixed.Point) error {
 
 			// Update coefficients
 			phiNew := make([]fixed.Point, k)
-			for j := uint(1); j < k; j++ {
-				if j-1 < uint(len(phi)) && k-j-1 < uint(len(phi)) {
+			for j := 1; j < k; j++ {
+				if j-1 < len(phi) && k-j-1 < len(phi) {
 					phiNew[j-1] = phi[j-1].Sub(phiKK.Mul(phi[k-j-1]))
 				}
 			}
 			phiNew[k-1] = phiKK
 
 			// Copy back
-			for j := uint(0); j < k && j < m.p; j++ {
-				if j < uint(len(phiNew)) {
+			for j := 0; j < k && j < m.p; j++ {
+				if j < len(phiNew) {
 					phi[j] = phiNew[j]
 				}
 			}
@@ -560,10 +559,10 @@ func (m *Model) initializeParameters() {
 	}
 
 	// Initialize MA parameters to small values
-	for i := uint(0); i < m.q; i++ {
+	for i := 0; i < m.q; i++ {
 		// Small initial values to ensure invertibility
 		initVal := fixed.FromFloat64(0.1 * (0.5 - float64(i%2)))
-		if i < uint(len(m.maParams)) {
+		if i < len(m.maParams) {
 			m.maParams[i] = initVal
 		}
 	}
@@ -577,7 +576,7 @@ func (m *Model) initializeParameters() {
 
 	// Initialize variance if not already set
 	if m.variance.Eq(fixed.Zero) {
-		m.variance = m.diffData.Variance()
+		m.variance = m.diffData.SampleVariance()
 		if m.variance.Lte(fixed.Zero) {
 			m.variance = fixed.One
 		}
@@ -585,7 +584,7 @@ func (m *Model) initializeParameters() {
 }
 
 func (m *Model) logLikelihood() fixed.Point {
-	n := m.diffData.B.Size()
+	n := m.diffData.Size()
 	if n == 0 || m.variance.Lte(fixed.Zero) {
 		return fixed.FromFloat64(-math.Inf(1))
 	}
@@ -611,7 +610,7 @@ func (m *Model) logLikelihood() fixed.Point {
 }
 
 func (m *Model) calculateCurrentResiduals() []fixed.Point {
-	n := m.diffData.B.Size()
+	n := m.diffData.Size()
 	if n <= max(m.p, m.q) {
 		return []fixed.Point{}
 	}
@@ -629,8 +628,8 @@ func (m *Model) calculateCurrentResiduals() []fixed.Point {
 		}
 
 		// AR component
-		for j := uint(1); j <= m.p && j <= uint(i); j++ {
-			if j-1 < uint(len(m.arParams)) {
+		for j := 1; j <= m.p && j <= i; j++ {
+			if j-1 < len(m.arParams) {
 				arCoeff := m.arParams[j-1]
 				laggedValue := series[i-j]
 				if m.includeConstant {
@@ -641,8 +640,8 @@ func (m *Model) calculateCurrentResiduals() []fixed.Point {
 		}
 
 		// MA component (using previously calculated residuals)
-		for j := uint(1); j <= m.q && j <= uint(i-startIdx); j++ {
-			if j-1 < uint(len(m.maParams)) {
+		for j := 1; j <= m.q && j <= i-startIdx; j++ {
+			if j-1 < len(m.maParams) {
 				maCoeff := m.maParams[j-1]
 				laggedResidual := residuals[i-startIdx-j]
 				fitted = fitted.Add(maCoeff.Mul(laggedResidual))
@@ -807,7 +806,7 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 
 	// AR parameters: ensure stationarity
 	arSum := fixed.Zero
-	for i := uint(0); i < m.p && idx < len(params); i++ {
+	for i := 0; i < m.p && idx < len(params); i++ {
 		// Bound individual AR coefficients
 		if params[idx].Gt(fixed.FromFloat64(0.99)) {
 			params[idx] = fixed.FromFloat64(0.99)
@@ -825,7 +824,7 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 		if m.includeConstant {
 			arIdx = 1
 		}
-		for i := uint(0); i < m.p && arIdx < len(params); i++ {
+		for i := 0; i < m.p && arIdx < len(params); i++ {
 			params[arIdx] = params[arIdx].Mul(scale)
 			arIdx++
 		}
@@ -833,7 +832,7 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 
 	// MA parameters: ensure invertibility
 	maSum := fixed.Zero
-	for i := uint(0); i < m.q && idx < len(params); i++ {
+	for i := 0; i < m.q && idx < len(params); i++ {
 		// Bound individual MA coefficients
 		if params[idx].Gt(fixed.FromFloat64(0.99)) {
 			params[idx] = fixed.FromFloat64(0.99)
@@ -851,7 +850,7 @@ func (m *Model) enforceParameterConstraints(params []fixed.Point) {
 		if m.includeConstant {
 			maIdx++
 		}
-		for i := uint(0); i < m.q && maIdx < len(params); i++ {
+		for i := 0; i < m.q && maIdx < len(params); i++ {
 			params[maIdx] = params[maIdx].Mul(scale)
 			maIdx++
 		}
@@ -877,7 +876,7 @@ func (m *Model) calculateResiduals() {
 	// Clear and populate residuals buffer
 	m.residuals.Clear()
 	for _, r := range residuals {
-		m.residuals.PushUpdate(r)
+		m.residuals.Add(r)
 	}
 
 	// Calculate standardized residuals
@@ -893,7 +892,7 @@ func (m *Model) calculateResiduals() {
 		for _, r := range residuals {
 			if residualStdDev.Gt(fixed.Zero) {
 				standardized := r.Div(residualStdDev)
-				m.standardizedResiduals.PushUpdate(standardized)
+				m.standardizedResiduals.Add(standardized)
 			}
 		}
 	}
@@ -1183,7 +1182,7 @@ func (m *Model) checkParameterValidity() error {
 }
 
 func (m *Model) checkResidualProperties() error {
-	if m.residuals.B.Size() < 10 {
+	if m.residuals.Size() < 10 {
 		return nil
 	}
 
@@ -1206,27 +1205,23 @@ func (m *Model) initializeForecastState() *forecastState {
 	}
 
 	// Get data in oldest-to-newest order
-	if m.diffData.B.Size() > 0 {
+	if m.diffData.Size() > 0 {
 		state.diffSeries = m.getDiffSeriesInOrder()
 	}
 
-	if m.residuals.B.Size() > 0 {
-		residualData := m.residuals.B.Data()
-		// Reverse to get oldest to newest
-		for i := len(residualData) - 1; i >= 0; i-- {
-			state.residuals = append(state.residuals, residualData[i])
-		}
+	if m.residuals.Size() > 0 {
+		state.residuals = m.residuals.ToSliceFifo()
 	}
 
 	// Store raw values for undifferencing
-	if m.rawData.B.Size() > 0 {
+	if m.rawData.Size() > 0 {
 		state.rawValues = m.getRawSeriesInOrder()
 	}
 
 	return state
 }
 
-func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult, error) {
+func (m *Model) forecastOneStep(state *forecastState, step int) (ForecastResult, error) {
 	var result ForecastResult
 
 	// Point forecast in differenced scale
@@ -1238,7 +1233,7 @@ func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult
 	}
 
 	// AR component
-	for i := uint(0); i < m.p && i < uint(len(m.arParams)); i++ {
+	for i := 0; i < m.p && i < len(m.arParams); i++ {
 		arCoeff := m.arParams[i]
 
 		// Get the appropriate lagged value
@@ -1264,7 +1259,7 @@ func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult
 	}
 
 	// MA component
-	for i := uint(0); i < m.q && i < uint(len(m.maParams)); i++ {
+	for i := 0; i < m.q && i < len(m.maParams); i++ {
 		maCoeff := m.maParams[i]
 
 		// For forecasting, we use actual residuals for past values
@@ -1323,7 +1318,7 @@ func (m *Model) forecastOneStep(state *forecastState, step uint) (ForecastResult
 	return result, nil
 }
 
-func (m *Model) calculateForecastVariance(step uint) fixed.Point {
+func (m *Model) calculateForecastVariance(step int) fixed.Point {
 	if step == 0 {
 		return m.variance
 	}
@@ -1333,7 +1328,7 @@ func (m *Model) calculateForecastVariance(step uint) fixed.Point {
 
 	// Sum of squared psi weights
 	sumSquaredPsi := fixed.One // psi_0 = 1
-	for i := uint(1); i < step && i-1 < uint(len(psiWeights)); i++ {
+	for i := 1; i < step && i-1 < len(psiWeights); i++ {
 		psi := psiWeights[i-1]
 		sumSquaredPsi = sumSquaredPsi.Add(psi.Mul(psi))
 	}
@@ -1341,18 +1336,18 @@ func (m *Model) calculateForecastVariance(step uint) fixed.Point {
 	return m.variance.Mul(sumSquaredPsi)
 }
 
-func (m *Model) calculatePsiWeights(maxLag uint) []fixed.Point {
+func (m *Model) calculatePsiWeights(maxLag int) []fixed.Point {
 	if maxLag == 0 {
 		return []fixed.Point{}
 	}
 
 	psi := make([]fixed.Point, maxLag)
 
-	for j := uint(0); j < maxLag; j++ {
+	for j := 0; j < maxLag; j++ {
 		psiJ := fixed.Zero
 
 		// AR contribution
-		for i := uint(0); i < m.p && i <= j && i < uint(len(m.arParams)); i++ {
+		for i := 0; i < m.p && i <= j && i < len(m.arParams); i++ {
 			if j == i {
 				// When j-i = 0, we need ψ₀ which is implicitly 1
 				psiJ = psiJ.Add(m.arParams[i])
@@ -1363,7 +1358,7 @@ func (m *Model) calculatePsiWeights(maxLag uint) []fixed.Point {
 		}
 
 		// MA contribution (only for j < q)
-		if j < m.q && j < uint(len(m.maParams)) {
+		if j < m.q && j < len(m.maParams) {
 			psiJ = psiJ.Add(m.maParams[j])
 		}
 
@@ -1379,17 +1374,17 @@ func (m *Model) appendZeroResidual(state *forecastState) {
 }
 
 func (m *Model) getDiffSeriesInOrder() []fixed.Point {
-	if m.diffData.B.Size() == 0 {
+	if m.diffData.Size() == 0 {
 		return []fixed.Point{}
 	}
 
-	return m.diffData.B.Data()
+	return m.diffData.ToSliceFifo()
 }
 
 func (m *Model) getRawSeriesInOrder() []fixed.Point {
-	if m.rawData.B.Size() == 0 {
+	if m.rawData.Size() == 0 {
 		return []fixed.Point{}
 	}
 
-	return m.rawData.B.Data()
+	return m.rawData.ToSliceFifo()
 }

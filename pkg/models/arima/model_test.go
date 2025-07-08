@@ -2,9 +2,10 @@ package arima
 
 import (
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"math"
 	"testing"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 func TestModel_JarqueBeraTest(t *testing.T) {
@@ -242,7 +243,7 @@ func TestModel_JarqueBeraTestImplementation(t *testing.T) {
 func TestModel_CheckParameterValidity(t *testing.T) {
 	tests := []struct {
 		name        string
-		p, q        uint
+		p, q        int
 		arParams    []fixed.Point
 		maParams    []fixed.Point
 		variance    fixed.Point
@@ -586,7 +587,7 @@ func TestModel_CheckResidualProperties(t *testing.T) {
 			// Set up residuals
 			m.residuals.Clear()
 			for _, r := range tt.residuals {
-				m.residuals.PushUpdate(r)
+				m.residuals.Add(r)
 			}
 
 			// Set diagnostics
@@ -643,13 +644,13 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 
 		// Add data to model
 		for _, val := range series {
-			m.diffData.PushUpdate(val)
+			m.diffData.Add(val)
 		}
 
 		// Set residuals
 		m.residuals.Clear()
 		for _, r := range residuals {
-			m.residuals.PushUpdate(r)
+			m.residuals.Add(r)
 		}
 
 		// Calculate diagnostics (this sets LjungBoxPValue)
@@ -698,7 +699,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 
 		// Add data to model
 		for _, val := range series {
-			m.diffData.PushUpdate(val)
+			m.diffData.Add(val)
 		}
 
 		// Calculate residuals with wrong model
@@ -711,7 +712,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 
 		m.residuals.Clear()
 		for _, r := range residuals {
-			m.residuals.PushUpdate(r)
+			m.residuals.Add(r)
 		}
 
 		// Force a low p-value to simulate autocorrelation detection
@@ -732,7 +733,7 @@ func TestModel_CheckResidualPropertiesEdgeCases(t *testing.T) {
 
 		// Add some residuals
 		for i := 0; i < 15; i++ {
-			m.residuals.PushUpdate(fixed.FromFloat64(float64(i) * 0.01))
+			m.residuals.Add(fixed.FromFloat64(float64(i) * 0.01))
 		}
 
 		// Don't set diagnostics - LjungBoxPValue will be zero
@@ -753,9 +754,9 @@ func TestModel_CheckResidualPropertiesEdgeCases(t *testing.T) {
 		for i := 0; i < 500; i++ {
 			// Alternating pattern to avoid autocorrelation
 			if i%2 == 0 {
-				m.residuals.PushUpdate(fixed.FromFloat64(0.1))
+				m.residuals.Add(fixed.FromFloat64(0.1))
 			} else {
-				m.residuals.PushUpdate(fixed.FromFloat64(-0.1))
+				m.residuals.Add(fixed.FromFloat64(-0.1))
 			}
 		}
 
@@ -771,7 +772,7 @@ func TestModel_CheckResidualPropertiesEdgeCases(t *testing.T) {
 func TestModel_InitializeForecastState(t *testing.T) {
 	tests := []struct {
 		name                  string
-		p, d, q               uint
+		p, d, q               int
 		diffSeriesData        []fixed.Point
 		rawSeriesData         []fixed.Point
 		residualsData         []fixed.Point
@@ -843,13 +844,13 @@ func TestModel_InitializeForecastState(t *testing.T) {
 
 			// Populate buffers
 			for _, val := range tt.rawSeriesData {
-				m.rawData.PushUpdate(val)
+				m.rawData.Add(val)
 			}
 			for _, val := range tt.diffSeriesData {
-				m.diffData.PushUpdate(val)
+				m.diffData.Add(val)
 			}
 			for _, val := range tt.residualsData {
-				m.residuals.PushUpdate(val)
+				m.residuals.Add(val)
 			}
 
 			// Initialize forecast state
@@ -905,10 +906,10 @@ func TestModel_InitializeForecastStateWithCircularBufferWrap(t *testing.T) {
 
 	// Add more data than buffer capacity to force wrap-around
 	for i := 0; i < 100; i++ {
-		m.rawData.PushUpdate(fixed.FromFloat64(float64(i)))
-		m.diffData.PushUpdate(fixed.FromFloat64(float64(i * 10)))
+		m.rawData.Add(fixed.FromFloat64(float64(i)))
+		m.diffData.Add(fixed.FromFloat64(float64(i * 10)))
 		if i < 8 {
-			m.residuals.PushUpdate(fixed.FromFloat64(float64(i) * 0.1))
+			m.residuals.Add(fixed.FromFloat64(float64(i) * 0.1))
 		}
 	}
 
@@ -946,12 +947,12 @@ func TestModel_InitializeForecastStateConsistency(t *testing.T) {
 
 	// Add some data
 	for i := 0; i < 15; i++ {
-		m.rawData.PushUpdate(fixed.FromFloat64(float64(100 + i)))
+		m.rawData.Add(fixed.FromFloat64(float64(100 + i)))
 		if i > 0 { // For d=1, we need at least 2 raw values
-			m.diffData.PushUpdate(fixed.FromFloat64(float64(i)))
+			m.diffData.Add(fixed.FromFloat64(float64(i)))
 		}
 		if i < 10 {
-			m.residuals.PushUpdate(fixed.FromFloat64(float64(i) * 0.01))
+			m.residuals.Add(fixed.FromFloat64(float64(i) * 0.01))
 		}
 	}
 
@@ -987,7 +988,7 @@ func TestModel_InitializeForecastStateConsistency(t *testing.T) {
 func TestModel_ForecastOneStep(t *testing.T) {
 	tests := []struct {
 		name             string
-		p, d, q          uint
+		p, d, q          int
 		arParams         []fixed.Point
 		maParams         []fixed.Point
 		constant         fixed.Point
@@ -996,7 +997,7 @@ func TestModel_ForecastOneStep(t *testing.T) {
 		diffSeries       []fixed.Point
 		rawSeries        []fixed.Point
 		residuals        []fixed.Point
-		step             uint
+		step             int
 		expectedForecast fixed.Point
 		tolerance        fixed.Point
 	}{
@@ -1075,13 +1076,13 @@ func TestModel_ForecastOneStep(t *testing.T) {
 
 			// Populate buffers
 			for _, val := range tt.rawSeries {
-				m.rawData.PushUpdate(val)
+				m.rawData.Add(val)
 			}
 			for _, val := range tt.diffSeries {
-				m.diffData.PushUpdate(val)
+				m.diffData.Add(val)
 			}
 			for _, val := range tt.residuals {
-				m.residuals.PushUpdate(val)
+				m.residuals.Add(val)
 			}
 
 			// Initialize forecast state
@@ -1140,8 +1141,8 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 		fixed.FromFloat64(13), fixed.FromFloat64(14),
 	}
 	for _, val := range series {
-		m.rawData.PushUpdate(val)
-		m.diffData.PushUpdate(val) // No differencing
+		m.rawData.Add(val)
+		m.diffData.Add(val) // No differencing
 	}
 
 	// Add some residuals
@@ -1150,14 +1151,14 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 		fixed.FromFloat64(0.2), fixed.FromFloat64(0.1),
 	}
 	for _, val := range residuals {
-		m.residuals.PushUpdate(val)
+		m.residuals.Add(val)
 	}
 
 	state := m.initializeForecastState()
 
 	// Test that multi-step forecasts use previous forecasts
 	prevForecast := fixed.Zero
-	for step := uint(0); step < 3; step++ {
+	for step := 0; step < 3; step++ {
 		result, err := m.forecastOneStep(state, step)
 		if err != nil {
 			t.Fatalf("Step %d: Unexpected error: %v", step, err)
@@ -1209,8 +1210,8 @@ func TestModel_ForecastOneStepEdgeCases(t *testing.T) {
 			fixed.FromFloat64(1), fixed.FromFloat64(0.5),
 		}
 		for _, val := range series {
-			m.rawData.PushUpdate(val)
-			m.diffData.PushUpdate(val)
+			m.rawData.Add(val)
+			m.diffData.Add(val)
 		}
 
 		state := m.initializeForecastState()
@@ -1239,9 +1240,9 @@ func TestModel_ForecastOneStepEdgeCases(t *testing.T) {
 
 		// Add dummy data
 		for i := 0; i < 5; i++ {
-			m.rawData.PushUpdate(fixed.FromFloat64(float64(i)))
-			m.diffData.PushUpdate(fixed.FromFloat64(float64(i)))
-			m.residuals.PushUpdate(fixed.Zero)
+			m.rawData.Add(fixed.FromFloat64(float64(i)))
+			m.diffData.Add(fixed.FromFloat64(float64(i)))
+			m.residuals.Add(fixed.Zero)
 		}
 
 		state := m.initializeForecastState()
@@ -1273,7 +1274,7 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 		// Quadratic trend plus noise
 		val := float64(i*i)/10.0 + float64(i) + 10.0
 		rawSeries = append(rawSeries, fixed.FromFloat64(val))
-		m.rawData.PushUpdate(fixed.FromFloat64(val))
+		m.rawData.Add(fixed.FromFloat64(val))
 	}
 
 	// Manually calculate second differences for verification
@@ -1282,8 +1283,8 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 		d1_curr := rawSeries[i].Sub(rawSeries[i-1])
 		d1_prev := rawSeries[i-1].Sub(rawSeries[i-2])
 		d2 := d1_curr.Sub(d1_prev)
-		m.diffData.PushUpdate(d2)
-		m.residuals.PushUpdate(fixed.FromFloat64(0.1)) // Small residuals
+		m.diffData.Add(d2)
+		m.residuals.Add(fixed.FromFloat64(0.1)) // Small residuals
 	}
 
 	state := m.initializeForecastState()
@@ -1309,12 +1310,12 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 func TestModel_CalculateForecastVariance(t *testing.T) {
 	tests := []struct {
 		name     string
-		p        uint
-		q        uint
+		p        int
+		q        int
 		arParams []fixed.Point
 		maParams []fixed.Point
 		variance fixed.Point
-		step     uint
+		step     int
 		expected fixed.Point
 	}{
 		{
@@ -1398,7 +1399,7 @@ func TestModel_CalculateForecastVarianceAR2(t *testing.T) {
 	m.variance = fixed.FromFloat64(1.0)
 
 	tests := []struct {
-		step     uint
+		step     int
 		expected fixed.Point
 	}{
 		{
@@ -1429,7 +1430,7 @@ func TestModel_CalculateForecastVarianceAR2(t *testing.T) {
 
 				// Calculate sum of squared psi
 				sumSquaredPsi := fixed.One
-				for i := uint(0); i < tt.step-1 && i < uint(len(psiWeights)); i++ {
+				for i := 0; i < tt.step-1 && i < len(psiWeights); i++ {
 					sumSquaredPsi = sumSquaredPsi.Add(psiWeights[i].Mul(psiWeights[i]))
 				}
 				t.Logf("Sum of squared psi: %v", sumSquaredPsi.String())
@@ -1447,7 +1448,7 @@ func TestModel_CalculateForecastVarianceLargeHorizon(t *testing.T) {
 	m.variance = fixed.FromFloat64(1.0)
 
 	// For AR(1) with φ = 0.5, the h-step variance should converge to σ²/(1-φ²) = 1/(1-0.25) = 1.333...
-	largeStep := uint(50)
+	largeStep := 50
 	result := m.calculateForecastVariance(largeStep)
 
 	// Should be close to the theoretical limit
@@ -1482,7 +1483,7 @@ func TestModel_CalculateForecastVarianceEdgeCases(t *testing.T) {
 
 		// With all zero parameters, psi weights are all zero
 		// So forecast variance should equal model variance for all horizons
-		for step := uint(1); step <= 5; step++ {
+		for step := 1; step <= 5; step++ {
 			result := m.calculateForecastVariance(step)
 			if !result.Eq(fixed.FromFloat64(2.0)) {
 				t.Errorf("Step %d: Expected variance 2.0, got %v", step, result.String())
@@ -1494,11 +1495,11 @@ func TestModel_CalculateForecastVarianceEdgeCases(t *testing.T) {
 func TestModel_CalculatePsiWeights(t *testing.T) {
 	tests := []struct {
 		name     string
-		p        uint // AR order
-		q        uint // MA order
+		p        int // AR order
+		q        int // MA order
 		arParams []fixed.Point
 		maParams []fixed.Point
-		maxLag   uint
+		maxLag   int
 		expected []fixed.Point
 	}{
 		{
@@ -1645,7 +1646,7 @@ func TestModel_GetRawSeriesInOrder(t *testing.T) {
 	}
 
 	for _, p := range testData {
-		m.rawData.PushUpdate(p)
+		m.rawData.Add(p)
 	}
 
 	// Get series in order
@@ -1676,7 +1677,7 @@ func TestModel_GetDiffSeriesInOrder(t *testing.T) {
 	}
 
 	for _, p := range testDiffData {
-		m.diffData.PushUpdate(p)
+		m.diffData.Add(p)
 	}
 
 	// Get series in order

@@ -101,7 +101,7 @@ func solveNormalEquations(X [][]fixed.Point, y []fixed.Point) []fixed.Point {
 	return solveLinearSystem(XtX, Xty)
 }
 
-func binomialCoefficient(n, k uint) fixed.Point {
+func binomialCoefficient(n, k int) fixed.Point {
 	if k > n {
 		return fixed.Zero
 	}
@@ -111,9 +111,9 @@ func binomialCoefficient(n, k uint) fixed.Point {
 
 	// Use multiplicative formula to avoid overflow
 	result := fixed.One
-	for i := uint(0); i < k; i++ {
-		result = result.MulInt(int(n - i))
-		result = result.DivInt(int(i + 1))
+	for i := 0; i < k; i++ {
+		result = result.MulInt(n - i)
+		result = result.DivInt(i + 1)
 	}
 	return result
 }

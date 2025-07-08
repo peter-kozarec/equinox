@@ -3,24 +3,23 @@ package indicators
 import (
 	"errors"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type ZScore struct {
 	windowSize int
-	data       *circular.PointBuffer
+	data       *fixed.RingBuffer
 }
 
 func NewZScore(windowSize int) *ZScore {
 	return &ZScore{
 		windowSize: windowSize,
-		data:       circular.NewPointBuffer(uint(windowSize)),
+		data:       fixed.NewRingBuffer(windowSize),
 	}
 }
 
 func (z *ZScore) AddPoint(p fixed.Point) {
-	z.data.PushUpdate(p)
+	z.data.Add(p)
 }
 
 func (z *ZScore) Value() (fixed.Point, error) {
@@ -28,7 +27,7 @@ func (z *ZScore) Value() (fixed.Point, error) {
 		return fixed.Point{}, errors.New("not enough data")
 	}
 
-	lastPoint := z.data.B.First()
+	lastPoint := z.data.Latest()
 	mean := z.data.Mean()
 	stdDev := z.data.StdDev()
 
@@ -36,5 +35,5 @@ func (z *ZScore) Value() (fixed.Point, error) {
 }
 
 func (z *ZScore) IsReady() bool {
-	return z.data.B.IsFull()
+	return z.data.IsFull()
 }

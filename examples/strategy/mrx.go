@@ -6,7 +6,6 @@ import (
 
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -20,8 +19,8 @@ type MrxAdvisor struct {
 	router *bus.Router
 
 	lastTick common.Tick
-	closes   *circular.Buffer[fixed.Point]
-	zScores  *circular.Buffer[fixed.Point]
+	closes   *fixed.RingBuffer
+	zScores  *fixed.RingBuffer
 
 	posOpen bool
 }
@@ -29,8 +28,8 @@ type MrxAdvisor struct {
 func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
 	return &MrxAdvisor{
 		router:  router,
-		closes:  circular.NewBuffer[fixed.Point](60),
-		zScores: circular.NewBuffer[fixed.Point](60),
+		closes:  fixed.NewRingBuffer(60),
+		zScores: fixed.NewRingBuffer(60),
 		posOpen: false,
 	}
 }
@@ -41,18 +40,17 @@ func (a *MrxAdvisor) NewTick(t common.Tick) {
 
 func (a *MrxAdvisor) NewBar(b common.Bar) {
 
-	a.closes.Push(b.Close)
+	a.closes.Add(b.Close)
 
 	if !a.closes.IsFull() {
 		return
 	}
 
-	closes := a.closes.Data()
-	mean := fixed.Mean(closes)
-	stdDev := fixed.StdDev(closes, mean)
+	mean := a.closes.Mean()
+	stdDev := a.closes.SampleStdDev()
 	z := b.Close.Sub(mean).Div(stdDev)
 
-	a.zScores.Push(z)
+	a.zScores.Add(z)
 
 	if !a.zScores.IsFull() {
 		return

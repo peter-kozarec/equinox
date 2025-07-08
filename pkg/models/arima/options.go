@@ -14,7 +14,7 @@ func WithConstant(include bool) ModelOption {
 	}
 }
 
-func WithSeasonal(period uint) ModelOption {
+func WithSeasonal(period int) ModelOption {
 	return func(m *Model) {
 		if period > 1 {
 			m.seasonal = true

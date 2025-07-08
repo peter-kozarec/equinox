@@ -1,8 +1,9 @@
 package arima
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"testing"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 func Test_SolveLinearSystem(t *testing.T) {
@@ -189,7 +190,7 @@ func Test_SolveNormalEquations(t *testing.T) {
 
 func Test_BinomialCoefficient(t *testing.T) {
 	tests := []struct {
-		n, k     uint
+		n, k     int
 		expected fixed.Point
 	}{
 		{5, 0, fixed.One},

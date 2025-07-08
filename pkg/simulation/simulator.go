@@ -2,17 +2,15 @@ package simulation
 
 import (
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/common"
+	"log/slog"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
-
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type Simulator struct {
-	logger     *zap.Logger
 	router     *bus.Router
 	aggregator *Aggregator
 	audit      *Audit
@@ -30,9 +28,8 @@ type Simulator struct {
 	cfg Configuration
 }
 
-func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit, cfg Configuration) *Simulator {
+func NewSimulator(router *bus.Router, audit *Audit, cfg Configuration) *Simulator {
 	return &Simulator{
-		logger:     logger,
 		router:     router,
 		aggregator: NewAggregator(cfg.BarPeriod, router),
 		audit:      audit,
@@ -43,12 +40,12 @@ func NewSimulator(logger *zap.Logger, router *bus.Router, audit *Audit, cfg Conf
 }
 
 func (s *Simulator) PrintDetails() {
-	s.logger.Info("simulation details",
-		zap.String("slippage", s.cfg.PipSlippage.String()),
-		zap.String("commissions", s.cfg.CommissionPerLot.String()),
-		zap.String("contract_size", s.cfg.ContractSize.String()),
-		zap.String("pip_size", s.cfg.PipSize.String()),
-		zap.String("aggregator_interval", s.aggregator.interval.String()))
+	slog.Info("simulation details",
+		"slippage", s.cfg.PipSlippage,
+		"commissions", s.cfg.CommissionPerLot,
+		"contract_size", s.cfg.ContractSize,
+		"pip_size", s.cfg.PipSize,
+		"aggregator_interval", s.aggregator.interval)
 }
 
 func (s *Simulator) OnOrder(order common.Order) {
@@ -72,24 +69,24 @@ func (s *Simulator) OnTick(tick common.Tick) error {
 	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != s.balance {
 		if err := s.router.Post(bus.BalanceEvent, s.balance); err != nil {
-			s.logger.Error("unable to post balance event", zap.Error(err))
+			slog.Error("unable to post balance event", "error", err)
 		}
 	}
 	// Post equity event if the current equity changed after the tick was processed
 	if lastEquity != s.equity {
 		if err := s.router.Post(bus.EquityEvent, s.equity); err != nil {
-			s.logger.Error("unable to post equity event", zap.Error(err))
+			slog.Error("unable to post equity event", "error", err)
 		}
 	}
 
 	s.audit.AddAccountSnapshot(s.balance, s.equity, s.simulationTime)
 
 	if err := s.router.Post(bus.TickEvent, tick); err != nil {
-		s.logger.Error("unable to post tick event", zap.Error(err))
+		slog.Error("unable to post tick event", "error", err)
 	}
 
 	if err := s.aggregator.OnTick(tick); err != nil {
-		s.logger.Warn("unable to aggregate ticks", zap.Error(err))
+		slog.Warn("unable to aggregate ticks", "error", err)
 	}
 
 	return nil
@@ -143,7 +140,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 			switch order.OrderType {
 			case common.Market:
 				if err := s.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					s.logger.Warn("unable to execute open order", zap.Error(err))
+					slog.Warn("unable to execute open order", "error", err)
 				}
 			case common.Limit:
 				if !s.shouldOpenPosition(order.Price, order.Size, tick) {
@@ -151,21 +148,21 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 					continue
 				}
 				if err := s.executeOpenOrder(order.Size, order.StopLoss, order.TakeProfit); err != nil {
-					s.logger.Warn("unable to execute open order", zap.Error(err))
+					slog.Warn("unable to execute open order", "error", err)
 				}
 			}
 		case common.CmdClose:
 			if err := s.executeCloseOrder(order.PositionId); err != nil {
-				s.logger.Warn("unable to execute close order", zap.Error(err))
+				slog.Warn("unable to execute close order", "error", err)
 			}
 		case common.CmdModify:
 			if err := s.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit); err != nil {
-				s.logger.Warn("unable to modify open position", zap.Error(err))
+				slog.Warn("unable to modify open position", "error", err)
 			}
 		case common.CmdRemove:
 			continue
 		default:
-			s.logger.Warn("unknown command", zap.Any("cmd", order.Command))
+			slog.Warn("unknown command", "cmd", order.Command)
 		}
 	}
 
@@ -283,7 +280,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.OpenPrice = openPrice
 			position.OpenTime = time.Unix(0, tick.TimeStamp)
 			if err := s.router.Post(bus.PositionOpenedEvent, *position); err != nil {
-				s.logger.Warn("unable to post position opened event", zap.Error(err))
+				slog.Warn("unable to post position opened event", "error", err)
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
 		case common.PendingClose:
@@ -294,13 +291,13 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			s.balance = s.balance.Add(position.NetProfit)
 			s.audit.AddClosedPosition(*position)
 			if err := s.router.Post(bus.PositionClosedEvent, *position); err != nil {
-				s.logger.Warn("unable to post position closed event", zap.Error(err))
+				slog.Warn("unable to post position closed event", "error", err)
 			}
 		default:
 			s.calcPositionProfits(position, closePrice)
 			s.equity = s.equity.Add(position.NetProfit)
 			if err := s.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
-				s.logger.Warn("unable to post position pnl updated event", zap.Error(err))
+				slog.Warn("unable to post position pnl updated event", "error", err)
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
 		}

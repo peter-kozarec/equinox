@@ -3,12 +3,13 @@ package ctrader
 import (
 	"context"
 	"encoding/hex"
-	"github.com/gorilla/websocket"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
+	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"google.golang.org/protobuf/proto"
 )
 
 var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
@@ -31,8 +32,7 @@ var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
 }
 
 type connection struct {
-	conn   *websocket.Conn
-	logger *zap.Logger
+	conn *websocket.Conn
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -45,12 +45,11 @@ type connection struct {
 	subscribers   map[openapi.ProtoOAPayloadType][]chan *openapi.ProtoMessage
 }
 
-func newConnection(conn *websocket.Conn, logger *zap.Logger) *connection {
+func newConnection(conn *websocket.Conn) *connection {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &connection{
 		conn:        conn,
-		logger:      logger,
 		ctx:         ctx,
 		ctxCancel:   cancel,
 		writeChan:   make(chan *openapi.ProtoMessage, 100),
@@ -78,16 +77,16 @@ func (c *connection) read() {
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
-				c.logger.Warn("cannot read data", zap.Error(err))
+				slog.Warn("cannot read data", "error", err)
 				time.Sleep(1 * time.Second) // prevent tight loop
 				return
 			}
 
 			var msg openapi.ProtoMessage
 			if err := proto.Unmarshal(message, &msg); err != nil {
-				c.logger.Warn("unmarshal failed",
-					zap.String("raw", hex.EncodeToString(message)),
-					zap.Error(err))
+				slog.Warn("unmarshal failed",
+					"raw", hex.EncodeToString(message),
+					"error", err)
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
@@ -95,9 +94,9 @@ func (c *connection) read() {
 			payloadType := openapi.ProtoOAPayloadType(*msg.PayloadType) // #nosec G115
 			_, isStream := streamMessageTypes[payloadType]
 
-			c.logger.Debug("read",
-				zap.String("type", payloadType.String()),
-				zap.String("payload", hex.EncodeToString(msg.GetPayload())))
+			slog.Debug("read",
+				"type", payloadType.String(),
+				"payload", hex.EncodeToString(msg.GetPayload()))
 
 			if isStream {
 				c.subscribersMu.RLock()
@@ -130,18 +129,18 @@ func (c *connection) write() {
 				return // channel closed — stop writing
 			}
 
-			c.logger.Debug("write",
-				zap.String("type", openapi.ProtoOAPayloadType(msg.GetPayloadType()).String()), // #nosec G115
-				zap.String("payload", hex.EncodeToString(msg.GetPayload())))
+			slog.Debug("write",
+				"type", openapi.ProtoOAPayloadType(msg.GetPayloadType()).String(), // #nosec G115
+				"payload", hex.EncodeToString(msg.GetPayload()))
 
 			data, err := proto.Marshal(msg)
 			if err != nil {
-				c.logger.Warn("failed to marshal message", zap.Error(err))
+				slog.Warn("failed to marshal message", "error", err)
 				continue
 			}
 
 			if err = c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-				c.logger.Warn("failed to write to connection", zap.Error(err))
+				slog.Warn("failed to write to connection", "error", err)
 				time.Sleep(1 * time.Second) // prevent tight loop
 				continue
 			}

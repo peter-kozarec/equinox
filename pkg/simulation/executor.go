@@ -7,12 +7,9 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type Executor struct {
-	logger    *zap.Logger
 	simulator *Simulator
 	reader    *mapper.Reader[mapper.BinaryTick]
 
@@ -25,9 +22,8 @@ type Executor struct {
 	lastErr    error
 }
 
-func NewExecutor(logger *zap.Logger, simulator *Simulator, reader *mapper.Reader[mapper.BinaryTick], from, to time.Time) *Executor {
+func NewExecutor(simulator *Simulator, reader *mapper.Reader[mapper.BinaryTick], from, to time.Time) *Executor {
 	return &Executor{
-		logger:    logger,
 		simulator: simulator,
 		reader:    reader,
 		from:      from.UnixNano(),

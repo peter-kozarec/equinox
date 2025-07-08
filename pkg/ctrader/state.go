@@ -4,21 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 	"sync"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"google.golang.org/protobuf/proto"
 )
 
 type State struct {
 	router *bus.Router
-	logger *zap.Logger
 
 	instrument common.Instrument
 	barPeriod  time.Duration
@@ -34,10 +35,9 @@ type State struct {
 	equity      fixed.Point
 }
 
-func NewState(router *bus.Router, logger *zap.Logger, instrument common.Instrument, barPeriod time.Duration) *State {
+func NewState(router *bus.Router, instrument common.Instrument, barPeriod time.Duration) *State {
 	return &State{
 		router:      router,
-		logger:      logger,
 		instrument:  instrument,
 		barPeriod:   barPeriod,
 		postBalance: true, // Post balance on first poll, then only when position is closed
@@ -49,7 +49,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 
 	err := proto.Unmarshal(msg.GetPayload(), &v)
 	if err != nil {
-		state.logger.Warn("unable to unmarshal spots event", zap.Error(err))
+		slog.Warn("unable to unmarshal spots event", "error", err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	if err := state.router.Post(bus.TickEvent, internalTick); err != nil {
-		state.logger.Warn("unable to post tick event", zap.Error(err))
+		slog.Warn("unable to post tick event", "error", err)
 		return
 	} else {
 		state.lastTick = internalTick
@@ -93,7 +93,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 
 	if lastInternalBarTimeStamp != 0 && lastBarTimeStamp != lastInternalBarTimeStamp { // New bar has came, propagate old one
 		if err := state.router.Post(bus.BarEvent, state.lastBar); err != nil {
-			state.logger.Warn("unable to post bar event", zap.Error(err))
+			slog.Warn("unable to post bar event", "error", err)
 			return
 		}
 	}
@@ -114,7 +114,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 	var v openapi.ProtoOAExecutionEvent
 
 	if err := proto.Unmarshal(msg.GetPayload(), &v); err != nil {
-		state.logger.Warn("unable to unmarshal execution event", zap.Error(err))
+		slog.Warn("unable to unmarshal execution event", "error", err)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 				state.openPositions = append(state.openPositions[:idx], state.openPositions[idx+1:]...)
 
 				if err := state.router.Post(bus.PositionClosedEvent, *internalPosition); err != nil {
-					state.logger.Warn("unable to post position closed event", zap.Error(err))
+					slog.Warn("unable to post position closed event", "error", err)
 				}
 
 				state.balanceMu.Lock()
@@ -154,7 +154,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 				return
 			}
 		}
-		state.logger.Warn("position not found", zap.Int64("id", position.GetPositionId()))
+		slog.Warn("position not found", "id", position.GetPositionId())
 
 	} else if position.GetPositionStatus() == openapi.ProtoOAPositionStatus_POSITION_STATUS_OPEN {
 		// This can be only open
@@ -175,7 +175,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		state.openPositions = append(state.openPositions, internalPosition)
 
 		if err := state.router.Post(bus.PositionOpenedEvent, internalPosition); err != nil {
-			state.logger.Warn("unable to post position opened event", zap.Error(err))
+			slog.Warn("unable to post position opened event", "error", err)
 			return
 		}
 	}
@@ -247,11 +247,11 @@ func (state *State) StartBalancePolling(parentCtx context.Context, client *Clien
 				if err != nil {
 					// Distinguish between timeout and other errors for better debugging
 					if errors.Is(balanceCtx.Err(), context.DeadlineExceeded) {
-						state.logger.Warn("balance poll timed out",
-							zap.Duration("timeout", requestTimeout),
-							zap.Error(err))
+						slog.Warn("balance poll timed out",
+							"timeout", requestTimeout,
+							"error", err)
 					} else {
-						state.logger.Warn("unable to poll balance", zap.Error(err))
+						slog.Warn("unable to poll balance", "error", err)
 					}
 				} else {
 					state.setBalance(balance)
@@ -261,7 +261,7 @@ func (state *State) StartBalancePolling(parentCtx context.Context, client *Clien
 			}
 		}
 
-		state.logger.Debug("balance polling stopped", zap.Error(parentCtx.Err()))
+		slog.Debug("balance polling stopped", "error", parentCtx.Err())
 	}()
 }
 
@@ -284,7 +284,7 @@ func (state *State) calcPnL() {
 		// Only post event if profit changed
 		if !oldProfit.Eq(position.NetProfit) {
 			if err := state.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
-				state.logger.Warn("unable to post position updated event", zap.Error(err))
+				slog.Warn("unable to post position updated event", "error", err)
 			}
 		}
 	}
@@ -305,7 +305,7 @@ func (state *State) calcEquity() {
 
 	if !oldEquity.Eq(state.equity) {
 		if err := state.router.Post(bus.EquityEvent, state.equity); err != nil {
-			state.logger.Warn("unable to post equity event", zap.Error(err))
+			slog.Warn("unable to post equity event", "error", err)
 		}
 	}
 }
@@ -316,7 +316,7 @@ func (state *State) setBalance(newBalance fixed.Point) {
 	if state.postBalance {
 		state.postBalance = false
 		if err := state.router.Post(bus.BalanceEvent, state.balance); err != nil {
-			state.logger.Warn("unable to post balance event", zap.Error(err))
+			slog.Warn("unable to post balance event", "error", err)
 		}
 	}
 	state.balanceMu.Unlock()

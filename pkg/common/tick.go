@@ -2,7 +2,6 @@ package common
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type Tick struct {
@@ -19,14 +18,4 @@ func (t Tick) Average() fixed.Point {
 
 func (t Tick) AggregatedVolume() fixed.Point {
 	return t.AskVolume.Add(t.BidVolume)
-}
-
-func (t Tick) Fields() []zap.Field {
-	return []zap.Field{
-		zap.Int64("timestamp", t.TimeStamp),
-		zap.String("ask", t.Ask.String()),
-		zap.String("bid", t.Bid.String()),
-		zap.String("ask_volume", t.AskVolume.String()),
-		zap.String("bid_volume", t.BidVolume.String()),
-	}
 }

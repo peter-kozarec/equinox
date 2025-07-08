@@ -3,28 +3,27 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/common"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"golang.org/x/exp/slog"
 )
 
 type Pushover struct {
 	ctx    context.Context
-	logger *zap.Logger
 	user   string
 	token  string
 	device string
 }
 
-func NewPushover(ctx context.Context, logger *zap.Logger, user, token, device string) *Pushover {
+func NewPushover(ctx context.Context, user, token, device string) *Pushover {
 	return &Pushover{
 		ctx:    ctx,
-		logger: logger,
 		user:   user,
 		token:  token,
 		device: device,
@@ -36,7 +35,7 @@ func (p *Pushover) WithPositionClosed(handler bus.PositionClosedEventHandler) bu
 		go func() {
 			msg := fmt.Sprintf("id = %d\npnl = %s", position.Id.Int64(), position.NetProfit.Rescale(2).String())
 			if err := sendPushoverNotification(p.ctx, p.token, p.user, p.device, "Position Closed", msg); err != nil {
-				p.logger.Error("sendPushoverNotification", zap.Error(err))
+				slog.Error("sendPushoverNotification", "error", err)
 			}
 		}()
 		handler(position)

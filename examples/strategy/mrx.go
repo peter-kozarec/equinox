@@ -8,7 +8,6 @@ import (
 
 	"github.com/peter-kozarec/equinox/pkg/utility/circular"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 var (
@@ -18,7 +17,6 @@ var (
 
 // MrxAdvisor is a test strategy, not meant for production
 type MrxAdvisor struct {
-	logger *zap.Logger
 	router *bus.Router
 
 	lastTick common.Tick
@@ -28,9 +26,8 @@ type MrxAdvisor struct {
 	posOpen bool
 }
 
-func NewMrxAdvisor(logger *zap.Logger, router *bus.Router) *MrxAdvisor {
+func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
 	return &MrxAdvisor{
-		logger:  logger,
 		router:  router,
 		closes:  circular.NewBuffer[fixed.Point](60),
 		zScores: circular.NewBuffer[fixed.Point](60),

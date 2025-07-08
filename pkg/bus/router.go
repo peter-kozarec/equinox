@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type event struct {
@@ -17,8 +17,6 @@ type event struct {
 }
 
 type Router struct {
-	logger *zap.Logger
-
 	// Channels
 	done   chan error
 	events chan event
@@ -42,195 +40,190 @@ type Router struct {
 	dispatchFails uint64
 }
 
-func NewRouter(logger *zap.Logger, eventCapacity int) *Router {
+func NewRouter(eventCapacity int) *Router {
 	return &Router{
-		logger: logger,
 		done:   make(chan error),
 		events: make(chan event, eventCapacity),
 	}
 }
 
-func (router *Router) Post(id EventId, data interface{}) error {
+func (r *Router) Post(id EventId, data interface{}) error {
 	select {
-	case router.events <- event{id, data}:
-		router.postCount++
+	case r.events <- event{id, data}:
+		r.postCount++
 		return nil
 	default:
-		router.postFails++
+		r.postFails++
 		return errors.New("event capacity reached")
 	}
 }
 
-func (router *Router) Exec(ctx context.Context) {
+func (r *Router) Exec(ctx context.Context) {
 
-	router.runTime = 0
-	router.dispatchCount = 0
-	router.dispatchFails = 0
-	router.postCount = 0
-	router.postFails = 0
+	r.runTime = 0
+	r.dispatchCount = 0
+	r.dispatchFails = 0
+	r.postCount = 0
+	r.postFails = 0
 
 	start := time.Now()
 	defer func() {
-		router.runTime += time.Since(start)
+		r.runTime += time.Since(start)
 	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			router.done <- ctx.Err()
+			r.done <- ctx.Err()
 			return
-		case ev := <-router.events:
-			router.dispatchCount++
-			if err := router.dispatch(ev); err != nil {
-				router.dispatchFails++
-				router.logger.Warn("dispatch failed",
-					zap.Error(err),
-					zap.Any("event", ev))
+		case ev := <-r.events:
+			r.dispatchCount++
+			if err := r.dispatch(ev); err != nil {
+				r.dispatchFails++
+				slog.Warn("dispatch failed", "error", err, "event", ev)
 			}
 		}
 	}
 }
 
-func (router *Router) ExecLoop(ctx context.Context, doOnceCb func() error) {
+func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) {
 
-	router.runTime = 0
-	router.dispatchCount = 0
-	router.dispatchFails = 0
-	router.postCount = 0
-	router.postFails = 0
+	r.runTime = 0
+	r.dispatchCount = 0
+	r.dispatchFails = 0
+	r.postCount = 0
+	r.postFails = 0
 
 	start := time.Now()
 	defer func() {
-		router.runTime += time.Since(start)
+		r.runTime += time.Since(start)
 	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			router.done <- ctx.Err()
+			r.done <- ctx.Err()
 			return
-		case ev := <-router.events:
-			router.dispatchCount++
-			if err := router.dispatch(ev); err != nil {
-				router.dispatchFails++
-				router.logger.Warn("dispatch failed",
-					zap.Error(err),
-					zap.Any("event", ev))
+		case ev := <-r.events:
+			r.dispatchCount++
+			if err := r.dispatch(ev); err != nil {
+				r.dispatchFails++
+				slog.Warn("dispatch failed", "error", err, "event", ev)
 			}
 		default:
 			if err := doOnceCb(); err != nil {
-				router.done <- err
+				r.done <- err
 				return
 			}
 		}
 	}
 }
 
-func (router *Router) Done() <-chan error {
-	return router.done
+func (r *Router) Done() <-chan error {
+	return r.done
 }
 
-func (router *Router) PrintStatistics() {
-	router.logger.Info("router statistics",
-		zap.Duration("run_time", router.runTime),
-		zap.Uint64("post_count", router.postCount),
-		zap.Uint64("post_fails", router.postFails),
-		zap.Uint64("dispatch_count", router.dispatchCount),
-		zap.Uint64("dispatch_fails", router.dispatchFails),
-		zap.Float64("throughput", float64(router.postCount)/router.runTime.Seconds()))
+func (r *Router) PrintStatistics() {
+	slog.Info("router statistics",
+		"run_time", r.runTime,
+		"post_count", r.postCount,
+		"post_fails", r.postFails,
+		"dispatch_count", r.dispatchCount,
+		"dispatch_fails", r.dispatchFails,
+		"throughput", float64(r.postCount)/r.runTime.Seconds())
 }
 
-func (router *Router) dispatch(ev event) error {
+func (r *Router) dispatch(ev event) error {
 	switch ev.id {
 	case TickEvent:
 		tick, ok := ev.data.(common.Tick)
 		if !ok {
 			return errors.New("invalid type assertion for tick event")
 		}
-		if router.TickHandler != nil {
-			router.TickHandler(tick)
+		if r.TickHandler != nil {
+			r.TickHandler(tick)
 		} else {
-			router.logger.Debug("tick handler is nil")
+			slog.Debug("tick handler is nil")
 		}
 	case BarEvent:
 		bar, ok := ev.data.(common.Bar)
 		if !ok {
 			return errors.New("invalid type assertion for bar event")
 		}
-		if router.BarHandler != nil {
-			router.BarHandler(bar)
+		if r.BarHandler != nil {
+			r.BarHandler(bar)
 		} else {
-			router.logger.Debug("bar handler is nil")
+			slog.Debug("bar handler is nil")
 		}
 	case EquityEvent:
 		eq, ok := ev.data.(fixed.Point)
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
-		if router.EquityHandler != nil {
-			router.EquityHandler(eq)
+		if r.EquityHandler != nil {
+			r.EquityHandler(eq)
 		} else {
-			router.logger.Debug("equity handler is nil")
+			slog.Debug("equity handler is nil")
 		}
 	case BalanceEvent:
 		bal, ok := ev.data.(fixed.Point)
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
 		}
-		if router.BalanceHandler != nil {
-			router.BalanceHandler(bal)
+		if r.BalanceHandler != nil {
+			r.BalanceHandler(bal)
 		} else {
-			router.logger.Debug("balance handler is nil")
+			slog.Debug("balance handler is nil")
 		}
 	case PositionOpenedEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position opened event")
 		}
-		if router.PositionOpenedHandler != nil {
-			router.PositionOpenedHandler(pos)
+		if r.PositionOpenedHandler != nil {
+			r.PositionOpenedHandler(pos)
 		} else {
-			router.logger.Debug("position opened handler is nil")
+			slog.Debug("position opened handler is nil")
 		}
 	case PositionClosedEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position closed event")
 		}
-		if router.PositionClosedHandler != nil {
-			router.PositionClosedHandler(pos)
+		if r.PositionClosedHandler != nil {
+			r.PositionClosedHandler(pos)
 		} else {
-			router.logger.Debug("position closed handler is nil")
+			slog.Debug("position closed handler is nil")
 		}
 	case PositionPnLUpdatedEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position pnl updated event")
 		}
-		if router.PositionPnLUpdatedHandler != nil {
-			router.PositionPnLUpdatedHandler(pos)
+		if r.PositionPnLUpdatedHandler != nil {
+			r.PositionPnLUpdatedHandler(pos)
 		} else {
-			router.logger.Debug("position pnl updated handler is nil")
+			slog.Debug("position pnl updated handler is nil")
 		}
 	case OrderEvent:
 		order, ok := ev.data.(common.Order)
 		if !ok {
 			return errors.New("invalid type assertion for order event")
 		}
-		if router.OrderHandler != nil {
-			router.OrderHandler(order)
+		if r.OrderHandler != nil {
+			r.OrderHandler(order)
 		} else {
-			router.logger.Debug("order handler is nil")
+			slog.Debug("order handler is nil")
 		}
 	case SignalEvent:
 		sig, ok := ev.data.(common.Signal)
 		if !ok {
 			return errors.New("invalid type assertion for signal event")
 		}
-		if router.SignalHandler != nil {
-			router.SignalHandler(sig)
+		if r.SignalHandler != nil {
+			r.SignalHandler(sig)
 		} else {
-			router.logger.Debug("signal handler is nil")
+			slog.Debug("signal handler is nil")
 		}
 	default:
 		return fmt.Errorf("unsupported event id: %v", ev.id)

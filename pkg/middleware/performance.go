@@ -1,18 +1,17 @@
 package middleware
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/common"
+	"log/slog"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type Performance struct {
-	logger *zap.Logger
-
 	totalTickHandlerDur    time.Duration
 	totalBarHandlerDur     time.Duration
 	totalBalanceHandlerDur time.Duration
@@ -24,10 +23,8 @@ type Performance struct {
 	totalSignalHandlerDur  time.Duration
 }
 
-func NewPerformance(logger *zap.Logger) *Performance {
-	return &Performance{
-		logger: logger,
-	}
+func NewPerformance() *Performance {
+	return &Performance{}
 }
 
 func (p *Performance) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
@@ -104,19 +101,19 @@ func (p *Performance) WithSignal(handler bus.SignalEventHandler) bus.SignalEvent
 
 func (p *Performance) PrintStatistics(t *Telemetry) {
 	if t == nil {
-		p.logger.Warn("Telemetry is nil; cannot compute performance statistics")
+		slog.Warn("Telemetry is nil; cannot compute performance statistics")
 		return
 	}
 
-	var fields []zap.Field
+	var fields []slog.Attr
 
 	// Tick events
 	if t.tickEventCounter > 0 {
 		avgTick := p.totalTickHandlerDur / time.Duration(t.tickEventCounter)
 		if avgTick > 0 {
 			fields = append(fields,
-				zap.Duration("tick_avg_duration", avgTick),
-				zap.Duration("tick_total_duration", p.totalTickHandlerDur),
+				slog.Duration("tick_avg_duration", avgTick),
+				slog.Duration("tick_total_duration", p.totalTickHandlerDur),
 			)
 		}
 	}
@@ -126,8 +123,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgBar := p.totalBarHandlerDur / time.Duration(t.barEventCounter)
 		if avgBar > 0 {
 			fields = append(fields,
-				zap.Duration("bar_avg_duration", avgBar),
-				zap.Duration("bar_total_duration", p.totalBarHandlerDur),
+				slog.Duration("bar_avg_duration", avgBar),
+				slog.Duration("bar_total_duration", p.totalBarHandlerDur),
 			)
 		}
 	}
@@ -137,8 +134,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgBalance := p.totalBalanceHandlerDur / time.Duration(t.balanceEventCounter)
 		if avgBalance > 0 {
 			fields = append(fields,
-				zap.Duration("balance_avg_duration", avgBalance),
-				zap.Duration("balance_total_duration", p.totalBalanceHandlerDur),
+				slog.Duration("balance_avg_duration", avgBalance),
+				slog.Duration("balance_total_duration", p.totalBalanceHandlerDur),
 			)
 		}
 	}
@@ -148,8 +145,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgEquity := p.totalEquityHandlerDur / time.Duration(t.equityEventCounter)
 		if avgEquity > 0 {
 			fields = append(fields,
-				zap.Duration("equity_avg_duration", avgEquity),
-				zap.Duration("equity_total_duration", p.totalEquityHandlerDur),
+				slog.Duration("equity_avg_duration", avgEquity),
+				slog.Duration("equity_total_duration", p.totalEquityHandlerDur),
 			)
 		}
 	}
@@ -159,8 +156,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgPosOpen := p.totalPosOpenHandlerDur / time.Duration(t.positionOpenedEventCounter)
 		if avgPosOpen > 0 {
 			fields = append(fields,
-				zap.Duration("position_open_avg_duration", avgPosOpen),
-				zap.Duration("position_open_total_duration", p.totalPosOpenHandlerDur),
+				slog.Duration("position_open_avg_duration", avgPosOpen),
+				slog.Duration("position_open_total_duration", p.totalPosOpenHandlerDur),
 			)
 		}
 	}
@@ -170,8 +167,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgPosClosed := p.totalPosClosHandlerDur / time.Duration(t.positionClosedEventCounter)
 		if avgPosClosed > 0 {
 			fields = append(fields,
-				zap.Duration("position_closed_avg_duration", avgPosClosed),
-				zap.Duration("position_closed_total_duration", p.totalPosClosHandlerDur),
+				slog.Duration("position_closed_avg_duration", avgPosClosed),
+				slog.Duration("position_closed_total_duration", p.totalPosClosHandlerDur),
 			)
 		}
 	}
@@ -181,8 +178,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgPosPnlUpd := p.totalPosUpdtHandlerDur / time.Duration(t.positionPnLUpdatedEventCounter)
 		if avgPosPnlUpd > 0 {
 			fields = append(fields,
-				zap.Duration("position_pnl_update_avg_duration", avgPosPnlUpd),
-				zap.Duration("position_pnl_update_total_duration", p.totalPosUpdtHandlerDur),
+				slog.Duration("position_pnl_update_avg_duration", avgPosPnlUpd),
+				slog.Duration("position_pnl_update_total_duration", p.totalPosUpdtHandlerDur),
 			)
 		}
 	}
@@ -192,8 +189,8 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgOrder := p.totalOrderHandlerDur / time.Duration(t.orderEventCounter)
 		if avgOrder > 0 {
 			fields = append(fields,
-				zap.Duration("order_avg_duration", avgOrder),
-				zap.Duration("order_total_duration", p.totalOrderHandlerDur),
+				slog.Duration("order_avg_duration", avgOrder),
+				slog.Duration("order_total_duration", p.totalOrderHandlerDur),
 			)
 		}
 	}
@@ -203,10 +200,15 @@ func (p *Performance) PrintStatistics(t *Telemetry) {
 		avgSignal := p.totalSignalHandlerDur / time.Duration(t.signalEventCounter)
 		if avgSignal > 0 {
 			fields = append(fields,
-				zap.Duration("signal_avg_duration", avgSignal),
-				zap.Duration("signal_total_duration", p.totalSignalHandlerDur))
+				slog.Duration("signal_avg_duration", avgSignal),
+				slog.Duration("signal_total_duration", p.totalSignalHandlerDur))
 		}
 	}
 
-	p.logger.Info("performance statistics", fields...)
+	anyFields := make([]any, len(fields))
+	for i, attr := range fields {
+		anyFields[i] = attr
+	}
+
+	slog.Info("performance statistics", anyFields...)
 }

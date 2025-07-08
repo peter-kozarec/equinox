@@ -1,15 +1,14 @@
 package middleware
 
 import (
+	"log/slog"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type Telemetry struct {
-	logger *zap.Logger
-
 	tickEventCounter               int64
 	barEventCounter                int64
 	balanceEventCounter            int64
@@ -21,10 +20,8 @@ type Telemetry struct {
 	signalEventCounter             int64
 }
 
-func NewTelemetry(logger *zap.Logger) *Telemetry {
-	return &Telemetry{
-		logger: logger,
-	}
+func NewTelemetry() *Telemetry {
+	return &Telemetry{}
 }
 
 func (t *Telemetry) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
@@ -91,14 +88,14 @@ func (t *Telemetry) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHa
 }
 
 func (t *Telemetry) PrintStatistics() {
-	t.logger.Info("event statistics",
-		zap.Int64("tick_events", t.tickEventCounter),
-		zap.Int64("bar_events", t.barEventCounter),
-		zap.Int64("balance_events", t.balanceEventCounter),
-		zap.Int64("equity_events", t.equityEventCounter),
-		zap.Int64("position_opened_events", t.positionOpenedEventCounter),
-		zap.Int64("position_closed_events", t.positionClosedEventCounter),
-		zap.Int64("position_pnl_updated_events", t.positionPnLUpdatedEventCounter),
-		zap.Int64("order_events", t.orderEventCounter),
-		zap.Int64("signal_events", t.signalEventCounter))
+	slog.Info("event statistics",
+		"tick_events", t.tickEventCounter,
+		"bar_events", t.barEventCounter,
+		"balance_events", t.balanceEventCounter,
+		"equity_events", t.equityEventCounter,
+		"position_opened_events", t.positionOpenedEventCounter,
+		"position_closed_events", t.positionClosedEventCounter,
+		"position_pnl_updated_events", t.positionPnLUpdatedEventCounter,
+		"order_events", t.orderEventCounter,
+		"signal_events", t.signalEventCounter)
 }

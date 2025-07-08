@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
 	"github.com/peter-kozarec/equinox/pkg/common"
@@ -13,28 +14,25 @@ import (
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 type Client struct {
-	conn   *connection
-	logger *zap.Logger
+	conn *connection
 }
 
-func dial(logger *zap.Logger, host, port string) (*Client, error) {
+func dial(host, port string) (*Client, error) {
 
 	wsConn, _, err := websocket.DefaultDialer.Dial("wss://"+host+":"+port, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	conn := newConnection(wsConn, logger)
+	conn := newConnection(wsConn)
 	conn.start()
 
 	client := &Client{
-		conn:   conn,
-		logger: logger,
+		conn: conn,
 	}
 
 	client.addErrRespHandler()
@@ -43,12 +41,12 @@ func dial(logger *zap.Logger, host, port string) (*Client, error) {
 }
 
 //goland:noinspection GoUnusedExportedFunction
-func DialLive(logger *zap.Logger) (*Client, error) {
-	return dial(logger, "live.ctraderapi.com", "5035")
+func DialLive() (*Client, error) {
+	return dial("live.ctraderapi.com", "5035")
 }
 
-func DialDemo(logger *zap.Logger) (*Client, error) {
-	return dial(logger, "demo.ctraderapi.com", "5035")
+func DialDemo() (*Client, error) {
+	return dial("demo.ctraderapi.com", "5035")
 }
 
 func (client *Client) Close() {
@@ -164,7 +162,7 @@ func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instr
 
 	_, err := subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_SPOT_EVENT, cb)
 	if err != nil {
-		client.logger.Warn("unable to subscribe", zap.Error(err))
+		slog.Warn("unable to subscribe", "error", err)
 	}
 
 	return nil
@@ -263,7 +261,7 @@ func (client *Client) keepAlive(interval time.Duration) {
 				select {
 				case client.conn.writeChan <- msg:
 				default:
-					client.logger.Warn("heartbeat dropped: writeChan full")
+					slog.Warn("heartbeat dropped: writeChan full")
 				}
 			}
 		}
@@ -276,17 +274,17 @@ func (client *Client) addErrRespHandler() {
 		var v openapi.ProtoOAErrorRes
 		err := proto.Unmarshal(message.GetPayload(), &v)
 		if err != nil {
-			client.logger.Warn("unable to unmarshal error response", zap.Error(err))
+			slog.Warn("unable to unmarshal error response", "error", err)
 		}
-		client.logger.Warn("something went wrong", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
+		slog.Warn("something went wrong", "code", v.GetErrorCode(), "description", v.GetDescription())
 	})
 
 	_, _ = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_ORDER_ERROR_EVENT, func(message *openapi.ProtoMessage) {
 		var v openapi.ProtoOAOrderErrorEvent
 		err := proto.Unmarshal(message.GetPayload(), &v)
 		if err != nil {
-			client.logger.Warn("unable to unmarshal order error response", zap.Error(err))
+			slog.Warn("unable to unmarshal order error response", "error", err)
 		}
-		client.logger.Warn("unable to process order event", zap.Any("code", v.GetErrorCode()), zap.Any("description", v.GetDescription()))
+		slog.Warn("unable to process order event", "code", v.GetErrorCode(), "description", v.GetDescription())
 	})
 }

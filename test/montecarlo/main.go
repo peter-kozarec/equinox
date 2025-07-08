@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -15,7 +15,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/simulation"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 const (
@@ -23,15 +22,7 @@ const (
 )
 
 func main() {
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		log.Fatalf("unable to initializing logger: %v", err)
-	}
-	defer func(logger *zap.Logger) {
-		_ = logger.Sync()
-	}(logger)
-
-	router := bus.NewRouter(logger, 1000)
+	router := bus.NewRouter(1000)
 
 	simConf := simulation.Configuration{
 		BarPeriod:        time.Minute,
@@ -42,11 +33,10 @@ func main() {
 		PipSlippage:      fixed.FromInt(10, 5),
 	}
 
-	audit := simulation.NewAudit(logger, time.Minute)
-	sim := simulation.NewSimulator(logger, router, audit, simConf)
+	audit := simulation.NewAudit(time.Minute)
+	sim := simulation.NewSimulator(router, audit, simConf)
 
 	exec := simulation.NewEurUsdMonteCarloTickSimulator(
-		logger,
 		sim,
 		rand.New(rand.NewSource(time.Now().UnixNano())),
 		30*24*time.Hour, // Duration
@@ -62,12 +52,12 @@ func main() {
 	//	logger.Fatal("unable to connect to postgres", zap.Error(err))
 	//}
 
-	telemetry := middleware.NewTelemetry(logger)
-	monitor := middleware.NewMonitor(logger, middleware.MonitorPositionsClosed)
-	performance := middleware.NewPerformance(logger)
+	telemetry := middleware.NewTelemetry()
+	monitor := middleware.NewMonitor(middleware.MonitorPositionsClosed)
+	performance := middleware.NewPerformance()
 	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 
-	advisor := strategy.NewMrxAdvisor(logger, router)
+	advisor := strategy.NewMrxAdvisor(router)
 	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(advisor.NewTick)
 	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar, performance.WithBar)(advisor.NewBar)
 	router.OrderHandler = middleware.Chain(telemetry.WithOrder, monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
@@ -86,12 +76,13 @@ func main() {
 
 	if err := <-router.Done(); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
-			logger.Fatal("unexpected error during execution", zap.Error(err))
+			slog.Error("unexpected error during execution", "error", err)
+			os.Exit(1)
 		}
 	}
 
 	sim.CloseAllOpenPositions()
 
 	report := audit.GenerateReport()
-	report.Print(logger)
+	report.Print()
 }

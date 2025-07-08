@@ -4,13 +4,14 @@ import (
 	"encoding/binary"
 	"encoding/csv"
 	"flag"
-	"github.com/peter-kozarec/equinox/pkg/data/mapper"
-	"go.uber.org/zap"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 )
 
 type Quote struct {
@@ -22,7 +23,6 @@ type Quote struct {
 }
 
 func dumpIt(csvPath string, binFile *os.File) error {
-
 	csvFile, err := os.Open(csvPath)
 	if err != nil {
 		return err
@@ -87,8 +87,7 @@ func dumpIt(csvPath string, binFile *os.File) error {
 	return nil
 }
 
-func dumpAll(symbol string, logger *zap.Logger) error {
-
+func dumpAll(symbol string) error {
 	binFile, err := os.Create(symbol + ".bin")
 	if err != nil {
 		return err
@@ -100,30 +99,24 @@ func dumpAll(symbol string, logger *zap.Logger) error {
 	for i := 2018; i <= 2025; i++ {
 		s := symbol + "_" + strconv.Itoa(i) + ".csv"
 		if err := dumpIt(s, binFile); err != nil {
+			os.Remove(symbol + ".bin")
 			return err
 		}
-		logger.Info("dump finished", zap.String("symbol", symbol), zap.String("file", s))
+		slog.Info("dump finished", "symbol", symbol, "file", s)
 	}
 
 	return nil
 }
 
 func main() {
-	logger, _ := zap.NewProduction()
-	defer func(logger *zap.Logger) {
-		_ = logger.Sync()
-	}(logger)
-
 	symbol := flag.String("symbol", "", "symbol")
 	flag.Parse()
 
 	if *symbol == "" {
-		logger.Fatal("symbol is required")
+		slog.Error("symbol is required")
+	} else if err := dumpAll(*symbol); err != nil {
+		slog.Error("failed to dump", "error", err)
+	} else {
+		slog.Info("done")
 	}
-
-	if err := dumpAll(*symbol, logger); err != nil {
-		logger.Fatal("Failed to dump", zap.Error(err))
-	}
-
-	logger.Info("Done dump")
 }

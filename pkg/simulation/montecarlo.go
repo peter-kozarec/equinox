@@ -1,6 +1,8 @@
 package simulation
 
 import (
+	"log/slog"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 
@@ -8,7 +10,6 @@ import (
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 var (
@@ -16,7 +17,6 @@ var (
 )
 
 type MonteCarloExecutor struct {
-	logger    *zap.Logger
 	simulator *Simulator
 	rng       *rand.Rand
 
@@ -57,7 +57,6 @@ type MonteCarloExecutor struct {
 }
 
 func NewMonteCarloExecutor(
-	logger *zap.Logger,
 	sim *Simulator,
 	rng *rand.Rand,
 	startTime time.Time,
@@ -67,7 +66,6 @@ func NewMonteCarloExecutor(
 	avgTickInterval := time.Duration(333_000_000) // ~333ms default
 
 	return &MonteCarloExecutor{
-		logger:    logger,
 		simulator: sim,
 		rng:       rng,
 
@@ -102,7 +100,6 @@ func NewMonteCarloExecutor(
 	}
 }
 func NewEurUsdMonteCarloTickSimulator(
-	logger *zap.Logger,
 	simulator *Simulator,
 	rng *rand.Rand,
 	duration time.Duration,
@@ -156,7 +153,6 @@ func NewEurUsdMonteCarloTickSimulator(
 
 	// Create the base Monte Carlo executor
 	executor := NewMonteCarloExecutor(
-		logger,
 		simulator,
 		rng,
 		startTime,
@@ -187,15 +183,15 @@ func NewEurUsdMonteCarloTickSimulator(
 	executor.normVolumeDigits = normVolumeDigits
 
 	// Log configuration
-	logger.Debug("EURUSD Monte Carlo Tick Simulator configured",
-		zap.Duration("duration", duration),
-		zap.Float64("mu_annual", mu),
-		zap.Float64("sigma_annual", sigma),
-		zap.Float64("start_price", eurUsdStartPrice),
-		zap.Float64("avg_spread_pips", eurUsdTypicalSpread*100000),
-		zap.Float64("avg_tick_interval_sec", avgTickIntervalSeconds),
-		zap.Int64("estimated_ticks", estimatedTicks),
-		zap.Time("start_time", startTime),
+	slog.Debug("EURUSD Monte Carlo Tick Simulator configured",
+		"duration", duration,
+		"mu_annual", mu,
+		"sigma_annual", sigma,
+		"start_price", eurUsdStartPrice,
+		"avg_spread_pips", eurUsdTypicalSpread*100000,
+		"avg_tick_interval_sec", avgTickIntervalSeconds,
+		"estimated_ticks", estimatedTicks,
+		"start_time", startTime,
 	)
 
 	return executor

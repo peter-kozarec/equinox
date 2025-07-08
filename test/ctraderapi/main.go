@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
-	"go.uber.org/zap"
 
 	"syscall"
 	"time"
@@ -23,36 +23,30 @@ var accountId, _ = strconv.Atoi(os.Getenv("CtAccountId"))
 var accessToken = os.Getenv("CtAccessToken")
 
 func main() {
-	// For development - pretty console output
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer func(logger *zap.Logger) {
-		_ = logger.Sync()
-	}(logger)
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
-	router := bus.NewRouter(logger, 1000)
-	c, err := ctrader.DialDemo(logger)
+	router := bus.NewRouter(1000)
+	c, err := ctrader.DialDemo()
 	if err != nil {
-		logger.Fatal("unable to connect to demo device", zap.Error(err))
+		slog.Error("unable to connect to demo device", "error", err)
+		os.Exit(1)
 	}
-	defer logger.Info("connection closed")
+	defer slog.Info("connection closed")
 	defer c.Close()
 
-	monitor := middleware.NewMonitor(logger, middleware.MonitorOrders|middleware.MonitorPositionsClosed|middleware.MonitorPositionsOpened|middleware.MonitorBars)
-	telemetry := middleware.NewTelemetry(logger)
-	advisor := strategy.NewMrxAdvisor(logger, router)
+	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened | middleware.MonitorBars)
+	telemetry := middleware.NewTelemetry()
+	advisor := strategy.NewMrxAdvisor(router)
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
-		logger.Fatal("unable to authenticate", zap.Error(err))
+		slog.Error("unable to authenticate", "error", err)
+		os.Exit(1)
 	}
 	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router)
 	if err != nil {
-		logger.Fatal("unable to initialize trading session", zap.Error(err))
+		slog.Error("unable to initialize trading session", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize middleware
@@ -71,6 +65,7 @@ func main() {
 	defer telemetry.PrintStatistics()
 
 	if err := <-router.Done(); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Fatal("something unexpected happened", zap.Error(err))
+		slog.Error("something unexpected happened", "error", err)
+		os.Exit(1)
 	}
 }

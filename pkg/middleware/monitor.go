@@ -1,11 +1,12 @@
 package middleware
 
 import (
+	"log/slog"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type MonitorFlags uint16
@@ -25,21 +26,19 @@ const (
 )
 
 type Monitor struct {
-	logger *zap.Logger
-	flags  MonitorFlags
+	flags MonitorFlags
 }
 
-func NewMonitor(logger *zap.Logger, flags MonitorFlags) *Monitor {
+func NewMonitor(flags MonitorFlags) *Monitor {
 	return &Monitor{
-		logger: logger,
-		flags:  flags,
+		flags: flags,
 	}
 }
 
 func (m *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
 	return func(tick common.Tick) {
 		if m.flags&MonitorTicks != 0 {
-			m.logger.Info("event", zap.Any("tick", tick.Fields()))
+			slog.Info("event", "tick", tick)
 		}
 		handler(tick)
 	}
@@ -48,7 +47,7 @@ func (m *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
 func (m *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
 	return func(bar common.Bar) {
 		if m.flags&MonitorBars != 0 {
-			m.logger.Info("event", zap.Any("bar", bar.Fields()))
+			slog.Info("event", "bar", bar)
 		}
 		handler(bar)
 	}
@@ -57,7 +56,7 @@ func (m *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
 func (m *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
 	return func(equity fixed.Point) {
 		if m.flags&MonitorEquity != 0 {
-			m.logger.Info("event", zap.String("equity", equity.String()))
+			slog.Info("event", "equity", equity)
 		}
 		handler(equity)
 	}
@@ -66,7 +65,7 @@ func (m *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHand
 func (m *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
 	return func(balance fixed.Point) {
 		if m.flags&MonitorBalance != 0 {
-			m.logger.Info("event", zap.String("balance", balance.String()))
+			slog.Info("event", "balance", balance)
 		}
 		handler(balance)
 	}
@@ -75,7 +74,7 @@ func (m *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventH
 func (m *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
 	return func(position common.Position) {
 		if m.flags&MonitorPositionsOpened != 0 {
-			m.logger.Info("event", zap.Any("position_open", position.Fields()))
+			slog.Info("event", "position_open", position)
 		}
 		handler(position)
 	}
@@ -84,7 +83,7 @@ func (m *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus
 func (m *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
 	return func(position common.Position) {
 		if m.flags&MonitorPositionsClosed != 0 {
-			m.logger.Info("event", zap.Any("position_closed", position.Fields()))
+			slog.Info("event", "position_closed", position)
 		}
 		handler(position)
 	}
@@ -93,7 +92,7 @@ func (m *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus
 func (m *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
 	return func(position common.Position) {
 		if m.flags&MonitorPositionsPnLUpdated != 0 {
-			m.logger.Info("event", zap.Any("position", position.Fields()))
+			slog.Info("event", "position_update", position)
 		}
 		handler(position)
 	}
@@ -102,7 +101,7 @@ func (m *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHand
 func (m *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
 	return func(order common.Order) {
 		if m.flags&MonitorOrders != 0 {
-			m.logger.Info("event", zap.Any("order", order.Fields()))
+			slog.Info("event", "order", order)
 		}
 		handler(order)
 	}
@@ -111,7 +110,7 @@ func (m *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler
 func (m *Monitor) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
 	return func(signal common.Signal) {
 		if m.flags&MonitorSignals != 0 {
-			m.logger.Info("event", zap.Any("signal", signal.Fields()))
+			slog.Info("event", "signal", signal)
 		}
 		handler(signal)
 	}

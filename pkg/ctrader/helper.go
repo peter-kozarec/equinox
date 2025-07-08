@@ -3,14 +3,13 @@ package ctrader
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-
-	"go.uber.org/zap"
 )
 
 func Authenticate(
@@ -25,7 +24,7 @@ func Authenticate(
 	if err := client.AuthorizeApplication(authAppCtx, appId, appSecret); err != nil {
 		return fmt.Errorf("unable to authorize application: %w", err)
 	}
-	client.logger.Info("application authorized")
+	slog.Info("application authorized")
 
 	authAccCtx, authAccCancel := context.WithTimeout(ctx, time.Second*5)
 	defer authAccCancel()
@@ -33,7 +32,7 @@ func Authenticate(
 	if err := client.AuthorizeAccount(authAccCtx, accountId, accessToken); err != nil {
 		return fmt.Errorf("unable to authorize account: %w", err)
 	}
-	client.logger.Info("account authorized")
+	slog.Info("account authorized")
 
 	return nil
 }
@@ -55,15 +54,15 @@ func InitTradeSession(
 		return nil, fmt.Errorf("unable to get %s symbol info: %w", symbol, err)
 	}
 	symbolInfo.Digits = 5
-	client.logger.Info("info",
-		zap.String("symbol", symbol),
-		zap.Int64("id", symbolInfo.Id),
-		zap.Int("digits", symbolInfo.Digits),
-		zap.String("lot_size", symbolInfo.LotSize.String()),
-		zap.String("denomination_unit", symbolInfo.DenominationUnit))
+	slog.Info("info",
+		"symbol", symbol,
+		"id", symbolInfo.Id,
+		"digits", symbolInfo.Digits,
+		"lot_size", symbolInfo.LotSize.String(),
+		"denomination_unit", symbolInfo.DenominationUnit)
 
 	// Create internal state
-	state := NewState(router, client.logger, symbolInfo, period)
+	state := NewState(router, symbolInfo, period)
 
 	// Load balance
 	balanceContext, balanceCancel := context.WithTimeout(ctx, time.Second)
@@ -71,7 +70,7 @@ func InitTradeSession(
 	if err := state.LoadBalance(balanceContext, client, accountId); err != nil {
 		return nil, fmt.Errorf("unable to load balance: %w", err)
 	}
-	client.logger.Info("account", zap.String("balance", state.balance.String()))
+	slog.Info("account", "balance", state.balance)
 
 	// Load open positions
 	loadPosContext, loadPosCancel := context.WithTimeout(ctx, time.Second)
@@ -80,9 +79,9 @@ func InitTradeSession(
 		return nil, fmt.Errorf("unable to load open positions: %w", err)
 	}
 	if len(state.openPositions) > 0 {
-		client.logger.Info("opened positions present", zap.Int("count", len(state.openPositions)))
+		slog.Info("opened positions present", "count", len(state.openPositions))
 	} else {
-		client.logger.Info("no opened positions")
+		slog.Info("no opened positions")
 	}
 
 	// Subscribe to spot events
@@ -91,18 +90,18 @@ func InitTradeSession(
 	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, period, state.OnSpotsEvent); err != nil {
 		return nil, fmt.Errorf("unable to subscribe to spot changes for %s: %w", symbol, err)
 	}
-	client.logger.Info("subscribed to spot events")
+	slog.Info("subscribed to spot events")
 
 	// Subscribe to execution events
 	_, err = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_EXECUTION_EVENT, state.OnExecutionEvent)
 	if err != nil {
 		return nil, fmt.Errorf("unable to subscribe to execution events: %w", err)
 	}
-	client.logger.Info("subscribed to execution events")
+	slog.Info("subscribed to execution events")
 
 	// Start balance polling
 	state.StartBalancePolling(ctx, client, accountId, time.Second*10)
-	client.logger.Info("started balance polling", zap.Duration("poll_interval", time.Second*10))
+	slog.Info("started balance polling", "poll_interval", time.Second*10)
 
 	// Return callback for making orders
 	return func(order common.Order) {
@@ -112,14 +111,14 @@ func InitTradeSession(
 			defer closeCancel()
 
 			if err := client.ClosePosition(closeContext, accountId, order.PositionId.Int64(), order.Size); err != nil {
-				client.logger.Warn("unable to close position", zap.Error(err))
+				slog.Warn("unable to close position", "error", err)
 			}
 		case common.CmdOpen:
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 
 			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.OrderType); err != nil {
-				client.logger.Warn("unable to open position", zap.Error(err))
+				slog.Warn("unable to open position", "error", err)
 			}
 		default:
 		}

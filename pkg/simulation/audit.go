@@ -1,11 +1,11 @@
 package simulation
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/common"
 	"time"
 
+	"github.com/peter-kozarec/equinox/pkg/common"
+
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"go.uber.org/zap"
 )
 
 type accountSnapshot struct {
@@ -15,17 +15,14 @@ type accountSnapshot struct {
 }
 
 type Audit struct {
-	logger *zap.Logger
-
 	minSnapshotInterval time.Duration
 
 	accountSnapshots []accountSnapshot
 	closedPositions  []common.Position
 }
 
-func NewAudit(logger *zap.Logger, minSnapshotInterval time.Duration) *Audit {
+func NewAudit(minSnapshotInterval time.Duration) *Audit {
 	return &Audit{
-		logger:              logger,
 		minSnapshotInterval: minSnapshotInterval,
 	}
 }

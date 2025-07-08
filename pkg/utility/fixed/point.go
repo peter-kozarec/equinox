@@ -58,6 +58,10 @@ func (p Point) Sqrt() Point       { return Point{must(p.v.Sqrt())} }
 func (p Point) Exp() Point { return Point{must(p.v.Exp())} }
 func (p Point) Log() Point { return Point{must(p.v.Log())} }
 
+func (p Point) MarshalText() ([]byte, error) {
+	return []byte(p.String()), nil
+}
+
 func must(v decimal.Decimal, err error) decimal.Decimal {
 	if err == nil {
 		// Return in the happy path

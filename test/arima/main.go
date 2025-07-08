@@ -51,7 +51,6 @@ func main() {
 	sim := simulation.NewSimulator(router, audit, simConf)
 	exec := simulation.NewExecutor(sim, mp, startTime, endTime)
 
-	telemetry := middleware.NewTelemetry()
 	monitor := middleware.NewMonitor(middleware.MonitorNone)
 	performance := middleware.NewPerformance()
 
@@ -65,8 +64,8 @@ func main() {
 	}
 
 	advisor := strategy.NewArimaAdvisor(router, model)
-	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(middleware.NoopTickHdl)
-	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar, performance.WithBar)(advisor.OnNewBar)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(middleware.NoopTickHdl)
+	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnNewBar)
 
 	if err := exec.LookupStartIndex(); err != nil {
 		slog.Error("unable to lookup start index", "error", err)
@@ -78,9 +77,8 @@ func main() {
 
 	go router.ExecLoop(ctx, exec.DoOnce)
 
-	defer performance.PrintStatistics(telemetry)
+	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
-	defer telemetry.PrintStatistics()
 	defer sim.PrintDetails()
 
 	if err := <-router.Done(); err != nil {

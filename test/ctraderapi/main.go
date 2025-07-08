@@ -36,7 +36,6 @@ func main() {
 	defer c.Close()
 
 	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened | middleware.MonitorBars)
-	telemetry := middleware.NewTelemetry()
 	advisor := strategy.NewMrxAdvisor(router)
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
@@ -50,19 +49,18 @@ func main() {
 	}
 
 	// Initialize middleware
-	router.TickHandler = middleware.Chain(monitor.WithTick, telemetry.WithTick)(advisor.NewTick)
-	router.BarHandler = middleware.Chain(monitor.WithBar, telemetry.WithBar)(advisor.NewBar)
-	router.BalanceHandler = middleware.Chain(monitor.WithBalance, telemetry.WithBalance)(middleware.NoopBalanceHdl)
-	router.EquityHandler = middleware.Chain(monitor.WithEquity, telemetry.WithEquity)(middleware.NoopEquityHdl)
-	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, telemetry.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, telemetry.WithPositionClosed)(advisor.PositionClosed)
-	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, telemetry.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
-	router.OrderHandler = middleware.Chain(monitor.WithOrder, telemetry.WithOrder)(orderHandler)
+	router.TickHandler = middleware.Chain(monitor.WithTick)(advisor.NewTick)
+	router.BarHandler = middleware.Chain(monitor.WithBar)(advisor.NewBar)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance)(middleware.NoopBalanceHdl)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity)(middleware.NoopEquityHdl)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened)(middleware.NoopPosOpnHdl)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed)(advisor.PositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
+	router.OrderHandler = middleware.Chain(monitor.WithOrder)(orderHandler)
 
 	go router.Exec(ctx)
 
 	defer router.PrintStatistics()
-	defer telemetry.PrintStatistics()
 
 	if err := <-router.Done(); err != nil && !errors.Is(err, context.Canceled) {
 		slog.Error("something unexpected happened", "error", err)

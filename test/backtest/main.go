@@ -48,19 +48,18 @@ func main() {
 	sim := simulation.NewSimulator(router, audit, simConf)
 	exec := simulation.NewExecutor(sim, mp, startTime, endTime)
 
-	telemetry := middleware.NewTelemetry()
 	monitor := middleware.NewMonitor(middleware.MonitorPositionsClosed)
 	performance := middleware.NewPerformance()
 
 	advisor := strategy.NewMrxAdvisor(router)
-	router.TickHandler = middleware.Chain(telemetry.WithTick, monitor.WithTick, performance.WithTick)(advisor.NewTick)
-	router.BarHandler = middleware.Chain(telemetry.WithBar, monitor.WithBar, performance.WithBar)(advisor.NewBar)
-	router.OrderHandler = middleware.Chain(telemetry.WithOrder, monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
-	router.PositionOpenedHandler = middleware.Chain(telemetry.WithPositionOpened, monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(telemetry.WithPositionClosed, monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.PositionClosed)
-	router.PositionPnLUpdatedHandler = middleware.Chain(telemetry.WithPositionPnLUpdated, monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
-	router.EquityHandler = middleware.Chain(telemetry.WithEquity, monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
-	router.BalanceHandler = middleware.Chain(telemetry.WithBalance, monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(advisor.NewTick)
+	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.NewBar)
+	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.PositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
 
 	if err := exec.LookupStartIndex(); err != nil {
 		slog.Error("unable to lookup start index", "error", err)
@@ -72,9 +71,8 @@ func main() {
 
 	go router.ExecLoop(ctx, exec.DoOnce)
 
-	defer performance.PrintStatistics(telemetry)
+	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
-	defer telemetry.PrintStatistics()
 	defer sim.PrintDetails()
 
 	if err := <-router.Done(); err != nil {

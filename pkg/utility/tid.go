@@ -21,9 +21,10 @@ const (
 )
 
 var (
-	sequence  atomic.Uint64
-	machineID uint64
-	epoch     = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	sequence      atomic.Uint64
+	machineID     uint64
+	epoch         = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	lastTimestamp atomic.Int64
 )
 
 func init() {
@@ -31,15 +32,29 @@ func init() {
 }
 
 func CreateTraceID() TraceID {
-	timestamp := uint64(time.Now().UnixMilli() - epoch)
-	seq := sequence.Add(1) & maxSequence
+	for {
+		timestamp := time.Now().UnixMilli() - epoch
+		last := lastTimestamp.Load()
 
-	if seq == 0 {
-		time.Sleep(time.Millisecond)
-		timestamp = uint64(time.Now().UnixMilli() - epoch)
+		if timestamp < last {
+			timestamp = last
+		}
+
+		if timestamp == last {
+			seq := sequence.Add(1) & maxSequence
+			if seq != 0 {
+				return (uint64(timestamp) << timestampShift) | (machineID << machineShift) | seq
+			}
+			time.Sleep(time.Millisecond)
+			continue
+		}
+
+		if lastTimestamp.CompareAndSwap(last, timestamp) {
+			sequence.Store(0)
+			seq := sequence.Add(1) & maxSequence
+			return (uint64(timestamp) << timestampShift) | (machineID << machineShift) | seq
+		}
 	}
-
-	return (timestamp << timestampShift) | (machineID << machineShift) | seq
 }
 
 func ParseTraceID(id TraceID) (timestamp time.Time, machine uint64, seq uint64) {

@@ -13,11 +13,12 @@ const (
 )
 
 var (
-	tid = atomic.Uint64{}
+	tid  = atomic.Uint64{}
+	once = sync.Once{}
 )
 
 func CreateTraceID() TraceID {
-	sync.OnceFunc(func() {
+	once.Do(func() {
 		tid.Store(I64ToU64Unsafe(time.Now().UnixMilli()))
 	})
 	return tid.Add(delta)

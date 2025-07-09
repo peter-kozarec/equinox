@@ -1,6 +1,10 @@
 package utility
 
-import "sync/atomic"
+import (
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 type TraceID = uint64
 
@@ -13,5 +17,8 @@ var (
 )
 
 func CreateTraceID() TraceID {
+	sync.OnceFunc(func() {
+		tid.Store(I64ToU64Unsafe(time.Now().UnixMilli()))
+	})
 	return tid.Add(delta)
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCreateTraceID(t *testing.T) {
+func TestUtility_CreateTraceID(t *testing.T) {
 	id1 := CreateTraceID()
 	id2 := CreateTraceID()
 
@@ -18,7 +18,7 @@ func TestCreateTraceID(t *testing.T) {
 	}
 }
 
-func TestCreateTraceIDUniqueness(t *testing.T) {
+func TestUtility_CreateTraceIDUniqueness(t *testing.T) {
 	const n = 10000
 	ids := make(map[TraceID]bool, n)
 
@@ -31,7 +31,7 @@ func TestCreateTraceIDUniqueness(t *testing.T) {
 	}
 }
 
-func TestCreateTraceIDConcurrent(t *testing.T) {
+func TestUtility_CreateTraceIDConcurrent(t *testing.T) {
 	const goroutines = 100
 	const idsPerGoroutine = 1000
 
@@ -64,7 +64,7 @@ func TestCreateTraceIDConcurrent(t *testing.T) {
 	}
 }
 
-func TestCreateTraceIDSequence(t *testing.T) {
+func TestUtility_CreateTraceIDSequence(t *testing.T) {
 	start := CreateTraceID()
 
 	for i := 1; i <= 100; i++ {
@@ -76,13 +76,13 @@ func TestCreateTraceIDSequence(t *testing.T) {
 	}
 }
 
-func BenchmarkCreateTraceID(b *testing.B) {
+func BenchmarkUtility_CreateTraceID(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = CreateTraceID()
 	}
 }
 
-func BenchmarkCreateTraceIDParallel(b *testing.B) {
+func BenchmarkUtility_CreateTraceIDParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_ = CreateTraceID()

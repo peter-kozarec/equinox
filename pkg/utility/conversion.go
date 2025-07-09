@@ -33,6 +33,20 @@ func U32ToI32Unsafe(i uint32) int32 {
 	panic("integer overflow")
 }
 
+func I64ToU64(i int64) (uint64, error) {
+	if i >= 0 {
+		return uint64(i), nil // #nosec G115
+	}
+	return 0, errors.New("integer overflow")
+}
+
+func I64ToU64Unsafe(i int64) uint64 {
+	if i >= 0 {
+		return uint64(i) // #nosec G115
+	}
+	panic("integer overflow")
+}
+
 func U64ToI64(i uint64) (int64, error) {
 	if i <= uint64(math.MaxInt64) {
 		return int64(i), nil // #nosec G115

@@ -133,6 +133,74 @@ func TestUtilityConversion_U32ToI32Unsafe(t *testing.T) {
 	}
 }
 
+func TestUtilityConversion_I64ToU64(t *testing.T) {
+	tests := []struct {
+		input    int64
+		expected uint64
+		hasError bool
+	}{
+		{0, 0, false},
+		{1, 1, false},
+		{math.MaxInt64, uint64(math.MaxInt64), false},
+		{math.MaxInt64 - 1, uint64(math.MaxInt64 - 1), false},
+		{-1, 0, true},
+		{-42, 0, true},
+		{-math.MaxInt64, 0, true},
+		{math.MinInt64, 0, true},
+	}
+
+	for _, tt := range tests {
+		result, err := I64ToU64(tt.input)
+		if tt.hasError {
+			if err == nil {
+				t.Errorf("I64ToU64(%d) expected error, got nil", tt.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("I64ToU64(%d) unexpected error: %v", tt.input, err)
+			}
+			if result != tt.expected {
+				t.Errorf("I64ToU64(%d) = %d, want %d", tt.input, result, tt.expected)
+			}
+		}
+	}
+}
+
+func TestUtilityConversion_I64ToU64Unsafe(t *testing.T) {
+	tests := []struct {
+		input       int64
+		expected    uint64
+		shouldPanic bool
+	}{
+		{0, 0, false},
+		{1, 1, false},
+		{math.MaxInt64, uint64(math.MaxInt64), false},
+		{math.MaxInt64 - 1, uint64(math.MaxInt64 - 1), false},
+		{-1, 0, true},
+		{-100, 0, true},
+		{-math.MaxInt64, 0, true},
+		{math.MinInt64, 0, true},
+	}
+
+	for _, tt := range tests {
+		if tt.shouldPanic {
+			t.Run("panic", func(t *testing.T) {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("I64ToU64Unsafe(%d) expected panic, got none", tt.input)
+					}
+				}()
+				I64ToU64Unsafe(tt.input)
+			})
+		} else {
+			result := I64ToU64Unsafe(tt.input)
+			if result != tt.expected {
+				t.Errorf("I64ToU64Unsafe(%d) = %d, want %d", tt.input, result, tt.expected)
+			}
+		}
+	}
+}
+
 func TestUtilityConversion_U64ToI64(t *testing.T) {
 	tests := []struct {
 		input    uint64
@@ -230,6 +298,33 @@ func TestUtilityConversion_EdgeCases(t *testing.T) {
 		})
 		if panicked != tc.expectedError {
 			t.Errorf("I32ToU32Unsafe(%d) panicked = %v, expectedPanic = %v", tc.value, panicked, tc.expectedError)
+		}
+	}
+
+	i64EdgeCases := []struct {
+		value         int64
+		expectedError bool
+	}{
+		{0, false},
+		{42, false},
+		{9223372036854775807, false},
+		{-1, true},
+		{-9223372036854775808, true},
+	}
+
+	for _, tc := range i64EdgeCases {
+		_, err := I64ToU64(tc.value)
+		if (err != nil) != tc.expectedError {
+			t.Errorf("I64ToU64(%d) error = %v, expectedError = %v", tc.value, err, tc.expectedError)
+		}
+	}
+
+	for _, tc := range i64EdgeCases {
+		panicked := didPanic(func() {
+			_ = I64ToU64Unsafe(tc.value)
+		})
+		if panicked != tc.expectedError {
+			t.Errorf("I64ToU64Unsafe(%d) panicked = %v, expectedPanic = %v", tc.value, panicked, tc.expectedError)
 		}
 	}
 
@@ -353,6 +448,51 @@ func BenchmarkUtilityConversion_MixedInputs_I32(b *testing.B) {
 	b.Run("Unsafe", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_ = I32ToU32Unsafe(inputs[i%len(inputs)])
+		}
+	})
+}
+
+func BenchmarkUtilityConversion_I64ToU64_Safe(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = I64ToU64(int64(i))
+	}
+}
+
+func BenchmarkUtilityConversion_I64ToU64_Overflow(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = I64ToU64(-1)
+	}
+}
+
+func BenchmarkUtilityConversion_I64ToU64Unsafe_Safe(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = I64ToU64Unsafe(int64(i))
+	}
+}
+
+func BenchmarkUtilityConversion_I64ToU64Unsafe_Boundary(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = I64ToU64Unsafe(0x7FFFFFFFFFFFFFFF)
+	}
+}
+
+func BenchmarkUtilityConversion_MixedInputs_I64(b *testing.B) {
+	inputs := []int64{
+		0,
+		42,
+		100,
+		0x7FFFFFFFFFFFFFFF,
+	}
+
+	b.Run("Safe", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, _ = I64ToU64(inputs[i%len(inputs)])
+		}
+	})
+
+	b.Run("Unsafe", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = I64ToU64Unsafe(inputs[i%len(inputs)])
 		}
 	})
 }

@@ -10,49 +10,53 @@ func TestUtility_GetExecutionID(t *testing.T) {
 	id2 := GetExecutionID()
 
 	if id1 != id2 {
-		t.Error("Expected same ExecutionID")
-	}
-
-	if id1.Version() != 7 {
-		t.Errorf("Expected UUID v7, got v%d", id1.Version())
+		t.Errorf("Expected same ExecutionID, got id1=%s, id2=%s", id1, id2)
 	}
 }
 
-func TestUtility_ResetExecutionID(t *testing.T) {
-	oldID := GetExecutionID()
-	newID := ResetExecutionID()
+func TestUtility_GetExecutionIDConsistency(t *testing.T) {
+	id := GetExecutionID()
 
-	if oldID == newID {
-		t.Error("ResetExecutionID didn't change ID")
-	}
-
-	if GetExecutionID() != newID {
-		t.Error("GetExecutionID doesn't return new ID")
+	for i := 0; i < 1000; i++ {
+		if GetExecutionID() != id {
+			t.Errorf("ExecutionID changed unexpectedly")
+		}
 	}
 }
 
 func TestUtility_GetExecutionIDConcurrent(t *testing.T) {
 	const goroutines = 100
+	const callsPerGoroutine = 1000
 
+	ids := make(chan ExecutionID, goroutines*callsPerGoroutine)
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	results := make([]ExecutionID, goroutines)
-
 	for i := 0; i < goroutines; i++ {
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
-			results[idx] = GetExecutionID()
-		}(i)
+			for j := 0; j < callsPerGoroutine; j++ {
+				ids <- GetExecutionID()
+			}
+		}()
 	}
 
 	wg.Wait()
+	close(ids)
 
-	first := results[0]
-	for i, id := range results {
+	first := <-ids
+	for id := range ids {
 		if id != first {
-			t.Errorf("Goroutine %d got different ID", i)
+			t.Errorf("Expected all ExecutionIDs to be %s, got %s", first, id)
 		}
+	}
+}
+
+func TestUtility_GetExecutionIDValid(t *testing.T) {
+	id := GetExecutionID()
+
+	if id == (ExecutionID{}) {
+		t.Error("ExecutionID is zero value")
 	}
 }
 
@@ -60,4 +64,12 @@ func BenchmarkUtility_GetExecutionID(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = GetExecutionID()
 	}
+}
+
+func BenchmarkUtility_GetExecutionIDParallel(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = GetExecutionID()
+		}
+	})
 }

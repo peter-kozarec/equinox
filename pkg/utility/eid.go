@@ -1,32 +1,13 @@
 package utility
 
-import (
-	"github.com/google/uuid"
-	"sync"
-)
+import "github.com/google/uuid"
 
 type ExecutionID = uuid.UUID
 
 var (
-	executionID     ExecutionID
-	executionIDOnce sync.Once
-	executionIDMu   sync.RWMutex
+	eid = uuid.New()
 )
 
 func GetExecutionID() ExecutionID {
-	executionIDOnce.Do(func() {
-		executionID = uuid.Must(uuid.NewV7())
-	})
-
-	executionIDMu.RLock()
-	defer executionIDMu.RUnlock()
-	return executionID
-}
-
-func ResetExecutionID() ExecutionID {
-	executionIDMu.Lock()
-	defer executionIDMu.Unlock()
-
-	executionID = uuid.Must(uuid.NewV7())
-	return executionID
+	return eid
 }

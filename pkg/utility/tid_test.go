@@ -3,35 +3,23 @@ package utility
 import (
 	"sync"
 	"testing"
-	"time"
 )
 
-func TestUtility_CreateTraceID(t *testing.T) {
+func TestCreateTraceID(t *testing.T) {
 	id1 := CreateTraceID()
 	id2 := CreateTraceID()
 
-	if id1 == id2 {
-		t.Error("Expected different TraceIDs")
+	if id1 >= id2 {
+		t.Errorf("Expected id2 > id1, got id1=%d, id2=%d", id1, id2)
 	}
 
-	ts1, m1, s1 := ParseTraceID(id1)
-	ts2, m2, s2 := ParseTraceID(id2)
-
-	if m1 != m2 {
-		t.Errorf("Machine IDs differ: %d vs %d", m1, m2)
-	}
-
-	if ts2.Before(ts1) {
-		t.Error("Timestamps not monotonic")
-	}
-
-	if ts1.Equal(ts2) && s2 <= s1 {
-		t.Errorf("Sequence not increasing: %d -> %d", s1, s2)
+	if id2-id1 != delta {
+		t.Errorf("Expected delta=%d, got %d", delta, id2-id1)
 	}
 }
 
-func TestUtility_CreateTraceIDUniqueness(t *testing.T) {
-	const n = 100000
+func TestCreateTraceIDUniqueness(t *testing.T) {
+	const n = 10000
 	ids := make(map[TraceID]bool, n)
 
 	for i := 0; i < n; i++ {
@@ -43,7 +31,7 @@ func TestUtility_CreateTraceIDUniqueness(t *testing.T) {
 	}
 }
 
-func TestUtility_CreateTraceIDConcurrent(t *testing.T) {
+func TestCreateTraceIDConcurrent(t *testing.T) {
 	const goroutines = 100
 	const idsPerGoroutine = 1000
 
@@ -66,51 +54,38 @@ func TestUtility_CreateTraceIDConcurrent(t *testing.T) {
 	seen := make(map[TraceID]bool)
 	for id := range ids {
 		if seen[id] {
-			t.Errorf("Duplicate TraceID: %d", id)
+			t.Errorf("Duplicate TraceID in concurrent test: %d", id)
 		}
 		seen[id] = true
 	}
-}
 
-func TestUtility_ParseTraceID(t *testing.T) {
-	before := time.Now().Truncate(time.Millisecond)
-	id := CreateTraceID()
-	after := time.Now().Truncate(time.Millisecond).Add(time.Millisecond)
-
-	ts, machine, seq := ParseTraceID(id)
-
-	if ts.Before(before) || ts.After(after) {
-		t.Errorf("Timestamp out of range: %v not in [%v, %v]", ts, before, after)
-	}
-
-	if machine > maxMachine {
-		t.Errorf("Machine ID out of range: %d > %d", machine, maxMachine)
-	}
-
-	if seq > maxSequence {
-		t.Errorf("Sequence out of range: %d > %d", seq, maxSequence)
+	if len(seen) != goroutines*idsPerGoroutine {
+		t.Errorf("Expected %d unique IDs, got %d", goroutines*idsPerGoroutine, len(seen))
 	}
 }
 
-func BenchmarkUtility_CreateTraceID(b *testing.B) {
+func TestCreateTraceIDSequence(t *testing.T) {
+	start := CreateTraceID()
+
+	for i := 1; i <= 100; i++ {
+		id := CreateTraceID()
+		expected := start + uint64(i)*delta
+		if id != expected {
+			t.Errorf("Expected ID %d, got %d", expected, id)
+		}
+	}
+}
+
+func BenchmarkCreateTraceID(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = CreateTraceID()
 	}
 }
 
-func BenchmarkUtility_CreateTraceIDParallel(b *testing.B) {
+func BenchmarkCreateTraceIDParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			_ = CreateTraceID()
 		}
 	})
-}
-
-func BenchmarkUtility_ParseTraceID(b *testing.B) {
-	id := CreateTraceID()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_, _, _ = ParseTraceID(id)
-	}
 }

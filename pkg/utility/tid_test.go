@@ -73,9 +73,9 @@ func TestUtility_CreateTraceIDConcurrent(t *testing.T) {
 }
 
 func TestUtility_ParseTraceID(t *testing.T) {
-	before := time.Now()
+	before := time.Now().Truncate(time.Millisecond)
 	id := CreateTraceID()
-	after := time.Now()
+	after := time.Now().Truncate(time.Millisecond).Add(time.Millisecond)
 
 	ts, machine, seq := ParseTraceID(id)
 

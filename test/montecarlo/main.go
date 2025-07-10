@@ -57,7 +57,7 @@ func main() {
 	//	logger.Fatal("unable to connect to postgres", zap.Error(err))
 	//}
 
-	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened | middleware.MonitorOrdersAccepted)
+	monitor := middleware.NewMonitor(middleware.MonitorAll)
 	performance := middleware.NewPerformance()
 	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 

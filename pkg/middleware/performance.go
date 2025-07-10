@@ -274,6 +274,5 @@ func (p *Performance) PrintStatistics() {
 	}
 
 	// ToDo: Fix this, not printing all fields
-	slog.Info("total fields to log", "count", len(fields))
 	slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
 }

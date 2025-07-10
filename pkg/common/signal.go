@@ -8,7 +8,7 @@ import (
 )
 
 type Signal struct {
-	Source      string              `json:"source,omitempty"`
+	Source      string              `json:"src,omitempty"`
 	Symbol      string              `json:"symbol,omitempty"`
 	ExecutionID utility.ExecutionID `json:"eid,omitempty"`
 	TraceID     utility.TraceID     `json:"tid,omitempty"`

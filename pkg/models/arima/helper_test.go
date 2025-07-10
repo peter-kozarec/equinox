@@ -6,7 +6,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-func Test_SolveLinearSystem(t *testing.T) {
+func TestModel_SolveLinearSystem(t *testing.T) {
 	tests := []struct {
 		name     string
 		A        [][]fixed.Point
@@ -118,7 +118,7 @@ func Test_SolveLinearSystem(t *testing.T) {
 	}
 }
 
-func Test_SolveNormalEquations(t *testing.T) {
+func TestModel_SolveNormalEquations(t *testing.T) {
 	tests := []struct {
 		name string
 		X    [][]fixed.Point
@@ -188,7 +188,7 @@ func Test_SolveNormalEquations(t *testing.T) {
 	}
 }
 
-func Test_BinomialCoefficient(t *testing.T) {
+func TestModel_BinomialCoefficient(t *testing.T) {
 	tests := []struct {
 		n, k     int
 		expected fixed.Point

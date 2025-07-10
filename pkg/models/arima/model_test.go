@@ -8,7 +8,630 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-func TestModel_JarqueBeraTest(t *testing.T) {
+func TestModelArima_CalculateDiagnostics(t *testing.T) {
+	tests := []struct {
+		name            string
+		p, d, q         int
+		includeConstant bool
+		setupModel      func(*Model)
+		checks          []diagnosticCheck
+	}{
+		{
+			name:            "Simple AR(1) model",
+			p:               1,
+			d:               0,
+			q:               0,
+			includeConstant: true,
+			setupModel: func(m *Model) {
+				// Set model parameters
+				m.arParams = []fixed.Point{fixed.FromFloat64(0.5)}
+				m.constant = fixed.FromFloat64(2.0)
+				m.variance = fixed.FromFloat64(1.0)
+
+				// Generate AR(1) series that follows the model
+				// y_t = c + φ(y_{t-1} - μ) + ε_t where μ is the mean
+				series := []float64{2.0} // Start at constant
+				for i := 1; i < 50; i++ {
+					// AR(1): y_t = 2 + 0.5*(y_{t-1} - mean) + noise
+					// For simplicity, using small noise
+					noise := float64(i%5-2) * 0.1
+					prev := series[i-1]
+					next := 2.0 + 0.5*(prev-2.0) + noise
+					series = append(series, next)
+				}
+
+				// Add the generated series
+				for _, val := range series {
+					m.diffData.Add(fixed.FromFloat64(val))
+				}
+			},
+			checks: []diagnosticCheck{
+				{name: "LogLikelihood", validator: func(d ModelDiagnostics) bool {
+					// Log-likelihood should be negative
+					return d.LogLikelihood.Lt(fixed.Zero)
+				}},
+				{name: "AIC", validator: func(d ModelDiagnostics) bool {
+					// AIC = -2*log(L) + 2*k, should be positive
+					return d.AIC.Gt(fixed.Zero)
+				}},
+				{name: "BIC", validator: func(d ModelDiagnostics) bool {
+					// BIC should be greater than AIC (penalty for parameters)
+					return d.BIC.Gt(d.AIC)
+				}},
+				{name: "RMSE", validator: func(d ModelDiagnostics) bool {
+					// RMSE should be positive and reasonable for this well-specified model
+					return d.RMSE.Gt(fixed.Zero) && d.RMSE.Lt(fixed.FromFloat64(3.0))
+				}},
+				{name: "LjungBoxPValue", validator: func(d ModelDiagnostics) bool {
+					// P-value should be between 0 and 1
+					return d.LjungBoxPValue.Gte(fixed.Zero) && d.LjungBoxPValue.Lte(fixed.One)
+				}},
+			},
+		},
+		{
+			name:            "ARMA(1,1) model",
+			p:               1,
+			d:               0,
+			q:               1,
+			includeConstant: false,
+			setupModel: func(m *Model) {
+				m.arParams = []fixed.Point{fixed.FromFloat64(0.7)}
+				m.maParams = []fixed.Point{fixed.FromFloat64(0.3)}
+				m.variance = fixed.FromFloat64(0.5)
+
+				// Generate synthetic data
+				for i := 0; i < 100; i++ {
+					val := math.Sin(float64(i)*0.1) + float64(i%7-3)*0.1
+					m.diffData.Add(fixed.FromFloat64(val))
+				}
+
+				// Do not add residuals manually
+				// Let calculateDiagnostics compute them via calculateCurrentResiduals()
+			},
+			checks: []diagnosticCheck{
+				{name: "AICc", validator: func(d ModelDiagnostics) bool {
+					// AICc should be >= AIC (correction for small samples)
+					return d.AICC.Gte(d.AIC)
+				}},
+				{name: "MAE", validator: func(d ModelDiagnostics) bool {
+					// MAE should be positive and <= RMSE
+					return d.MAE.Gt(fixed.Zero) && d.MAE.Lte(d.RMSE)
+				}},
+				{name: "IsStationary", validator: func(d ModelDiagnostics) bool {
+					// Model should be stationary with these parameters
+					return d.IsStationary
+				}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create model
+			m, err := NewModel(tt.p, tt.d, tt.q, 200)
+			if err != nil {
+				t.Fatalf("Failed to create model: %v", err)
+			}
+
+			m.includeConstant = tt.includeConstant
+			m.estimated = true
+
+			// Setup model with test data
+			tt.setupModel(m)
+
+			// Calculate diagnostics
+			m.calculateDiagnostics()
+
+			// Run checks
+			for _, check := range tt.checks {
+				if !check.validator(m.diagnostics) {
+					t.Errorf("Check '%s' failed", check.name)
+					logDiagnostics(t, m.diagnostics)
+				}
+			}
+		})
+	}
+}
+
+func TestModelArima_CalculateDiagnosticsEdgeCases(t *testing.T) {
+
+	t.Run("All zero actual values for MAPE", func(t *testing.T) {
+		m, _ := NewModel(1, 0, 0, 100)
+		m.arParams = []fixed.Point{fixed.FromFloat64(0.5)}
+		m.variance = fixed.FromFloat64(1.0)
+		m.constant = fixed.Zero
+		m.includeConstant = false
+		m.estimated = true
+
+		// Add all zeros (this will make calculateCurrentResiduals return empty)
+		for i := 0; i < 20; i++ {
+			m.diffData.Add(fixed.Zero)
+		}
+
+		m.calculateDiagnostics()
+
+		// MAPE should be zero when no valid percent errors
+		if !m.diagnostics.MAPE.Eq(fixed.Zero) {
+			t.Errorf("Expected MAPE = 0 with all zero actuals, got %v",
+				m.diagnostics.MAPE.String())
+		}
+	})
+
+	t.Run("High parameter count", func(t *testing.T) {
+		m, _ := NewModel(5, 0, 5, 100)
+		m.arParams = make([]fixed.Point, 5)
+		m.maParams = make([]fixed.Point, 5)
+		for i := 0; i < 5; i++ {
+			m.arParams[i] = fixed.FromFloat64(0.1)
+			m.maParams[i] = fixed.FromFloat64(0.1)
+		}
+		m.variance = fixed.FromFloat64(1.0)
+		m.constant = fixed.FromFloat64(1.0)
+		m.includeConstant = true
+		m.estimated = true
+
+		// Add minimal data (need at least max(p,q) + 1 points)
+		for i := 0; i < 25; i++ {
+			m.diffData.Add(fixed.FromFloat64(float64(i)))
+		}
+
+		m.calculateDiagnostics()
+
+		// AICc correction should be large
+		aiccCorrection := m.diagnostics.AICC.Sub(m.diagnostics.AIC)
+		if aiccCorrection.Lt(fixed.FromFloat64(10)) {
+			t.Errorf("Expected large AICc correction, got %v",
+				aiccCorrection.String())
+		}
+	})
+}
+
+func TestModelArima_CalculateDiagnosticsInformationCriteria(t *testing.T) {
+	// Test relationships between AIC, BIC, and AICc
+	m, _ := NewModel(2, 0, 1, 100)
+	m.arParams = []fixed.Point{fixed.FromFloat64(0.4), fixed.FromFloat64(0.3)}
+	m.maParams = []fixed.Point{fixed.FromFloat64(0.2)}
+	m.constant = fixed.FromFloat64(1.0)
+	m.variance = fixed.FromFloat64(1.0)
+	m.includeConstant = true
+	m.estimated = true
+
+	// Test with different sample sizes
+	sampleSizes := []int{20, 50, 100, 200}
+
+	for _, n := range sampleSizes {
+		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
+			// Clear and add data
+			m.diffData.Clear()
+			m.residuals.Clear()
+
+			for i := 0; i < n; i++ {
+				m.diffData.Add(fixed.FromFloat64(float64(i % 10)))
+				if i > 3 {
+					m.residuals.Add(fixed.FromFloat64(0.1))
+				}
+			}
+
+			m.calculateDiagnostics()
+
+			// Verify relationships
+			// 1. BIC >= AIC for reasonable sample sizes
+			if n > 8 && m.diagnostics.BIC.Lt(m.diagnostics.AIC) {
+				t.Errorf("BIC should be >= AIC for n=%d", n)
+			}
+
+			// 2. AICc >= AIC
+			if m.diagnostics.AICC.Lt(m.diagnostics.AIC) {
+				t.Errorf("AICc should be >= AIC")
+			}
+
+			// 3. As n increases, AICc should approach AIC
+			if n > 100 {
+				diff := m.diagnostics.AICC.Sub(m.diagnostics.AIC)
+				if diff.Gt(fixed.FromFloat64(1.0)) {
+					t.Errorf("AICc-AIC difference too large for n=%d: %v",
+						n, diff.String())
+				}
+			}
+
+			t.Logf("n=%d: AIC=%v, BIC=%v, AICc=%v",
+				n, m.diagnostics.AIC.String(),
+				m.diagnostics.BIC.String(),
+				m.diagnostics.AICC.String())
+		})
+	}
+}
+
+func TestModelArima_CalculateDiagnosticsStationarity(t *testing.T) {
+	tests := []struct {
+		name         string
+		series       []float64
+		arParams     []float64
+		expectStatio bool
+	}{
+		{
+			name:         "Stationary AR(1)",
+			series:       generateAR1Series(100, 0.5, 0, 1),
+			arParams:     []float64{0.5},
+			expectStatio: true,
+		},
+		{
+			name:         "White noise",
+			series:       generateWhiteNoise(100),
+			arParams:     []float64{0.1},
+			expectStatio: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := NewModel(len(tt.arParams), 0, 0, 200)
+
+			// Set parameters
+			for i, param := range tt.arParams {
+				m.arParams[i] = fixed.FromFloat64(param)
+			}
+			m.variance = fixed.FromFloat64(1.0)
+			m.estimated = true
+
+			// Add series
+			for _, val := range tt.series {
+				m.diffData.Add(fixed.FromFloat64(val))
+			}
+
+			m.calculateDiagnostics()
+
+			if m.diagnostics.IsStationary != tt.expectStatio {
+				t.Errorf("Expected stationarity=%v, got %v",
+					tt.expectStatio, m.diagnostics.IsStationary)
+			}
+		})
+	}
+}
+
+func TestModelArima_LjungBoxTest(t *testing.T) {
+	tests := []struct {
+		name        string
+		residuals   []fixed.Point
+		minPValue   float64
+		maxPValue   float64
+		description string
+	}{
+		{
+			name:        "White noise residuals",
+			residuals:   generateWhiteNoiseResiduals(100, 42),
+			minPValue:   0.10,
+			maxPValue:   1.0,
+			description: "White noise should have high p-value (no autocorrelation)",
+		},
+		{
+			name:        "Highly autocorrelated residuals",
+			residuals:   generateAutocorrelatedResiduals(100, 0.9),
+			minPValue:   0.001,
+			maxPValue:   0.01,
+			description: "Highly autocorrelated residuals should have very low p-value",
+		},
+		{
+			name:        "Moderate autocorrelation",
+			residuals:   generateAutocorrelatedResiduals(100, 0.5),
+			minPValue:   0.001,
+			maxPValue:   0.05,
+			description: "Moderately autocorrelated residuals should have low p-value",
+		},
+		{
+			name:        "Alternating pattern",
+			residuals:   generateAlternatingResiduals(100),
+			minPValue:   0.001,
+			maxPValue:   0.05,
+			description: "Alternating pattern should show negative autocorrelation",
+		},
+		{
+			name:        "Too few observations",
+			residuals:   generateWhiteNoiseResiduals(8, 42),
+			minPValue:   1.0,
+			maxPValue:   1.0,
+			description: "Should return 1.0 for n < 10",
+		},
+		{
+			name:        "Exactly 10 observations",
+			residuals:   generateWhiteNoiseResiduals(10, 42),
+			minPValue:   0.01,
+			maxPValue:   1.0,
+			description: "Should compute p-value for n >= 10",
+		},
+		{
+			name:        "Trending residuals",
+			residuals:   generateTrendingResiduals(50),
+			minPValue:   0.001,
+			maxPValue:   0.01,
+			description: "Trending residuals indicate model misspecification",
+		},
+		{
+			name:        "Seasonal pattern",
+			residuals:   generateSeasonalResiduals(48, 12),
+			minPValue:   0.001,
+			maxPValue:   0.05,
+			description: "Seasonal patterns should show autocorrelation",
+		},
+		{
+			name:        "Zero variance",
+			residuals:   generateConstantResiduals(20, 0.0),
+			minPValue:   1.0,
+			maxPValue:   1.0,
+			description: "Zero variance should return 1.0",
+		},
+		{
+			name:        "Small variance",
+			residuals:   generateSmallVarianceResiduals(50),
+			minPValue:   0.001,
+			maxPValue:   1.0,
+			description: "Very small variance residuals",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, _ := NewModel(1, 0, 1, 100)
+			pValue := m.ljungBoxTest(tt.residuals)
+			pValueFloat, _ := pValue.Float64()
+
+			if pValueFloat < tt.minPValue || pValueFloat > tt.maxPValue {
+				t.Errorf("%s: p-value %.4f outside expected range [%.4f, %.4f]",
+					tt.description, pValueFloat, tt.minPValue, tt.maxPValue)
+			}
+
+			t.Logf("%s: p-value = %.4f", tt.name, pValueFloat)
+		})
+	}
+}
+
+func TestModelArima_LjungBoxTestSpecificCases(t *testing.T) {
+	model, _ := NewModel(1, 0, 1, 100)
+
+	t.Run("Perfect white noise", func(t *testing.T) {
+		// Test multiple seeds to account for randomness
+		passCount := 0
+		attempts := 5
+
+		for seed := int64(100); seed < int64(100+attempts); seed++ {
+			residuals := generateWhiteNoiseResiduals(200, seed)
+			pValue := model.ljungBoxTest(residuals)
+
+			if pValue.Gt(fixed.FromFloat64(0.05)) {
+				passCount++
+			}
+		}
+
+		// Expect most attempts to pass
+		if passCount < 3 {
+			t.Errorf("Expected at least 3 out of %d white noise tests to pass, got %d",
+				attempts, passCount)
+		}
+	})
+
+	t.Run("AR(1) residuals with different coefficients", func(t *testing.T) {
+		coefficients := []float64{0.3, 0.5, 0.7, 0.9}
+
+		for _, coef := range coefficients {
+			residuals := generateAutocorrelatedResiduals(100, coef)
+			pValue := model.ljungBoxTest(residuals)
+			pValueFloat, _ := pValue.Float64()
+
+			// Higher coefficient should lead to lower p-value
+			expectedMaxP := 0.10
+			if coef >= 0.7 {
+				expectedMaxP = 0.05
+			}
+			if pValueFloat > expectedMaxP {
+				t.Errorf("AR coefficient %.2f: expected p-value < %.4f, got %.4f",
+					coef, expectedMaxP, pValueFloat)
+			}
+
+			t.Logf("AR coefficient %.2f: p-value = %.4f", coef, pValueFloat)
+		}
+	})
+
+	t.Run("Different lag lengths", func(t *testing.T) {
+		// Generate autocorrelated residuals
+		allResiduals := generateAutocorrelatedResiduals(200, 0.7) // Generate enough for all tests
+
+		// The implementation uses min(10, n/4) for maxLag
+		// Test with different sample sizes to verify this
+		sizes := []int{20, 40, 80, 160}
+
+		for _, size := range sizes {
+			if size > len(allResiduals) {
+				t.Skipf("Skipping size %d, not enough test data", size)
+				continue
+			}
+
+			subset := allResiduals[:size]
+			pValue := model.ljungBoxTest(subset)
+			pValueFloat, _ := pValue.Float64()
+
+			expectedMaxLag := min(10, size/4)
+			t.Logf("Sample size %d (maxLag=%d): p-value = %.4f",
+				size, expectedMaxLag, pValueFloat)
+
+			// Should detect autocorrelation
+			if pValueFloat > 0.05 {
+				t.Errorf("Failed to detect autocorrelation with sample size %d", size)
+			}
+		}
+	})
+
+	t.Run("MA(1) residuals", func(t *testing.T) {
+		// Generate MA(1) process residuals
+		n := 100
+		residuals := make([]fixed.Point, n)
+		theta := 0.6
+
+		// Generate white noise
+		noise := generateWhiteNoiseResiduals(n+1, 123)
+
+		// MA(1): x_t = e_t + theta * e_{t-1}
+		for i := 0; i < n; i++ {
+			residuals[i] = noise[i+1].Add(noise[i].Mul(fixed.FromFloat64(theta)))
+		}
+
+		pValue := model.ljungBoxTest(residuals)
+		pValueFloat, _ := pValue.Float64()
+
+		// MA(1) should show autocorrelation at lag 1
+		if pValueFloat > 0.05 {
+			t.Errorf("Failed to detect MA(1) autocorrelation, p-value = %.4f", pValueFloat)
+		}
+	})
+
+	t.Run("Cyclic pattern", func(t *testing.T) {
+		// Create residuals with a cyclic pattern
+		n := 100
+		residuals := make([]fixed.Point, n)
+
+		for i := 0; i < n; i++ {
+			// Sin wave pattern
+			value := math.Sin(2*math.Pi*float64(i)/10.0) * 0.5
+			residuals[i] = fixed.FromFloat64(value)
+		}
+
+		pValue := model.ljungBoxTest(residuals)
+		pValueFloat, _ := pValue.Float64()
+
+		// Cyclic pattern should be detected
+		if pValueFloat > 0.01 {
+			t.Errorf("Failed to detect cyclic pattern, p-value = %.4f", pValueFloat)
+		}
+	})
+}
+
+func TestModelArima_LjungBoxTestEdgeCases(t *testing.T) {
+	model, _ := NewModel(1, 0, 1, 100)
+
+	t.Run("Single spike with echo", func(t *testing.T) {
+		// A single spike doesn't create autocorrelation
+		// Instead, create a spike with an "echo" effect
+		residuals := make([]fixed.Point, 30)
+		for i := range residuals {
+			residuals[i] = fixed.Zero
+		}
+
+		// Create spikes that show autocorrelation
+		residuals[10] = fixed.FromFloat64(1.0)
+		residuals[11] = fixed.FromFloat64(0.8) // Echo effect
+		residuals[12] = fixed.FromFloat64(0.6)
+
+		residuals[20] = fixed.FromFloat64(-0.9)
+		residuals[21] = fixed.FromFloat64(-0.7) // Another echo
+		residuals[22] = fixed.FromFloat64(-0.5)
+
+		pValue := model.ljungBoxTest(residuals)
+		pValueFloat, _ := pValue.Float64()
+
+		// This pattern should show autocorrelation
+		if pValueFloat > 0.10 {
+			t.Errorf("Expected low p-value for echo pattern, got %.4f", pValueFloat)
+		}
+
+		t.Logf("Echo pattern p-value: %.4f", pValueFloat)
+	})
+
+	t.Run("Very small values", func(t *testing.T) {
+		residuals := make([]fixed.Point, 50)
+		for i := range residuals {
+			// Very small alternating values
+			if i%2 == 0 {
+				residuals[i] = fixed.FromFloat64(1e-10)
+			} else {
+				residuals[i] = fixed.FromFloat64(-1e-10)
+			}
+		}
+
+		pValue := model.ljungBoxTest(residuals)
+		// Should handle small values gracefully
+		pValueFloat, _ := pValue.Float64()
+		if pValueFloat < 0.0 || pValueFloat > 1.0 {
+			t.Errorf("P-value out of valid range: %.4f", pValueFloat)
+		}
+	})
+
+	t.Run("Large sample size", func(t *testing.T) {
+		// Test with a large sample
+		residuals := generateWhiteNoiseResiduals(1000, 999)
+
+		pValue := model.ljungBoxTest(residuals)
+		pValueFloat, _ := pValue.Float64()
+
+		// Should still work correctly with large samples
+		if pValueFloat < 0.01 {
+			t.Errorf("White noise with large sample wrongly rejected, p-value = %.4f", pValueFloat)
+		}
+	})
+
+	t.Run("Boundary sample sizes", func(t *testing.T) {
+		testSizes := []int{9, 10, 11, 39, 40, 41}
+
+		for _, size := range testSizes {
+			residuals := generateWhiteNoiseResiduals(size, int64(size))
+			pValue := model.ljungBoxTest(residuals)
+			pValueFloat, _ := pValue.Float64()
+
+			if size < 10 {
+				if pValueFloat != 1.0 {
+					t.Errorf("Size %d: expected p-value 1.0, got %.4f", size, pValueFloat)
+				}
+			} else {
+				if pValueFloat < 0.0 || pValueFloat > 1.0 {
+					t.Errorf("Size %d: p-value %.4f out of range", size, pValueFloat)
+				}
+			}
+		}
+	})
+}
+
+func TestModelArima_LjungBoxTestNumericalStability(t *testing.T) {
+	model, _ := NewModel(1, 0, 1, 100)
+
+	t.Run("Extreme values", func(t *testing.T) {
+		residuals := make([]fixed.Point, 50)
+		for i := range residuals {
+			if i%10 == 0 {
+				// Extreme values
+				residuals[i] = fixed.FromFloat64(1000.0)
+			} else {
+				residuals[i] = fixed.FromFloat64(0.1)
+			}
+		}
+
+		pValue := model.ljungBoxTest(residuals)
+		pValueFloat, _ := pValue.Float64()
+
+		// Should handle extreme values without overflow
+		if math.IsNaN(pValueFloat) || math.IsInf(pValueFloat, 0) {
+			t.Error("Numerical instability with extreme values")
+		}
+
+		// Should detect the pattern
+		if pValueFloat > 0.05 {
+			t.Errorf("Failed to detect extreme value pattern, p-value = %.4f", pValueFloat)
+		}
+	})
+
+	t.Run("Near-zero variance", func(t *testing.T) {
+		residuals := make([]fixed.Point, 30)
+		for i := range residuals {
+			// All values very close to mean
+			residuals[i] = fixed.FromFloat64(0.00001 * float64(i%3-1))
+		}
+
+		pValue := model.ljungBoxTest(residuals)
+		// Should handle gracefully
+		if pValue.Lt(fixed.Zero) {
+			t.Error("Negative p-value with near-zero variance")
+		}
+	})
+}
+
+func TestModelArima_JarqueBeraTest(t *testing.T) {
 	tests := []struct {
 		name        string
 		residuals   []fixed.Point
@@ -83,7 +706,7 @@ func TestModel_JarqueBeraTest(t *testing.T) {
 	}
 }
 
-func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
+func TestModelArima_JarqueBeraTestSpecificCases(t *testing.T) {
 	model, _ := NewModel(1, 0, 1, 100)
 
 	t.Run("Perfect normal distribution", func(t *testing.T) {
@@ -92,7 +715,7 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 		attempts := 5
 
 		for seed := int64(12345); seed < int64(12345+attempts); seed++ {
-			residuals := []fixed.Point{}
+			var residuals []fixed.Point
 			n := 500 // Larger sample size
 
 			// Use linear congruential generator
@@ -131,8 +754,8 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 	})
 
 	t.Run("Extreme skewness", func(t *testing.T) {
-		// Create highly skewed distribution (exponential-like)
-		residuals := []fixed.Point{}
+		// Create a highly skewed distribution (exponential-like)
+		var residuals []fixed.Point
 		for i := 0; i < 50; i++ {
 			if i < 45 {
 				residuals = append(residuals, fixed.FromFloat64(0.1))
@@ -151,7 +774,7 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 
 	t.Run("Extreme kurtosis", func(t *testing.T) {
 		// Create distribution with high kurtosis (heavy tails)
-		residuals := []fixed.Point{}
+		var residuals []fixed.Point
 		for i := 0; i < 50; i++ {
 			if i%10 == 0 {
 				// Extreme values
@@ -175,7 +798,7 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 
 	t.Run("Bimodal distribution", func(t *testing.T) {
 		// Create bimodal distribution
-		residuals := []fixed.Point{}
+		var residuals []fixed.Point
 		for i := 0; i < 100; i++ {
 			if i < 50 {
 				// First mode around -1
@@ -187,7 +810,7 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 		}
 
 		pValue := model.jarqueBeraTest(residuals)
-		// Bimodal distribution should fail normality test
+		// Bimodal distribution should fail the normality test
 		if pValue.Gt(fixed.FromFloat64(0.1)) {
 			pf, _ := pValue.Float64()
 			t.Errorf("Bimodal distribution should have low p-value, got %.4f", pf)
@@ -195,7 +818,7 @@ func TestModel_JarqueBeraTestSpecificCases(t *testing.T) {
 	})
 }
 
-func TestModel_JarqueBeraTestImplementation(t *testing.T) {
+func TestModelArima_JarqueBeraTestImplementation(t *testing.T) {
 	m, _ := NewModel(1, 0, 1, 100)
 
 	t.Run("Known skewness and kurtosis", func(t *testing.T) {
@@ -240,7 +863,7 @@ func TestModel_JarqueBeraTestImplementation(t *testing.T) {
 	})
 }
 
-func TestModel_CheckParameterValidity(t *testing.T) {
+func TestModelArima_CheckParameterValidity(t *testing.T) {
 	tests := []struct {
 		name        string
 		p, q        int
@@ -451,7 +1074,7 @@ func TestModel_CheckParameterValidity(t *testing.T) {
 	}
 }
 
-func TestModel_CheckParameterValidityEdgeCases(t *testing.T) {
+func TestModelArima_CheckParameterValidityEdgeCases(t *testing.T) {
 
 	t.Run("Very small variance", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 0, 100)
@@ -510,7 +1133,7 @@ func TestModel_CheckParameterValidityEdgeCases(t *testing.T) {
 	})
 }
 
-func TestModel_CheckResidualProperties(t *testing.T) {
+func TestModelArima_CheckResidualProperties(t *testing.T) {
 	tests := []struct {
 		name           string
 		residuals      []fixed.Point
@@ -573,7 +1196,7 @@ func TestModel_CheckResidualProperties(t *testing.T) {
 				fixed.FromFloat64(0.12), fixed.FromFloat64(-0.08), fixed.FromFloat64(0.18),
 				fixed.FromFloat64(-0.14), fixed.FromFloat64(0.05), fixed.FromFloat64(-0.1),
 			},
-			ljungBoxPValue: fixed.FromFloat64(0.05), // Exactly at threshold
+			ljungBoxPValue: fixed.FromFloat64(0.05), // Exactly at a threshold
 			shouldError:    false,                   // Should pass as it's not < 0.05
 		},
 	}
@@ -611,7 +1234,7 @@ func TestModel_CheckResidualProperties(t *testing.T) {
 	}
 }
 
-func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
+func TestModelArima_CheckResidualPropertiesIntegration(t *testing.T) {
 
 	t.Run("Well-specified model", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 0, 50)
@@ -621,7 +1244,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 
 		// Generate pseudo-random white noise residuals with low autocorrelation
 		// Using a linear congruential generator for reproducibility
-		residuals := []fixed.Point{}
+		var residuals []fixed.Point
 		a := int64(1664525)
 		c := int64(1013904223)
 		mod := int64(1) << 32
@@ -634,7 +1257,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 			residuals = append(residuals, fixed.FromFloat64(val))
 		}
 
-		// Generate series from these residuals
+		// Generate a series from these residuals
 		series := []fixed.Point{fixed.Zero}
 		for i := 0; i < len(residuals); i++ {
 			// AR(1) process: y_t = 0.5 * y_{t-1} + e_t
@@ -642,7 +1265,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 			series = append(series, value)
 		}
 
-		// Add data to model
+		// Add data to a model
 		for _, val := range series {
 			m.diffData.Add(val)
 		}
@@ -697,13 +1320,13 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 			series = append(series, value)
 		}
 
-		// Add data to model
+		// Add data to a model
 		for _, val := range series {
 			m.diffData.Add(val)
 		}
 
-		// Calculate residuals with wrong model
-		residuals := []fixed.Point{}
+		// Calculate residuals with a wrong model
+		var residuals []fixed.Point
 		for i := 1; i < len(series); i++ {
 			fitted := series[i-1].Mul(fixed.FromFloat64(0.3))
 			residual := series[i].Sub(fitted)
@@ -726,7 +1349,7 @@ func TestModel_CheckResidualPropertiesIntegration(t *testing.T) {
 	})
 }
 
-func TestModel_CheckResidualPropertiesEdgeCases(t *testing.T) {
+func TestModelArima_CheckResidualPropertiesEdgeCases(t *testing.T) {
 	t.Run("Nil diagnostics", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 1, 100)
 		m.estimated = true
@@ -769,7 +1392,7 @@ func TestModel_CheckResidualPropertiesEdgeCases(t *testing.T) {
 	})
 }
 
-func TestModel_InitializeForecastState(t *testing.T) {
+func TestModelArima_InitializeForecastState(t *testing.T) {
 	tests := []struct {
 		name                  string
 		p, d, q               int
@@ -889,7 +1512,7 @@ func TestModel_InitializeForecastState(t *testing.T) {
 				}
 			}
 
-			// Check forecasted diffs is initialized empty
+			// Check if forecasted diffs are initialized empty
 			if len(state.forecastedDiffs) != 0 {
 				t.Errorf("Expected empty forecastedDiffs, got %d elements",
 					len(state.forecastedDiffs))
@@ -898,7 +1521,7 @@ func TestModel_InitializeForecastState(t *testing.T) {
 	}
 }
 
-func TestModel_InitializeForecastStateWithCircularBufferWrap(t *testing.T) {
+func TestModelArima_InitializeForecastStateWithCircularBufferWrap(t *testing.T) {
 
 	m, _ := NewModel(1, 0, 1, 50)
 	m.variance = fixed.FromFloat64(1.0)
@@ -920,7 +1543,7 @@ func TestModel_InitializeForecastStateWithCircularBufferWrap(t *testing.T) {
 		t.Errorf("Expected 5 raw values, got %d", len(state.rawValues))
 	}
 
-	// Check that we have the most recent values in oldest-to-newest order
+	// Check that we have the most recent values in an oldest-to-newest order
 	expectedRaw := []float64{50, 51, 52, 53, 54}
 	for i, expected := range expectedRaw {
 		if !state.rawValues[i].Eq(fixed.FromFloat64(expected)) {
@@ -939,7 +1562,7 @@ func TestModel_InitializeForecastStateWithCircularBufferWrap(t *testing.T) {
 	}
 }
 
-func TestModel_InitializeForecastStateConsistency(t *testing.T) {
+func TestModelArima_InitializeForecastStateConsistency(t *testing.T) {
 
 	m, _ := NewModel(2, 1, 1, 50)
 	m.variance = fixed.FromFloat64(1.5)
@@ -985,7 +1608,7 @@ func TestModel_InitializeForecastStateConsistency(t *testing.T) {
 	}
 }
 
-func TestModel_ForecastOneStep(t *testing.T) {
+func TestModelArima_ForecastOneStep(t *testing.T) {
 	tests := []struct {
 		name             string
 		p, d, q          int
@@ -1055,7 +1678,7 @@ func TestModel_ForecastOneStep(t *testing.T) {
 			rawSeries:       []fixed.Point{fixed.FromFloat64(10), fixed.FromFloat64(12), fixed.FromFloat64(11), fixed.FromFloat64(14)},
 			residuals:       []fixed.Point{fixed.Zero, fixed.FromFloat64(0.5), fixed.FromFloat64(-0.2)},
 			step:            0,
-			// Forecast in differenced scale, then undifference
+			// Forecast in a differenced scale, then undifference
 			// The exact calculation depends on PointBuffer's mean calculation
 			// and the undifferencing process
 			expectedForecast: fixed.FromFloat64(16.1),
@@ -1088,7 +1711,7 @@ func TestModel_ForecastOneStep(t *testing.T) {
 			// Initialize forecast state
 			state := m.initializeForecastState()
 
-			// Perform one-step forecast
+			// Perform a one-step forecast
 			result, err := m.forecastOneStep(state, tt.step)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
@@ -1125,8 +1748,8 @@ func TestModel_ForecastOneStep(t *testing.T) {
 	}
 }
 
-func TestModel_ForecastOneStepMultiStep(t *testing.T) {
-	// Test multi-step forecasting with state updates
+func TestModelArima_ForecastOneStepMultiStep(t *testing.T) {
+	// Test multistep forecasting with state updates
 	m, _ := NewModel(1, 0, 1, 100)
 	m.arParams = []fixed.Point{fixed.FromFloat64(0.6)}
 	m.maParams = []fixed.Point{fixed.FromFloat64(0.3)}
@@ -1156,7 +1779,7 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 
 	state := m.initializeForecastState()
 
-	// Test that multi-step forecasts use previous forecasts
+	// Test that multistep forecasts use previous forecasts
 	prevForecast := fixed.Zero
 	for step := 0; step < 3; step++ {
 		result, err := m.forecastOneStep(state, step)
@@ -1164,13 +1787,13 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 			t.Fatalf("Step %d: Unexpected error: %v", step, err)
 		}
 
-		// Store in forecast cache (mimicking Forecast method)
+		// Store in a forecast cache (mimicking Forecast method)
 		m.forecastCache = append(m.forecastCache, result.PointForecast)
 
 		// Update state
 		m.appendZeroResidual(state)
 
-		// For AR models, subsequent forecasts should depend on previous ones
+		// For AR models, later forecasts should depend on previous ones
 		if step > 0 && m.p > 0 {
 			// The forecast should be different from the previous one
 			// (unless the model predicts constant values)
@@ -1179,7 +1802,7 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 			}
 		}
 
-		// Variance should increase with horizon
+		// Variance should increase with a horizon
 		if step > 0 {
 			currentVar := m.calculateForecastVariance(step + 1)
 			prevVar := m.calculateForecastVariance(step)
@@ -1195,7 +1818,7 @@ func TestModel_ForecastOneStepMultiStep(t *testing.T) {
 	}
 }
 
-func TestModel_ForecastOneStepEdgeCases(t *testing.T) {
+func TestModelArima_ForecastOneStepEdgeCases(t *testing.T) {
 	t.Run("No constant term", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 0, 100)
 		m.arParams = []fixed.Point{fixed.FromFloat64(0.7)}
@@ -1251,14 +1874,14 @@ func TestModel_ForecastOneStepEdgeCases(t *testing.T) {
 			t.Fatalf("Unexpected error: %v", err)
 		}
 
-		// With zero variance, all intervals should collapse to point forecast
+		// With zero variances, all intervals should collapse to the point forecast
 		if !result.StandardError.Eq(fixed.Zero) {
 			t.Error("Standard error should be zero with zero variance")
 		}
 	})
 }
 
-func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
+func TestModelArima_ForecastOneStepWithDifferencing(t *testing.T) {
 	// Test ARIMA(1,2,1) - with d=2 differencing
 	m, _ := NewModel(1, 2, 1, 100)
 	m.arParams = []fixed.Point{fixed.FromFloat64(0.3)}
@@ -1269,7 +1892,7 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 	m.estimated = true
 
 	// Create a trending series
-	rawSeries := []fixed.Point{}
+	var rawSeries []fixed.Point
 	for i := 0; i < 20; i++ {
 		// Quadratic trend plus noise
 		val := float64(i*i)/10.0 + float64(i) + 10.0
@@ -1280,16 +1903,16 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 	// Manually calculate second differences for verification
 	// This would normally be done by AddPoint
 	for i := 2; i < len(rawSeries); i++ {
-		d1_curr := rawSeries[i].Sub(rawSeries[i-1])
-		d1_prev := rawSeries[i-1].Sub(rawSeries[i-2])
-		d2 := d1_curr.Sub(d1_prev)
+		d1Curr := rawSeries[i].Sub(rawSeries[i-1])
+		d1Prev := rawSeries[i-1].Sub(rawSeries[i-2])
+		d2 := d1Curr.Sub(d1Prev)
 		m.diffData.Add(d2)
 		m.residuals.Add(fixed.FromFloat64(0.1)) // Small residuals
 	}
 
 	state := m.initializeForecastState()
 
-	// Store previous forecasts in cache (needed for undifferencing)
+	// Store previous forecasts in the cache (needed for undifferencing)
 	m.forecastCache = []fixed.Point{}
 
 	result, err := m.forecastOneStep(state, 0)
@@ -1307,7 +1930,7 @@ func TestModel_ForecastOneStepWithDifferencing(t *testing.T) {
 		lastValue.String(), result.PointForecast.String())
 }
 
-func TestModel_CalculateForecastVariance(t *testing.T) {
+func TestModelArima_CalculateForecastVariance(t *testing.T) {
 	tests := []struct {
 		name     string
 		p        int
@@ -1392,7 +2015,7 @@ func TestModel_CalculateForecastVariance(t *testing.T) {
 	}
 }
 
-func TestModel_CalculateForecastVarianceAR2(t *testing.T) {
+func TestModelArima_CalculateForecastVarianceAR2(t *testing.T) {
 	// More complex AR(2) case
 	m, _ := NewModel(2, 0, 0, 100)
 	m.arParams = []fixed.Point{fixed.FromFloat64(0.4), fixed.FromFloat64(0.3)}
@@ -1428,7 +2051,7 @@ func TestModel_CalculateForecastVarianceAR2(t *testing.T) {
 				psiWeights := m.calculatePsiWeights(tt.step)
 				t.Logf("Psi weights: %v", psiWeights)
 
-				// Calculate sum of squared psi
+				// Calculate sums of squared psi
 				sumSquaredPsi := fixed.One
 				for i := 0; i < tt.step-1 && i < len(psiWeights); i++ {
 					sumSquaredPsi = sumSquaredPsi.Add(psiWeights[i].Mul(psiWeights[i]))
@@ -1441,7 +2064,7 @@ func TestModel_CalculateForecastVarianceAR2(t *testing.T) {
 	}
 }
 
-func TestModel_CalculateForecastVarianceLargeHorizon(t *testing.T) {
+func TestModelArima_CalculateForecastVarianceLargeHorizon(t *testing.T) {
 	// Test that variance converges for stationary AR(1)
 	m, _ := NewModel(1, 0, 0, 100)
 	m.arParams = []fixed.Point{fixed.FromFloat64(0.5)}
@@ -1461,7 +2084,7 @@ func TestModel_CalculateForecastVarianceLargeHorizon(t *testing.T) {
 	}
 }
 
-func TestModel_CalculateForecastVarianceEdgeCases(t *testing.T) {
+func TestModelArima_CalculateForecastVarianceEdgeCases(t *testing.T) {
 	t.Run("Zero variance model", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 1, 100)
 		m.arParams = []fixed.Point{fixed.FromFloat64(0.5)}
@@ -1481,7 +2104,7 @@ func TestModel_CalculateForecastVarianceEdgeCases(t *testing.T) {
 		m.maParams = []fixed.Point{fixed.Zero, fixed.Zero}
 		m.variance = fixed.FromFloat64(2.0)
 
-		// With all zero parameters, psi weights are all zero
+		// With all zero parameters, psi weights are all zero.
 		// So forecast variance should equal model variance for all horizons
 		for step := 1; step <= 5; step++ {
 			result := m.calculateForecastVariance(step)
@@ -1492,7 +2115,7 @@ func TestModel_CalculateForecastVarianceEdgeCases(t *testing.T) {
 	})
 }
 
-func TestModel_CalculatePsiWeights(t *testing.T) {
+func TestModelArima_CalculatePsiWeights(t *testing.T) {
 	tests := []struct {
 		name     string
 		p        int // AR order
@@ -1592,7 +2215,7 @@ func TestModel_CalculatePsiWeights(t *testing.T) {
 	}
 }
 
-func TestModel_CalculatePsiWeightsEdgeCases(t *testing.T) {
+func TestModelArima_CalculatePsiWeightsEdgeCases(t *testing.T) {
 	t.Run("Large maxLag with small model", func(t *testing.T) {
 		m, _ := NewModel(1, 0, 1, 100)
 		m.arParams = []fixed.Point{fixed.FromFloat64(0.5)}
@@ -1633,7 +2256,7 @@ func TestModel_CalculatePsiWeightsEdgeCases(t *testing.T) {
 	})
 }
 
-func TestModel_GetRawSeriesInOrder(t *testing.T) {
+func TestModelArima_GetRawSeriesInOrder(t *testing.T) {
 	m, _ := NewModel(1, 1, 1, 50)
 
 	// Add test data
@@ -1649,7 +2272,7 @@ func TestModel_GetRawSeriesInOrder(t *testing.T) {
 		m.rawData.Add(p)
 	}
 
-	// Get series in order
+	// Get the series in order
 	result := m.getRawSeriesInOrder()
 
 	// Verify length
@@ -1665,7 +2288,7 @@ func TestModel_GetRawSeriesInOrder(t *testing.T) {
 	}
 }
 
-func TestModel_GetDiffSeriesInOrder(t *testing.T) {
+func TestModelArima_GetDiffSeriesInOrder(t *testing.T) {
 	m, _ := NewModel(1, 1, 1, 50)
 
 	// Add test data to diffData buffer
@@ -1680,7 +2303,7 @@ func TestModel_GetDiffSeriesInOrder(t *testing.T) {
 		m.diffData.Add(p)
 	}
 
-	// Get series in order
+	// Get the series in order
 	result := m.getDiffSeriesInOrder()
 
 	// Verify length
@@ -1696,7 +2319,7 @@ func TestModel_GetDiffSeriesInOrder(t *testing.T) {
 	}
 }
 
-func TestModel_GetSeriesInOrderEmpty(t *testing.T) {
+func TestModelArima_GetSeriesInOrderEmpty(t *testing.T) {
 	m, _ := NewModel(1, 1, 1, 50)
 
 	// Test empty buffers
@@ -1781,4 +2404,170 @@ func generateConstantResiduals(n int, value float64) []fixed.Point {
 		residuals[i] = fixed.FromFloat64(value)
 	}
 	return residuals
+}
+
+func generateWhiteNoiseResiduals(n int, seed int64) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	// Use Box-Muller transform for better white noise
+	a := int64(1664525)
+	c := int64(1013904223)
+	m := int64(1) << 32
+	x := seed
+
+	for i := 0; i < n; i += 2 {
+		// Generate two uniform random numbers
+		x = (a*x + c) % m
+		u1 := float64(x) / float64(m)
+
+		x = (a*x + c) % m
+		u2 := float64(x) / float64(m)
+
+		// Box-Muller transform
+		z0 := math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2) * 0.3
+		z1 := math.Sqrt(-2*math.Log(u1)) * math.Sin(2*math.Pi*u2) * 0.3
+
+		residuals[i] = fixed.FromFloat64(z0)
+		if i+1 < n {
+			residuals[i+1] = fixed.FromFloat64(z1)
+		}
+	}
+
+	// Shuffle to break any patterns
+	for i := n - 1; i > 0; i-- {
+		x = (a*x + c) % m
+		j := int(x) % (i + 1)
+		residuals[i], residuals[j] = residuals[j], residuals[i]
+	}
+
+	return residuals
+}
+
+func generateAutocorrelatedResiduals(n int, rho float64) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	// Start with white noise
+	noise := generateWhiteNoiseResiduals(n, 12345)
+
+	// AR(1) process: x_t = rho * x_{t-1} + e_t
+	residuals[0] = noise[0]
+	for i := 1; i < n; i++ {
+		residuals[i] = residuals[i-1].Mul(fixed.FromFloat64(rho)).Add(
+			noise[i].Mul(fixed.FromFloat64(math.Sqrt(1 - rho*rho))))
+	}
+
+	return residuals
+}
+
+func generateAlternatingResiduals(n int) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	for i := 0; i < n; i++ {
+		if i%2 == 0 {
+			residuals[i] = fixed.FromFloat64(0.5)
+		} else {
+			residuals[i] = fixed.FromFloat64(-0.5)
+		}
+	}
+
+	return residuals
+}
+
+func generateTrendingResiduals(n int) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	for i := 0; i < n; i++ {
+		// Linear trend plus noise
+		trend := float64(i)/float64(n) - 0.5
+		noise := (float64(i%7) - 3.0) * 0.05
+		residuals[i] = fixed.FromFloat64(trend + noise)
+	}
+
+	return residuals
+}
+
+func generateSeasonalResiduals(n int, period int) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	for i := 0; i < n; i++ {
+		seasonal := math.Sin(2 * math.Pi * float64(i) / float64(period))
+		noise := (float64(i%5) - 2.0) * 0.1
+		residuals[i] = fixed.FromFloat64(seasonal*0.5 + noise)
+	}
+
+	return residuals
+}
+
+func generateSmallVarianceResiduals(n int) []fixed.Point {
+	residuals := make([]fixed.Point, n)
+
+	// Pattern that creates small variance but still has structure
+	for i := 0; i < n; i++ {
+		// Repeating a pattern with very small values
+		if i%4 == 0 {
+			residuals[i] = fixed.FromFloat64(0.0001)
+		} else if i%4 == 1 {
+			residuals[i] = fixed.FromFloat64(0.0002)
+		} else if i%4 == 2 {
+			residuals[i] = fixed.FromFloat64(-0.0001)
+		} else {
+			residuals[i] = fixed.FromFloat64(-0.0002)
+		}
+	}
+
+	return residuals
+}
+
+type diagnosticCheck struct {
+	name      string
+	validator func(ModelDiagnostics) bool
+}
+
+func logDiagnostics(t *testing.T, d ModelDiagnostics) {
+	t.Logf("Diagnostics:")
+	t.Logf("  LogLikelihood: %v", d.LogLikelihood.String())
+	t.Logf("  AIC: %v", d.AIC.String())
+	t.Logf("  BIC: %v", d.BIC.String())
+	t.Logf("  AICC: %v", d.AICC.String())
+	t.Logf("  RMSE: %v", d.RMSE.String())
+	t.Logf("  MAE: %v", d.MAE.String())
+	t.Logf("  MAPE: %v", d.MAPE.String())
+	t.Logf("  LjungBoxPValue: %v", d.LjungBoxPValue.String())
+	t.Logf("  JarqueBeraTest: %v", d.JarqueBeraTest.String())
+	t.Logf("  IsStationary: %v", d.IsStationary)
+}
+
+func generateAR1Series(n int, phi, constant, variance float64) []float64 {
+	series := make([]float64, n)
+	series[0] = constant
+
+	// Simple random number generator
+	a := int64(1664525)
+	c := int64(1013904223)
+	m := int64(1) << 32
+	x := int64(42)
+
+	for i := 1; i < n; i++ {
+		x = (a*x + c) % m
+		noise := (float64(x)/float64(m) - 0.5) * 2 * math.Sqrt(variance)
+		series[i] = constant + phi*(series[i-1]-constant) + noise
+	}
+
+	return series
+}
+
+func generateWhiteNoise(n int) []float64 {
+	series := make([]float64, n)
+
+	a := int64(1664525)
+	c := int64(1013904223)
+	m := int64(1) << 32
+	x := int64(12345)
+
+	for i := 0; i < n; i++ {
+		x = (a*x + c) % m
+		series[i] = (float64(x)/float64(m) - 0.5) * 2
+	}
+
+	return series
 }

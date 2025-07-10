@@ -1,43 +1,44 @@
 package common
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-type State int
-type PositionId int64
-
-func (pId PositionId) Int64() int64 {
-	return int64(pId)
-}
+type PositionSide int
+type PositionStatus string
+type PositionId = int64
 
 const (
-	Opened State = iota
-	PendingOpen
-	Closed
-	PendingClose
+	PositionSideLong PositionSide = iota
+	PositionSideShort
+)
+
+const (
+	PositionStatusOpen   PositionStatus = "open"
+	PositionStatusClosed PositionStatus = "closed"
 )
 
 type Position struct {
-	Id          PositionId
-	State       State
-	GrossProfit fixed.Point
-	NetProfit   fixed.Point
-	OpenPrice   fixed.Point
-	ClosePrice  fixed.Point
-	OpenTime    time.Time
-	CloseTime   time.Time
-	Size        fixed.Point
-	StopLoss    fixed.Point
-	TakeProfit  fixed.Point
-}
-
-func (p Position) IsLong() bool {
-	return p.Size.Gt(fixed.Zero)
-}
-
-func (p Position) IsShort() bool {
-	return p.Size.Lt(fixed.Zero)
+	Source        string              `json:"source,omitempty"`
+	Symbol        string              `json:"symbol,omitempty"`
+	ExecutionID   utility.ExecutionID `json:"eid,omitempty"`
+	TraceID       utility.TraceID     `json:"tid,omitempty"`
+	OrderTraceIDs []utility.TraceID   `json:"order_tid,omitempty"`
+	TimeStamp     time.Time           `json:"ts"`
+	Id            PositionId          `json:"id"`
+	Status        PositionStatus      `json:"status"`
+	Side          PositionSide        `json:"side"`
+	GrossProfit   fixed.Point         `json:"gross_profit"`
+	NetProfit     fixed.Point         `json:"net_profit"`
+	OpenPrice     fixed.Point         `json:"open_price"`
+	ClosePrice    fixed.Point         `json:"close_price,omitempty"`
+	OpenTime      time.Time           `json:"open_time"`
+	CloseTime     time.Time           `json:"close_time,omitempty"`
+	Size          fixed.Point         `json:"size"`
+	StopLoss      fixed.Point         `json:"stop_loss,omitempty"`
+	TakeProfit    fixed.Point         `json:"take_profit,omitempty"`
+	Commission    fixed.Point         `json:"commission"`
 }

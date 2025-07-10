@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -17,27 +18,31 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-const (
-	StartTime = "2020-01-01 00:00:00"
-)
+var (
+	barPeriod    = time.Minute
+	startBalance = fixed.FromInt(10000, 0)
 
-func main() {
-	router := bus.NewRouter(1000)
-
-	simConf := simulation.Configuration{
-		BarPeriod:        time.Minute,
+	instrument = common.Instrument{
+		Symbol:           "EURUSD",
 		PipSize:          fixed.FromInt(1, 4),
 		ContractSize:     fixed.FromInt(100000, 0),
 		CommissionPerLot: fixed.FromInt(3, 0),
-		StartBalance:     fixed.FromInt(10000, 0),
 		PipSlippage:      fixed.FromInt(10, 5),
 	}
+)
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	router := bus.NewRouter(1000)
 
 	audit := simulation.NewAudit(time.Minute)
-	sim := simulation.NewSimulator(router, audit, simConf)
+	sim := simulation.NewSimulator(router, audit, instrument, startBalance)
+	aggregator := simulation.NewAggregator(barPeriod, instrument, router)
 
 	exec := simulation.NewEurUsdMonteCarloTickSimulator(
-		sim,
+		router,
+		instrument.Symbol,
 		rand.New(rand.NewSource(time.Now().UnixNano())),
 		30*24*time.Hour, // Duration
 		0.1607143264,    // Your mu
@@ -52,14 +57,21 @@ func main() {
 	//	logger.Fatal("unable to connect to postgres", zap.Error(err))
 	//}
 
-	monitor := middleware.NewMonitor(middleware.MonitorPositionsClosed)
+	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened | middleware.MonitorOrdersAccepted)
 	performance := middleware.NewPerformance()
 	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 
 	advisor := strategy.NewMrxAdvisor(router)
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(advisor.NewTick)
+
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(tick common.Tick) {
+		sim.OnTick(tick)
+		aggregator.OnTick(tick)
+		advisor.OnTick(tick)
+	})
 	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.NewBar)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
+	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(middleware.NoopOrderAccHdl)
+	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(middleware.NoopOrderRjctHdl)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
 	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.PositionClosed)
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
@@ -70,7 +82,6 @@ func main() {
 
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
-	defer sim.PrintDetails()
 
 	if err := <-router.Done(); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {

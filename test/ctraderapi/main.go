@@ -14,7 +14,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 
 	"syscall"
-	"time"
 )
 
 var appId = os.Getenv("CtAppId")
@@ -23,6 +22,8 @@ var accountId, _ = strconv.Atoi(os.Getenv("CtAccountId"))
 var accessToken = os.Getenv("CtAccessToken")
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 	defer cancel()
 
@@ -35,21 +36,21 @@ func main() {
 	defer slog.Info("connection closed")
 	defer c.Close()
 
-	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsClosed | middleware.MonitorPositionsOpened | middleware.MonitorBars)
+	monitor := middleware.NewMonitor(middleware.MonitorEquity)
 	advisor := strategy.NewMrxAdvisor(router)
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		slog.Error("unable to authenticate", "error", err)
 		os.Exit(1)
 	}
-	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", time.Minute, router)
+	orderHandler, err := ctrader.InitTradeSession(ctx, c, int64(accountId), "BTCUSD", router)
 	if err != nil {
 		slog.Error("unable to initialize trading session", "error", err)
 		os.Exit(1)
 	}
 
 	// Initialize middleware
-	router.TickHandler = middleware.Chain(monitor.WithTick)(advisor.NewTick)
+	router.TickHandler = middleware.Chain(monitor.WithTick)(advisor.OnTick)
 	router.BarHandler = middleware.Chain(monitor.WithBar)(advisor.NewBar)
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance)(middleware.NoopBalanceHdl)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity)(middleware.NoopEquityHdl)

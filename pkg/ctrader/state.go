@@ -18,14 +18,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	componentName = "ctrader"
+)
+
+const (
+	// Internal position statuses
+	positionStatusPendingOpen common.PositionStatus = "pending-open"
+)
+
 type State struct {
 	router *bus.Router
 
 	instrument common.Instrument
-	barPeriod  time.Duration
 
 	lastTick common.Tick
-	lastBar  common.Bar
 
 	openPositions []common.Position
 
@@ -35,11 +42,10 @@ type State struct {
 	equity      fixed.Point
 }
 
-func NewState(router *bus.Router, instrument common.Instrument, barPeriod time.Duration) *State {
+func NewState(router *bus.Router, instrument common.Instrument) *State {
 	return &State{
 		router:      router,
 		instrument:  instrument,
-		barPeriod:   barPeriod,
 		postBalance: true, // Post balance on first poll, then only when position is closed
 	}
 }
@@ -54,59 +60,42 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := common.Tick{}
+	internalTick.Symbol = state.instrument.Symbol
+	internalTick.Source = componentName
+	internalTick.ExecutionId = utility.GetExecutionID()
+	internalTick.TraceID = utility.CreateTraceID()
 	internalTick.Ask = fixed.FromUint64(v.GetAsk(), state.instrument.Digits)
 	internalTick.Bid = fixed.FromUint64(v.GetBid(), state.instrument.Digits)
-	internalTick.TimeStamp = v.GetTimestamp() * 1000
+	internalTick.TimeStamp = time.UnixMilli(v.GetTimestamp())
 
 	if internalTick.Ask.Eq(fixed.Zero) {
 		if state.lastTick.Ask.Eq(fixed.Zero) {
 			return
 		}
 		internalTick.Ask = state.lastTick.Ask
+	} else {
+		// Tick volume, basically when ask changes, this is one
+		internalTick.AskVolume = fixed.One
 	}
+
 	if internalTick.Bid.Eq(fixed.Zero) {
 		if state.lastTick.Bid.Eq(fixed.Zero) {
 			return
 		}
 		internalTick.Bid = state.lastTick.Bid
+	} else {
+		// Tick volume, basically when bid changes, this is one
+		internalTick.BidVolume = fixed.One
 	}
 
 	if err := state.router.Post(bus.TickEvent, internalTick); err != nil {
 		slog.Warn("unable to post tick event", "error", err)
 		return
-	} else {
-		state.lastTick = internalTick
 	}
 
-	// Calculate PnL for open positions
+	state.lastTick = internalTick
 	state.calcPnL()
-	// Calculate equity from unrealized PnL
 	state.calcEquity()
-
-	if len(v.GetTrendbar()) == 0 {
-		return
-	}
-
-	lastBar := v.GetTrendbar()[len(v.GetTrendbar())-1]
-	lastInternalBarTimeStamp := state.lastBar.TimeStamp
-	lastBarTimeStamp := int64(lastBar.GetUtcTimestampInMinutes()) * int64(time.Minute)
-
-	if lastInternalBarTimeStamp != 0 && lastBarTimeStamp != lastInternalBarTimeStamp { // New bar has came, propagate old one
-		if err := state.router.Post(bus.BarEvent, state.lastBar); err != nil {
-			slog.Warn("unable to post bar event", "error", err)
-			return
-		}
-	}
-
-	var internalBar common.Bar
-	internalBar.Period = state.barPeriod
-	internalBar.TimeStamp = lastBarTimeStamp
-	internalBar.Low = fixed.FromInt64(lastBar.GetLow(), state.instrument.Digits)
-	internalBar.High = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaHigh(), state.instrument.Digits))
-	internalBar.Close = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaClose(), state.instrument.Digits))
-	internalBar.Open = internalBar.Low.Add(fixed.FromUint64(lastBar.GetDeltaOpen(), state.instrument.Digits))
-	internalBar.Volume = fixed.FromInt64(lastBar.GetVolume(), 0)
-	state.lastBar = internalBar
 }
 
 func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
@@ -129,16 +118,18 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		for idx := range state.openPositions {
 			internalPosition := &state.openPositions[idx]
 
-			if internalPosition.Id.Int64() == position.GetPositionId() {
+			if internalPosition.Id == position.GetPositionId() {
 
-				internalPosition.State = common.Closed
+				internalPosition.Status = common.PositionStatusClosed
 				internalPosition.CloseTime = time.UnixMilli(utility.U64ToI64Unsafe(position.TradeData.GetCloseTimestamp()))
 
 				// This is just approximation - not real closing price
-				if internalPosition.IsLong() {
+				if internalPosition.Side == common.PositionSideLong {
 					internalPosition.ClosePrice = state.lastTick.Bid
-				} else if internalPosition.IsShort() {
+				} else if internalPosition.Side == common.PositionSideShort {
 					internalPosition.ClosePrice = state.lastTick.Ask
+				} else {
+					panic("invalid internal position side")
 				}
 
 				// Remove the closed position
@@ -160,16 +151,24 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		// This can be only open
 		var internalPosition common.Position
 
-		internalPosition.Id = common.PositionId(position.GetPositionId())
+		internalPosition.Symbol = state.instrument.Symbol
+		internalPosition.Source = componentName
+		internalPosition.ExecutionID = utility.GetExecutionID()
+		internalPosition.TraceID = utility.CreateTraceID()
+		internalPosition.TimeStamp = time.Now()
+		internalPosition.Side = common.PositionSideLong
+		internalPosition.Id = position.GetPositionId()
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
 		internalPosition.OpenPrice = fixed.FromFloat64(position.GetPrice())
-		internalPosition.State = common.PendingOpen
+		internalPosition.Status = positionStatusPendingOpen
 		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
-		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2)
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.instrument.ContractSize)
+		internalPosition.Commission = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
+			internalPosition.Side = common.PositionSideShort
 		}
 
 		state.openPositions = append(state.openPositions, internalPosition)
@@ -192,16 +191,24 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 
 		var internalPosition common.Position
 
-		internalPosition.Id = common.PositionId(position.GetPositionId())
+		internalPosition.Symbol = state.instrument.Symbol
+		internalPosition.Source = componentName
+		internalPosition.ExecutionID = utility.GetExecutionID()
+		internalPosition.TraceID = utility.CreateTraceID()
+		internalPosition.TimeStamp = time.Now()
+		internalPosition.Side = common.PositionSideLong
+		internalPosition.Id = position.GetPositionId()
 		internalPosition.OpenTime = time.UnixMilli(*position.TradeData.OpenTimestamp)
 		internalPosition.OpenPrice = fixed.FromFloat64(position.GetPrice())
-		internalPosition.State = common.Opened
+		internalPosition.Status = positionStatusPendingOpen
 		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
-		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2)
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.instrument.ContractSize)
+		internalPosition.Commission = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
+			internalPosition.Side = common.PositionSideShort
 		}
 
 		state.openPositions = append(state.openPositions, internalPosition)
@@ -223,7 +230,6 @@ func (state *State) LoadBalance(ctx context.Context, client *Client, accountId i
 }
 
 func (state *State) StartBalancePolling(parentCtx context.Context, client *Client, accountId int64, pollInterval time.Duration) {
-	// Ensure minimum timeout of 5 seconds, but allow longer for slow poll intervals
 	requestTimeout := 5 * time.Second
 	if pollInterval > 10*time.Second {
 		requestTimeout = pollInterval / 2
@@ -273,16 +279,18 @@ func (state *State) calcPnL() {
 		oldProfit := position.NetProfit
 
 		// This is without commissions
-		if position.IsLong() {
-			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.instrument.LotSize).Mul(position.Size.Abs())
-		} else if position.IsShort() {
-			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.instrument.LotSize).Mul(position.Size.Abs())
+		if position.Side == common.PositionSideLong {
+			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.instrument.ContractSize).Mul(position.Size.Abs())
+			position.GrossProfit = position.NetProfit.Add(position.Commission)
+		} else if position.Side == common.PositionSideShort {
+			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.instrument.ContractSize).Mul(position.Size.Abs())
+			position.GrossProfit = position.NetProfit.Sub(position.Commission)
+		} else {
+			panic("invalid position side")
 		}
 
-		// ToDo: Calc gross profit as well
-
-		// Only post event if profit changed
 		if !oldProfit.Eq(position.NetProfit) {
+			position.TimeStamp = time.Now()
 			if err := state.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
 				slog.Warn("unable to post position updated event", "error", err)
 			}
@@ -291,12 +299,9 @@ func (state *State) calcPnL() {
 }
 
 func (state *State) calcEquity() {
-
-	// Reset equity
 	oldEquity := state.equity
 	state.getBalance(&state.equity)
 
-	// Add unrealized PnL to equity
 	for idx := range state.openPositions {
 		position := &state.openPositions[idx]
 
@@ -304,7 +309,13 @@ func (state *State) calcEquity() {
 	}
 
 	if !oldEquity.Eq(state.equity) {
-		if err := state.router.Post(bus.EquityEvent, state.equity); err != nil {
+		if err := state.router.Post(bus.EquityEvent, common.Equity{
+			Source:      componentName,
+			ExecutionId: utility.GetExecutionID(),
+			TraceID:     utility.CreateTraceID(),
+			TimeStamp:   time.Now(),
+			Value:       state.equity,
+		}); err != nil {
 			slog.Warn("unable to post equity event", "error", err)
 		}
 	}
@@ -315,7 +326,13 @@ func (state *State) setBalance(newBalance fixed.Point) {
 	state.balance = newBalance
 	if state.postBalance {
 		state.postBalance = false
-		if err := state.router.Post(bus.BalanceEvent, state.balance); err != nil {
+		if err := state.router.Post(bus.BalanceEvent, common.Balance{
+			Source:      componentName,
+			ExecutionId: utility.GetExecutionID(),
+			TraceID:     utility.CreateTraceID(),
+			TimeStamp:   time.Now(),
+			Value:       state.balance,
+		}); err != nil {
 			slog.Warn("unable to post balance event", "error", err)
 		}
 	}

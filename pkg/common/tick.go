@@ -1,21 +1,19 @@
 package common
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"time"
 )
 
 type Tick struct {
-	TimeStamp int64 // Unix NanoSeconds
-	Ask       fixed.Point
-	Bid       fixed.Point
-	AskVolume fixed.Point
-	BidVolume fixed.Point
-}
-
-func (t Tick) Average() fixed.Point {
-	return t.Ask.Add(t.Bid).DivInt64(2)
-}
-
-func (t Tick) AggregatedVolume() fixed.Point {
-	return t.AskVolume.Add(t.BidVolume)
+	Source      string              `json:"src,omitempty"`
+	Symbol      string              `json:"symbol,omitempty"`
+	ExecutionId utility.ExecutionID `json:"eid,omitempty"`
+	TraceID     utility.TraceID     `json:"tid,omitempty"`
+	TimeStamp   time.Time           `json:"ts"`
+	Ask         fixed.Point         `json:"ask"`
+	Bid         fixed.Point         `json:"bid"`
+	AskVolume   fixed.Point         `json:"ask_volume"`
+	BidVolume   fixed.Point         `json:"bid_volume"`
 }

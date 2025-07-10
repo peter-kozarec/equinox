@@ -90,6 +90,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 
 	for _, s := range resp.GetSymbol() {
 		if strings.EqualFold(s.GetSymbolName(), symbol) {
+			instrument.Symbol = s.GetSymbolName()
 			instrument.Id = s.GetSymbolId()
 			break
 		}
@@ -109,7 +110,7 @@ func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol
 	for _, s := range symbolResp.GetSymbol() {
 		if s.GetSymbolId() == instrument.Id {
 			instrument.Digits = int(s.GetDigits())
-			instrument.LotSize = fixed.FromInt64(s.GetLotSize(), 2) // Lot Size is in cents
+			instrument.ContractSize = fixed.FromInt64(s.GetLotSize(), 2) // Lot Size is in cents
 			instrument.DenominationUnit = s.GetMeasurementUnits()
 			return instrument, nil
 		}
@@ -142,7 +143,7 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 	return fixed.FromInt64(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
-func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument common.Instrument, period time.Duration, cb func(*openapi.ProtoMessage)) error {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument common.Instrument, cb func(*openapi.ProtoMessage)) error {
 
 	subTimeStamp := true
 	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}, SubscribeToSpotTimestamp: &subTimeStamp}
@@ -150,14 +151,6 @@ func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instr
 
 	if err := sendReceive(ctx, client.conn, spotsReq, spotsResp); err != nil {
 		return fmt.Errorf("unable to perform subscribe spots request: %w", err)
-	}
-
-	periodMinutes := openapi.ProtoOATrendbarPeriod(int32(period.Minutes()))
-	barsReq := &openapi.ProtoOASubscribeLiveTrendbarReq{CtidTraderAccountId: &accountId, Period: &periodMinutes, SymbolId: &instrument.Id}
-	barsResp := &openapi.ProtoOASubscribeLiveTrendbarRes{}
-
-	if err := sendReceive(ctx, client.conn, barsReq, barsResp); err != nil {
-		return fmt.Errorf("unable to perform subscribe live bars request: %w", err)
 	}
 
 	_, err := subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_SPOT_EVENT, cb)
@@ -205,9 +198,9 @@ func (client *Client) OpenPosition(
 
 	var ot openapi.ProtoOAOrderType
 	switch orderType {
-	case common.Market:
+	case common.OrderTypeMarket:
 		ot = openapi.ProtoOAOrderType_MARKET
-	case common.Limit:
+	case common.OrderTypeLimit:
 		ot = openapi.ProtoOAOrderType_LIMIT
 		price, _ := openPrice.Float64()
 		limitPrice = &price

@@ -1,6 +1,8 @@
 package simulation
 
 import (
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"log/slog"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
@@ -17,8 +19,9 @@ var (
 )
 
 type MonteCarloExecutor struct {
-	simulator *Simulator
-	rng       *rand.Rand
+	router *bus.Router
+	symbol string
+	rng    *rand.Rand
 
 	startTime  time.Time
 	startPrice fixed.Point
@@ -57,7 +60,8 @@ type MonteCarloExecutor struct {
 }
 
 func NewMonteCarloExecutor(
-	sim *Simulator,
+	router *bus.Router,
+	symbol string,
 	rng *rand.Rand,
 	startTime time.Time,
 	startPrice, fullSpread, mu, sigma, deltaT fixed.Point,
@@ -66,8 +70,9 @@ func NewMonteCarloExecutor(
 	avgTickInterval := time.Duration(333_000_000) // ~333ms default
 
 	return &MonteCarloExecutor{
-		simulator: sim,
-		rng:       rng,
+		router: router,
+		symbol: symbol,
+		rng:    rng,
 
 		startTime:  startTime,
 		startPrice: startPrice,
@@ -100,7 +105,8 @@ func NewMonteCarloExecutor(
 	}
 }
 func NewEurUsdMonteCarloTickSimulator(
-	simulator *Simulator,
+	router *bus.Router,
+	symbol string,
 	rng *rand.Rand,
 	duration time.Duration,
 	mu, sigma float64) *MonteCarloExecutor {
@@ -153,7 +159,8 @@ func NewEurUsdMonteCarloTickSimulator(
 
 	// Create the base Monte Carlo executor
 	executor := NewMonteCarloExecutor(
-		simulator,
+		router,
+		symbol,
 		rng,
 		startTime,
 		startPrice,
@@ -244,7 +251,7 @@ func (e *MonteCarloExecutor) DoOnce() error {
 	// Build tick with realistic bid/ask spread
 	e.tick.Ask = e.lastPrice.Add(e.currentSpread)
 	e.tick.Bid = e.lastPrice.Sub(e.currentSpread)
-	e.tick.TimeStamp = e.lastTime.UnixNano()
+	e.tick.TimeStamp = e.lastTime
 	e.tick.AskVolume = askVol
 	e.tick.BidVolume = bidVol
 
@@ -257,7 +264,12 @@ func (e *MonteCarloExecutor) DoOnce() error {
 	e.tick.AskVolume = e.tick.AskVolume.Rescale(e.normVolumeDigits)
 	e.tick.BidVolume = e.tick.BidVolume.Rescale(e.normVolumeDigits)
 
-	if err := e.simulator.OnTick(e.tick); err != nil {
+	e.tick.Source = componentName
+	e.tick.Symbol = e.symbol
+	e.tick.ExecutionId = utility.GetExecutionID()
+	e.tick.TraceID = utility.CreateTraceID()
+
+	if err := e.router.Post(bus.TickEvent, e.tick); err != nil {
 		return err
 	}
 

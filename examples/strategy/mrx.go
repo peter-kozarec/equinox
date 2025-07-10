@@ -3,10 +3,13 @@ package strategy
 import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
-
-	"time"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+)
+
+const (
+	componentName = "mrx"
 )
 
 var (
@@ -34,7 +37,7 @@ func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
 	}
 }
 
-func (a *MrxAdvisor) NewTick(t common.Tick) {
+func (a *MrxAdvisor) OnTick(t common.Tick) {
 	a.lastTick = t
 }
 
@@ -59,20 +62,31 @@ func (a *MrxAdvisor) NewBar(b common.Bar) {
 	if !a.posOpen && a.canTrade() {
 		if z.Gte(Three) {
 			_ = a.router.Post(bus.OrderEvent, common.Order{
-				Command:    common.CmdOpen,
-				OrderType:  common.Market,
-				Size:       fixed.FromInt64(1, 2).Neg(),
-				StopLoss:   b.Close.Add(b.Close.Sub(mean)),
-				TakeProfit: mean,
+				Source:      componentName,
+				Symbol:      b.Symbol,
+				ExecutionId: utility.GetExecutionID(),
+				TraceID:     utility.CreateTraceID(),
+				Side:        common.OrderSideSell,
+				TimeStamp:   b.TimeStamp,
+				Command:     common.OrderCommandPositionOpen,
+				Type:        common.OrderTypeMarket,
+				Size:        fixed.FromInt64(1, 2).Neg(),
+				StopLoss:    b.Close.Add(b.Close.Sub(mean)),
+				TakeProfit:  mean,
 			})
 			a.posOpen = true
 		} else if z.Lte(NegativeThree) {
 			_ = a.router.Post(bus.OrderEvent, common.Order{
-				Command:    common.CmdOpen,
-				OrderType:  common.Market,
-				Size:       fixed.FromInt64(1, 2),
-				StopLoss:   b.Close.Sub(mean.Sub(b.Close)),
-				TakeProfit: mean,
+				Source:      componentName,
+				Symbol:      b.Symbol,
+				ExecutionId: utility.GetExecutionID(),
+				TraceID:     utility.CreateTraceID(),
+				Command:     common.OrderCommandPositionOpen,
+				Type:        common.OrderTypeMarket,
+				Side:        common.OrderSideBuy,
+				Size:        fixed.FromInt64(1, 2),
+				StopLoss:    b.Close.Sub(mean.Sub(b.Close)),
+				TakeProfit:  mean,
 			})
 			a.posOpen = true
 		}
@@ -85,13 +99,11 @@ func (a *MrxAdvisor) PositionClosed(_ common.Position) {
 
 func (a *MrxAdvisor) canTrade() bool {
 
-	if a.lastTick.TimeStamp == 0 {
+	if a.lastTick.TimeStamp.IsZero() {
 		return false
 	}
 
-	t := time.Unix(0, a.lastTick.TimeStamp)
-
-	if t.Hour() < 9 || t.Hour() > 18 {
+	if a.lastTick.TimeStamp.Hour() < 9 || a.lastTick.TimeStamp.Hour() > 18 {
 		return false
 	}
 

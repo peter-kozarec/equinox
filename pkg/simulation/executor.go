@@ -2,32 +2,35 @@ package simulation
 
 import (
 	"fmt"
-
+	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"time"
 )
 
 type Executor struct {
-	simulator *Simulator
-	reader    *mapper.Reader[mapper.BinaryTick]
+	router *bus.Router
+	reader *mapper.Reader[mapper.BinaryTick]
 
-	from int64
-	to   int64
-	idx  int64
+	symbol string
+	from   int64
+	to     int64
+	idx    int64
 
 	binaryTick mapper.BinaryTick
 	tick       common.Tick
 	lastErr    error
 }
 
-func NewExecutor(simulator *Simulator, reader *mapper.Reader[mapper.BinaryTick], from, to time.Time) *Executor {
+func NewExecutor(router *bus.Router, reader *mapper.Reader[mapper.BinaryTick], symbol string, from, to time.Time) *Executor {
 	return &Executor{
-		simulator: simulator,
-		reader:    reader,
-		from:      from.UnixNano(),
-		to:        to.UnixNano(),
+		router: router,
+		reader: reader,
+		symbol: symbol,
+		from:   from.UnixNano(),
+		to:     to.UnixNano(),
 	}
 }
 
@@ -87,8 +90,13 @@ func (e *Executor) DoOnce() error {
 
 	e.binaryTick.ToModelTick(&e.tick)
 
+	e.tick.Source = componentName
+	e.tick.Symbol = e.symbol
+	e.tick.ExecutionId = utility.GetExecutionID()
+	e.tick.TraceID = utility.CreateTraceID()
+
 	// Feed ticks to simulation
-	if e.lastErr = e.simulator.OnTick(e.tick); e.lastErr != nil {
+	if e.lastErr = e.router.Post(bus.TickEvent, e.tick); e.lastErr != nil {
 		return e.lastErr
 	}
 

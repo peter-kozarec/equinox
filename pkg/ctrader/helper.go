@@ -42,7 +42,6 @@ func InitTradeSession(
 	client *Client,
 	accountId int64,
 	symbol string,
-	period time.Duration,
 	router *bus.Router) (func(common.Order), error) {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
@@ -58,11 +57,11 @@ func InitTradeSession(
 		"symbol", symbol,
 		"id", symbolInfo.Id,
 		"digits", symbolInfo.Digits,
-		"lot_size", symbolInfo.LotSize.String(),
+		"lot_size", symbolInfo.ContractSize.String(),
 		"denomination_unit", symbolInfo.DenominationUnit)
 
 	// Create internal state
-	state := NewState(router, symbolInfo, period)
+	state := NewState(router, symbolInfo)
 
 	// Load balance
 	balanceContext, balanceCancel := context.WithTimeout(ctx, time.Second)
@@ -87,7 +86,7 @@ func InitTradeSession(
 	// Subscribe to spot events
 	spotsContext, spotsCancel := context.WithTimeout(ctx, time.Second)
 	defer spotsCancel()
-	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, period, state.OnSpotsEvent); err != nil {
+	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, state.OnSpotsEvent); err != nil {
 		return nil, fmt.Errorf("unable to subscribe to spot changes for %s: %w", symbol, err)
 	}
 	slog.Info("subscribed to spot events")
@@ -106,18 +105,18 @@ func InitTradeSession(
 	// Return callback for making orders
 	return func(order common.Order) {
 		switch order.Command {
-		case common.CmdClose:
+		case common.OrderCommandPositionClose:
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)
 			defer closeCancel()
 
-			if err := client.ClosePosition(closeContext, accountId, order.PositionId.Int64(), order.Size); err != nil {
+			if err := client.ClosePosition(closeContext, accountId, order.PositionId, order.Size); err != nil {
 				slog.Warn("unable to close position", "error", err)
 			}
-		case common.CmdOpen:
+		case common.OrderCommandPositionOpen:
 			openContext, openCancel := context.WithTimeout(ctx, time.Second)
 			defer openCancel()
 
-			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.OrderType); err != nil {
+			if err := client.OpenPosition(openContext, accountId, symbolInfo, order.Price, order.Size, order.StopLoss, order.TakeProfit, order.Type); err != nil {
 				slog.Warn("unable to open position", "error", err)
 			}
 		default:

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type event struct {
@@ -30,6 +29,8 @@ type Router struct {
 	PositionClosedHandler     PositionClosedEventHandler
 	PositionPnLUpdatedHandler PositionPnLUpdatedEventHandler
 	OrderHandler              OrderEventHandler
+	OrderAcceptedHandler      OrderAcceptedEventHandler
+	OrderRejectedHandler      OrderRejectedEventHandler
 	SignalHandler             SignalEventHandler
 
 	// Statistics
@@ -156,7 +157,7 @@ func (r *Router) dispatch(ev event) error {
 			slog.Debug("bar handler is nil")
 		}
 	case EquityEvent:
-		eq, ok := ev.data.(fixed.Point)
+		eq, ok := ev.data.(common.Equity)
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
@@ -166,7 +167,7 @@ func (r *Router) dispatch(ev event) error {
 			slog.Debug("equity handler is nil")
 		}
 	case BalanceEvent:
-		bal, ok := ev.data.(fixed.Point)
+		bal, ok := ev.data.(common.Balance)
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
 		}
@@ -214,6 +215,24 @@ func (r *Router) dispatch(ev event) error {
 			r.OrderHandler(order)
 		} else {
 			slog.Debug("order handler is nil")
+		}
+	case OrderAcceptedEvent:
+		orderAccepted, ok := ev.data.(common.OrderAccepted)
+		if !ok {
+			return errors.New("invalid type assertion for order accepted event")
+		}
+		if r.OrderAcceptedHandler != nil {
+			r.OrderAcceptedHandler(orderAccepted)
+		} else {
+			slog.Debug("order accepted handler is nil")
+		}
+	case OrderRejectedEvent:
+		orderRejected, ok := ev.data.(common.OrderRejected)
+		if !ok {
+			return errors.New("invalid type assertion for order rejected event")
+		}
+		if r.OrderRejectedHandler != nil {
+			r.OrderRejectedHandler(orderRejected)
 		}
 	case SignalEvent:
 		sig, ok := ev.data.(common.Signal)

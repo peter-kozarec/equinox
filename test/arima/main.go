@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -25,6 +26,19 @@ const (
 	EndTime   = "2020-01-01 00:00:00"
 )
 
+var (
+	barPeriod    = time.Minute
+	startBalance = fixed.FromInt(10000, 0)
+
+	instrument = common.Instrument{
+		Symbol:           "EURUSD",
+		PipSize:          fixed.FromInt(1, 4),
+		ContractSize:     fixed.FromInt(100000, 0),
+		CommissionPerLot: fixed.FromInt(3, 0),
+		PipSlippage:      fixed.FromInt(10, 5),
+	}
+)
+
 func main() {
 	router := bus.NewRouter(1000)
 
@@ -38,18 +52,10 @@ func main() {
 	startTime, _ := time.Parse(time.DateTime, StartTime)
 	endTime, _ := time.Parse(time.DateTime, EndTime)
 
-	simConf := simulation.Configuration{
-		BarPeriod:        10 * time.Minute,
-		PipSize:          fixed.FromInt64(1, 4),
-		ContractSize:     fixed.FromInt64(100000, 0),
-		CommissionPerLot: fixed.FromInt64(3, 0),
-		StartBalance:     fixed.FromInt64(10000, 0),
-		PipSlippage:      fixed.FromInt64(10, 5),
-	}
-
 	audit := simulation.NewAudit(time.Minute)
-	sim := simulation.NewSimulator(router, audit, simConf)
-	exec := simulation.NewExecutor(sim, mp, startTime, endTime)
+	sim := simulation.NewSimulator(router, audit, instrument, startBalance)
+	aggregator := simulation.NewAggregator(barPeriod, instrument, router)
+	exec := simulation.NewExecutor(router, mp, instrument.Symbol, startTime, endTime)
 
 	monitor := middleware.NewMonitor(middleware.MonitorNone)
 	performance := middleware.NewPerformance()
@@ -64,7 +70,10 @@ func main() {
 	}
 
 	advisor := strategy.NewArimaAdvisor(router, model)
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(middleware.NoopTickHdl)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(tick common.Tick) {
+		sim.OnTick(tick)
+		aggregator.OnTick(tick)
+	})
 	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnNewBar)
 
 	if err := exec.LookupStartIndex(); err != nil {
@@ -79,7 +88,6 @@ func main() {
 
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
-	defer sim.PrintDetails()
 
 	if err := <-router.Done(); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {

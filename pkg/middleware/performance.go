@@ -1,14 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/common"
-
 	"github.com/peter-kozarec/equinox/pkg/bus"
-
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/peter-kozarec/equinox/pkg/common"
 )
 
 type Performance struct {
@@ -20,6 +18,8 @@ type Performance struct {
 	positionClosedEventCounter     int64
 	positionPnLUpdatedEventCounter int64
 	orderEventCounter              int64
+	orderRejectedEventCounter      int64
+	orderAcceptedEventCounter      int64
 	signalEventCounter             int64
 
 	totalTickHandlerDur    time.Duration
@@ -30,6 +30,8 @@ type Performance struct {
 	totalPosUpdtHandlerDur time.Duration
 	totalPosClosHandlerDur time.Duration
 	totalOrderHandlerDur   time.Duration
+	totalOrderRejectedDur  time.Duration
+	totalOrderAcceptedDur  time.Duration
 	totalSignalHandlerDur  time.Duration
 }
 
@@ -56,7 +58,7 @@ func (p *Performance) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
 }
 
 func (p *Performance) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance fixed.Point) {
+	return func(balance common.Balance) {
 		startTime := time.Now()
 		handler(balance)
 		p.totalBalanceHandlerDur += time.Since(startTime)
@@ -65,7 +67,7 @@ func (p *Performance) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEv
 }
 
 func (p *Performance) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity fixed.Point) {
+	return func(equity common.Equity) {
 		startTime := time.Now()
 		handler(equity)
 		p.totalEquityHandlerDur += time.Since(startTime)
@@ -106,6 +108,24 @@ func (p *Performance) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHan
 		handler(order)
 		p.totalOrderHandlerDur += time.Since(startTime)
 		p.orderEventCounter++
+	}
+}
+
+func (p *Performance) WithOrderRejected(handler bus.OrderRejectedEventHandler) bus.OrderRejectedEventHandler {
+	return func(rejected common.OrderRejected) {
+		startTime := time.Now()
+		handler(rejected)
+		p.totalOrderRejectedDur += time.Since(startTime)
+		p.orderRejectedEventCounter++
+	}
+}
+
+func (p *Performance) WithOrderAccepted(handler bus.OrderAcceptedEventHandler) bus.OrderAcceptedEventHandler {
+	return func(accepted common.OrderAccepted) {
+		startTime := time.Now()
+		handler(accepted)
+		p.totalOrderAcceptedDur += time.Since(startTime)
+		p.orderAcceptedEventCounter++
 	}
 }
 
@@ -218,6 +238,30 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
+	// Order rejected events
+	if p.orderRejectedEventCounter > 0 {
+		avgOrderRejected := p.totalOrderRejectedDur / time.Duration(p.orderRejectedEventCounter)
+		if avgOrderRejected > 0 {
+			fields = append(fields,
+				slog.Int64("order_rejected_event_count", p.orderRejectedEventCounter),
+				slog.Duration("order_rejected_avg_duration", avgOrderRejected),
+				slog.Duration("order_rejected_total_duration", p.totalOrderRejectedDur),
+			)
+		}
+	}
+
+	// Order accepted events
+	if p.orderAcceptedEventCounter > 0 {
+		avgOrderAccepted := p.totalOrderAcceptedDur / time.Duration(p.orderAcceptedEventCounter)
+		if avgOrderAccepted > 0 {
+			fields = append(fields,
+				slog.Int64("order_accepted_event_count", p.orderAcceptedEventCounter),
+				slog.Duration("order_accepted_avg_duration", avgOrderAccepted),
+				slog.Duration("order_accepted_total_duration", p.totalOrderAcceptedDur),
+			)
+		}
+	}
+
 	// Signal events
 	if p.signalEventCounter > 0 {
 		avgSignal := p.totalSignalHandlerDur / time.Duration(p.signalEventCounter)
@@ -229,10 +273,7 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	anyFields := make([]any, len(fields))
-	for i, attr := range fields {
-		anyFields[i] = attr
-	}
-
-	slog.Info("performance statistics", anyFields...)
+	// ToDo: Fix this, not printing all fields
+	slog.Info("total fields to log", "count", len(fields))
+	slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
 }

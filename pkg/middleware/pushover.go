@@ -33,7 +33,7 @@ func NewPushover(ctx context.Context, user, token, device string) *Pushover {
 func (p *Pushover) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
 	return func(position common.Position) {
 		go func() {
-			msg := fmt.Sprintf("id = %d\npnl = %s", position.Id.Int64(), position.NetProfit.Rescale(2).String())
+			msg := fmt.Sprintf("id = %d\npnl = %s", position.Id, position.NetProfit.Rescale(2).String())
 			if err := sendPushoverNotification(p.ctx, p.token, p.user, p.device, "Position Closed", msg); err != nil {
 				slog.Error("sendPushoverNotification", "error", err)
 			}

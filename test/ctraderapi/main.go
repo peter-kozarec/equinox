@@ -51,11 +51,11 @@ func main() {
 
 	// Initialize middleware
 	router.TickHandler = middleware.Chain(monitor.WithTick)(advisor.OnTick)
-	router.BarHandler = middleware.Chain(monitor.WithBar)(advisor.NewBar)
+	router.BarHandler = middleware.Chain(monitor.WithBar)(advisor.OnBar)
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance)(middleware.NoopBalanceHdl)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity)(middleware.NoopEquityHdl)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed)(advisor.PositionClosed)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed)(advisor.OnPositionClosed)
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder)(orderHandler)
 

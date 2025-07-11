@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/common"
 	"log/slog"
 	"math/rand"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
@@ -63,17 +64,17 @@ func main() {
 
 	advisor := strategy.NewMrxAdvisor(router)
 
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(tick common.Tick) {
-		sim.OnTick(tick)
-		aggregator.OnTick(tick)
-		advisor.OnTick(tick)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(ctx context.Context, tick common.Tick) {
+		sim.OnTick(ctx, tick)
+		aggregator.OnTick(ctx, tick)
+		advisor.OnTick(ctx, tick)
 	})
-	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.NewBar)
+	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnBar)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
 	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(middleware.NoopOrderAccHdl)
 	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(middleware.NoopOrderRjctHdl)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.PositionClosed)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.OnPositionClosed)
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)

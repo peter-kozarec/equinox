@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
@@ -37,100 +38,100 @@ func NewMonitor(flags MonitorFlags) *Monitor {
 }
 
 func (m *Monitor) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick common.Tick) {
+	return func(ctx context.Context, tick common.Tick) {
 		if m.flags&MonitorTicks != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "tick", tick)
 		}
-		handler(tick)
+		handler(ctx, tick)
 	}
 }
 
 func (m *Monitor) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar common.Bar) {
+	return func(ctx context.Context, bar common.Bar) {
 		if m.flags&MonitorBars != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "bar", bar)
 		}
-		handler(bar)
+		handler(ctx, bar)
 	}
 }
 
 func (m *Monitor) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity common.Equity) {
+	return func(ctx context.Context, equity common.Equity) {
 		if m.flags&MonitorEquity != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "equity", equity)
 		}
-		handler(equity)
+		handler(ctx, equity)
 	}
 }
 
 func (m *Monitor) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance common.Balance) {
+	return func(ctx context.Context, balance common.Balance) {
 		if m.flags&MonitorBalance != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "balance", balance)
 		}
-		handler(balance)
+		handler(ctx, balance)
 	}
 }
 
 func (m *Monitor) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		if m.flags&MonitorPositionsOpened != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "position_open", position)
 		}
-		handler(position)
+		handler(ctx, position)
 	}
 }
 
 func (m *Monitor) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		if m.flags&MonitorPositionsClosed != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "position_closed", position)
 		}
-		handler(position)
+		handler(ctx, position)
 	}
 }
 
 func (m *Monitor) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		if m.flags&MonitorPositionsPnLUpdated != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "position_update", position)
 		}
-		handler(position)
+		handler(ctx, position)
 	}
 }
 
 func (m *Monitor) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order common.Order) {
+	return func(ctx context.Context, order common.Order) {
 		if m.flags&MonitorOrders != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "order", order)
 		}
-		handler(order)
+		handler(ctx, order)
 	}
 }
 
 func (m *Monitor) WithOrderRejected(handler bus.OrderRejectedEventHandler) bus.OrderRejectedEventHandler {
-	return func(rejected common.OrderRejected) {
+	return func(ctx context.Context, rejected common.OrderRejected) {
 		if m.flags&MonitorOrdersRejected != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "order_rejected", rejected)
 		}
-		handler(rejected)
+		handler(ctx, rejected)
 	}
 }
 
 func (m *Monitor) WithOrderAccepted(handler bus.OrderAcceptedEventHandler) bus.OrderAcceptedEventHandler {
-	return func(accepted common.OrderAccepted) {
+	return func(ctx context.Context, accepted common.OrderAccepted) {
 		if m.flags&MonitorOrdersAccepted != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "order_accepted", accepted)
 		}
-		handler(accepted)
+		handler(ctx, accepted)
 	}
 }
 
 func (m *Monitor) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
-	return func(signal common.Signal) {
+	return func(ctx context.Context, signal common.Signal) {
 		if m.flags&MonitorSignals != 0 || m.flags&MonitorAll != 0 {
 			slog.Info("event", "signal", signal)
 		}
-		handler(signal)
+		handler(ctx, signal)
 	}
 }

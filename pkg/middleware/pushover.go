@@ -15,15 +15,13 @@ import (
 )
 
 type Pushover struct {
-	ctx    context.Context
 	user   string
 	token  string
 	device string
 }
 
-func NewPushover(ctx context.Context, user, token, device string) *Pushover {
+func NewPushover(user, token, device string) *Pushover {
 	return &Pushover{
-		ctx:    ctx,
 		user:   user,
 		token:  token,
 		device: device,
@@ -31,14 +29,14 @@ func NewPushover(ctx context.Context, user, token, device string) *Pushover {
 }
 
 func (p *Pushover) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		go func() {
 			msg := fmt.Sprintf("id = %d\npnl = %s", position.Id, position.NetProfit.Rescale(2).String())
-			if err := sendPushoverNotification(p.ctx, p.token, p.user, p.device, "Position Closed", msg); err != nil {
+			if err := sendPushoverNotification(ctx, p.token, p.user, p.device, "Position Closed", msg); err != nil {
 				slog.Error("sendPushoverNotification", "error", err)
 			}
 		}()
-		handler(position)
+		handler(ctx, position)
 	}
 }
 

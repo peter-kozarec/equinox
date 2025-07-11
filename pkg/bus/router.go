@@ -79,7 +79,7 @@ func (r *Router) Exec(ctx context.Context) {
 			return
 		case ev := <-r.events:
 			r.dispatchCount++
-			if err := r.dispatch(ev); err != nil {
+			if err := r.dispatch(ctx, ev); err != nil {
 				r.dispatchFails++
 				slog.Warn("dispatch failed", "error", err, "event", ev)
 			}
@@ -107,7 +107,7 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) {
 			return
 		case ev := <-r.events:
 			r.dispatchCount++
-			if err := r.dispatch(ev); err != nil {
+			if err := r.dispatch(ctx, ev); err != nil {
 				r.dispatchFails++
 				slog.Warn("dispatch failed", "error", err, "event", ev)
 			}
@@ -134,7 +134,7 @@ func (r *Router) PrintStatistics() {
 		"throughput", float64(r.postCount)/r.runTime.Seconds())
 }
 
-func (r *Router) dispatch(ev event) error {
+func (r *Router) dispatch(ctx context.Context, ev event) error {
 	switch ev.id {
 	case TickEvent:
 		tick, ok := ev.data.(common.Tick)
@@ -142,7 +142,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for tick event")
 		}
 		if r.TickHandler != nil {
-			r.TickHandler(tick)
+			r.TickHandler(ctx, tick)
 		} else {
 			slog.Debug("tick handler is nil")
 		}
@@ -152,7 +152,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for bar event")
 		}
 		if r.BarHandler != nil {
-			r.BarHandler(bar)
+			r.BarHandler(ctx, bar)
 		} else {
 			slog.Debug("bar handler is nil")
 		}
@@ -162,7 +162,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for equity event")
 		}
 		if r.EquityHandler != nil {
-			r.EquityHandler(eq)
+			r.EquityHandler(ctx, eq)
 		} else {
 			slog.Debug("equity handler is nil")
 		}
@@ -172,7 +172,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for balance event")
 		}
 		if r.BalanceHandler != nil {
-			r.BalanceHandler(bal)
+			r.BalanceHandler(ctx, bal)
 		} else {
 			slog.Debug("balance handler is nil")
 		}
@@ -182,7 +182,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for position opened event")
 		}
 		if r.PositionOpenedHandler != nil {
-			r.PositionOpenedHandler(pos)
+			r.PositionOpenedHandler(ctx, pos)
 		} else {
 			slog.Debug("position opened handler is nil")
 		}
@@ -192,7 +192,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for position closed event")
 		}
 		if r.PositionClosedHandler != nil {
-			r.PositionClosedHandler(pos)
+			r.PositionClosedHandler(ctx, pos)
 		} else {
 			slog.Debug("position closed handler is nil")
 		}
@@ -202,7 +202,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for position pnl updated event")
 		}
 		if r.PositionPnLUpdatedHandler != nil {
-			r.PositionPnLUpdatedHandler(pos)
+			r.PositionPnLUpdatedHandler(ctx, pos)
 		} else {
 			slog.Debug("position pnl updated handler is nil")
 		}
@@ -212,7 +212,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for order event")
 		}
 		if r.OrderHandler != nil {
-			r.OrderHandler(order)
+			r.OrderHandler(ctx, order)
 		} else {
 			slog.Debug("order handler is nil")
 		}
@@ -222,7 +222,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for order accepted event")
 		}
 		if r.OrderAcceptedHandler != nil {
-			r.OrderAcceptedHandler(orderAccepted)
+			r.OrderAcceptedHandler(ctx, orderAccepted)
 		} else {
 			slog.Debug("order accepted handler is nil")
 		}
@@ -232,7 +232,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for order rejected event")
 		}
 		if r.OrderRejectedHandler != nil {
-			r.OrderRejectedHandler(orderRejected)
+			r.OrderRejectedHandler(ctx, orderRejected)
 		}
 	case SignalEvent:
 		sig, ok := ev.data.(common.Signal)
@@ -240,7 +240,7 @@ func (r *Router) dispatch(ev event) error {
 			return errors.New("invalid type assertion for signal event")
 		}
 		if r.SignalHandler != nil {
-			r.SignalHandler(sig)
+			r.SignalHandler(ctx, sig)
 		} else {
 			slog.Debug("signal handler is nil")
 		}

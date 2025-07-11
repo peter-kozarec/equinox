@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/common"
 	"log/slog"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
 
 	"github.com/peter-kozarec/equinox/pkg/models/arima"
 
@@ -70,9 +71,9 @@ func main() {
 	}
 
 	advisor := strategy.NewArimaAdvisor(router, model)
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(tick common.Tick) {
-		sim.OnTick(tick)
-		aggregator.OnTick(tick)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(ctx context.Context, tick common.Tick) {
+		sim.OnTick(ctx, tick)
+		aggregator.OnTick(ctx, tick)
 	})
 	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnNewBar)
 

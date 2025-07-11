@@ -1,10 +1,12 @@
 package simulation
 
 import (
+	"context"
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"log/slog"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
@@ -43,11 +45,11 @@ func NewSimulator(router *bus.Router, audit *Audit, instrument common.Instrument
 	}
 }
 
-func (s *Simulator) OnOrder(order common.Order) {
+func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
 	s.openOrders = append(s.openOrders, &order)
 }
 
-func (s *Simulator) OnTick(tick common.Tick) {
+func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 
 	// Set simulation time from a processed tick
 	s.simulationTime = tick.TimeStamp

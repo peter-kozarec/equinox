@@ -42,7 +42,7 @@ func InitTradeSession(
 	client *Client,
 	accountId int64,
 	symbol string,
-	router *bus.Router) (func(common.Order), error) {
+	router *bus.Router) (func(context.Context, common.Order), error) {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
 	defer symbolInfoCancel()
@@ -103,7 +103,7 @@ func InitTradeSession(
 	slog.Info("started balance polling", "poll_interval", time.Second*10)
 
 	// Return callback for making orders
-	return func(order common.Order) {
+	return func(ctx context.Context, order common.Order) {
 		switch order.Command {
 		case common.OrderCommandPositionClose:
 			closeContext, closeCancel := context.WithTimeout(ctx, time.Second)

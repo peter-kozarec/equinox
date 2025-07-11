@@ -1,6 +1,8 @@
 package strategy
 
 import (
+	"context"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility"
@@ -37,11 +39,11 @@ func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
 	}
 }
 
-func (a *MrxAdvisor) OnTick(t common.Tick) {
+func (a *MrxAdvisor) OnTick(_ context.Context, t common.Tick) {
 	a.lastTick = t
 }
 
-func (a *MrxAdvisor) NewBar(b common.Bar) {
+func (a *MrxAdvisor) OnBar(_ context.Context, b common.Bar) {
 
 	a.closes.Add(b.Close)
 
@@ -93,7 +95,7 @@ func (a *MrxAdvisor) NewBar(b common.Bar) {
 	}
 }
 
-func (a *MrxAdvisor) PositionClosed(_ common.Position) {
+func (a *MrxAdvisor) OnPositionClosed(_ context.Context, _ common.Position) {
 	a.posOpen = false
 }
 

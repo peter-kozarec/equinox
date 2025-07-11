@@ -1,10 +1,12 @@
 package simulation
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/utility"
+	"context"
 	"log/slog"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 )
@@ -29,7 +31,7 @@ func NewAggregator(interval time.Duration, instrument common.Instrument, bus *bu
 	}
 }
 
-func (a *Aggregator) OnTick(tick common.Tick) {
+func (a *Aggregator) OnTick(_ context.Context, tick common.Tick) {
 	ts := tick.TimeStamp
 	barTS := ts.Truncate(a.interval)
 	price := tick.Bid

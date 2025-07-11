@@ -40,99 +40,99 @@ func NewPerformance() *Performance {
 }
 
 func (p *Performance) WithTick(handler bus.TickEventHandler) bus.TickEventHandler {
-	return func(tick common.Tick) {
+	return func(ctx context.Context, tick common.Tick) {
 		startTime := time.Now()
-		handler(tick)
+		handler(ctx, tick)
 		p.totalTickHandlerDur += time.Since(startTime)
 		p.tickEventCounter++
 	}
 }
 
 func (p *Performance) WithBar(handler bus.BarEventHandler) bus.BarEventHandler {
-	return func(bar common.Bar) {
+	return func(ctx context.Context, bar common.Bar) {
 		startTime := time.Now()
-		handler(bar)
+		handler(ctx, bar)
 		p.totalBarHandlerDur += time.Since(startTime)
 		p.barEventCounter++
 	}
 }
 
 func (p *Performance) WithBalance(handler bus.BalanceEventHandler) bus.BalanceEventHandler {
-	return func(balance common.Balance) {
+	return func(ctx context.Context, balance common.Balance) {
 		startTime := time.Now()
-		handler(balance)
+		handler(ctx, balance)
 		p.totalBalanceHandlerDur += time.Since(startTime)
 		p.balanceEventCounter++
 	}
 }
 
 func (p *Performance) WithEquity(handler bus.EquityEventHandler) bus.EquityEventHandler {
-	return func(equity common.Equity) {
+	return func(ctx context.Context, equity common.Equity) {
 		startTime := time.Now()
-		handler(equity)
+		handler(ctx, equity)
 		p.totalEquityHandlerDur += time.Since(startTime)
 		p.equityEventCounter++
 	}
 }
 
 func (p *Performance) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
-		handler(position)
+		handler(ctx, position)
 		p.totalPosOpenHandlerDur += time.Since(startTime)
 		p.positionOpenedEventCounter++
 	}
 }
 
 func (p *Performance) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
-		handler(position)
+		handler(ctx, position)
 		p.totalPosClosHandlerDur += time.Since(startTime)
 		p.positionClosedEventCounter++
 	}
 }
 
 func (p *Performance) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
-	return func(position common.Position) {
+	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
-		handler(position)
+		handler(ctx, position)
 		p.totalPosUpdtHandlerDur += time.Since(startTime)
 		p.positionPnLUpdatedEventCounter++
 	}
 }
 
 func (p *Performance) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHandler {
-	return func(order common.Order) {
+	return func(ctx context.Context, order common.Order) {
 		startTime := time.Now()
-		handler(order)
+		handler(ctx, order)
 		p.totalOrderHandlerDur += time.Since(startTime)
 		p.orderEventCounter++
 	}
 }
 
 func (p *Performance) WithOrderRejected(handler bus.OrderRejectedEventHandler) bus.OrderRejectedEventHandler {
-	return func(rejected common.OrderRejected) {
+	return func(ctx context.Context, rejected common.OrderRejected) {
 		startTime := time.Now()
-		handler(rejected)
+		handler(ctx, rejected)
 		p.totalOrderRejectedDur += time.Since(startTime)
 		p.orderRejectedEventCounter++
 	}
 }
 
 func (p *Performance) WithOrderAccepted(handler bus.OrderAcceptedEventHandler) bus.OrderAcceptedEventHandler {
-	return func(accepted common.OrderAccepted) {
+	return func(ctx context.Context, accepted common.OrderAccepted) {
 		startTime := time.Now()
-		handler(accepted)
+		handler(ctx, accepted)
 		p.totalOrderAcceptedDur += time.Since(startTime)
 		p.orderAcceptedEventCounter++
 	}
 }
 
 func (p *Performance) WithSignal(handler bus.SignalEventHandler) bus.SignalEventHandler {
-	return func(signal common.Signal) {
+	return func(ctx context.Context, signal common.Signal) {
 		startTime := time.Now()
-		handler(signal)
+		handler(ctx, signal)
 		p.totalSignalHandlerDur += time.Since(startTime)
 		p.signalEventCounter++
 	}

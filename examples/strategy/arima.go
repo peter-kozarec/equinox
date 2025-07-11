@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
@@ -22,7 +23,7 @@ func NewArimaAdvisor(router *bus.Router, model *arima.Model) *ArimaAdvisor {
 	}
 }
 
-func (a *ArimaAdvisor) OnNewBar(b common.Bar) {
+func (a *ArimaAdvisor) OnNewBar(_ context.Context, b common.Bar) {
 	a.model.AddPoint(b.Close)
 
 	if a.model.ShouldReestimate() {

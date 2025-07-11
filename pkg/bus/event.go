@@ -1,6 +1,8 @@
 package bus
 
 import (
+	"context"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 )
 
@@ -20,14 +22,14 @@ const (
 	SignalEvent
 )
 
-type TickEventHandler func(common.Tick)
-type BarEventHandler func(common.Bar)
-type EquityEventHandler func(common.Equity)
-type BalanceEventHandler func(common.Balance)
-type PositionOpenedEventHandler func(common.Position)
-type PositionClosedEventHandler func(common.Position)
-type PositionPnLUpdatedEventHandler func(common.Position)
-type OrderEventHandler func(common.Order)
-type OrderRejectedEventHandler func(common.OrderRejected)
-type OrderAcceptedEventHandler func(common.OrderAccepted)
-type SignalEventHandler func(common.Signal)
+type TickEventHandler func(context.Context, common.Tick)
+type BarEventHandler func(context.Context, common.Bar)
+type EquityEventHandler func(context.Context, common.Equity)
+type BalanceEventHandler func(context.Context, common.Balance)
+type PositionOpenedEventHandler func(context.Context, common.Position)
+type PositionClosedEventHandler func(context.Context, common.Position)
+type PositionPnLUpdatedEventHandler func(context.Context, common.Position)
+type OrderEventHandler func(context.Context, common.Order)
+type OrderRejectedEventHandler func(context.Context, common.OrderRejected)
+type OrderAcceptedEventHandler func(context.Context, common.OrderAccepted)
+type SignalEventHandler func(context.Context, common.Signal)

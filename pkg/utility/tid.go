@@ -10,6 +10,7 @@ type TraceID = uint64
 
 const (
 	delta TraceID = 1
+	base  TraceID = 1e10
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 
 func CreateTraceID() TraceID {
 	once.Do(func() {
-		tid.Store(I64ToU64Unsafe(time.Now().UnixMilli()))
+		tid.Store(I64ToU64Unsafe(time.Now().Unix()) * base)
 	})
 	return tid.Add(delta)
 }

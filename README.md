@@ -6,4 +6,4 @@
 
 ## ⚠️ Warning
 
-This project is in active development. **Breaking changes will appear often**
+This is a public repo only because of github actions usage, so go away

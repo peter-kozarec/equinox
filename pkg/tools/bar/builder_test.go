@@ -13,6 +13,8 @@ import (
 )
 
 func TestBarBuilder_construct(t *testing.T) {
+	now := time.Now()
+
 	tests := []struct {
 		name      string
 		buildMode BuildMode
@@ -25,7 +27,7 @@ func TestBarBuilder_construct(t *testing.T) {
 			buildMode: BuildModeTickBased,
 			priceMode: PriceModeMid,
 			ticks: []common.Tick{
-				createTick(time.Now(), 100.0, 99.0, 10.0, 10.0),
+				createTick(now, 100.0, 99.0, 10.0, 10.0),
 			},
 			expected: common.Bar{
 				Open:   fixed.FromFloat64(99.5),
@@ -40,9 +42,9 @@ func TestBarBuilder_construct(t *testing.T) {
 			buildMode: BuildModeTickBased,
 			priceMode: PriceModeAsk,
 			ticks: []common.Tick{
-				createTick(time.Now(), 100.0, 99.0, 10.0, 10.0),
-				createTick(time.Now().Add(time.Second), 102.0, 101.0, 5.0, 5.0),
-				createTick(time.Now().Add(2*time.Second), 98.0, 97.0, 15.0, 15.0),
+				createTick(now, 100.0, 99.0, 10.0, 10.0),
+				createTick(now.Add(time.Second), 102.0, 101.0, 5.0, 5.0),
+				createTick(now.Add(2*time.Second), 98.0, 97.0, 15.0, 15.0),
 			},
 			expected: common.Bar{
 				Open:   fixed.FromFloat64(100.0),

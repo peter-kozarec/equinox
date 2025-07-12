@@ -91,12 +91,12 @@ func TestBusRouter_ExecLoop(t *testing.T) {
 		return nil
 	}
 
-	ctx := context.Background()
-	errChan := r.ExecLoop(ctx, doOnceCb)
-
 	if err := r.Post(BarEvent, common.Bar{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
+
+	ctx := context.Background()
+	errChan := r.ExecLoop(ctx, doOnceCb)
 
 	err := <-errChan
 	if err == nil || err.Error() != "done" {

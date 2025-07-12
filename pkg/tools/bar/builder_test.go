@@ -368,9 +368,9 @@ func BenchmarkGetNextTickTime(b *testing.B) {
 	}
 }
 
-func BenchmarkBarBuilder_MultipleSymbols(b *testing.B) {
+func BenchmarkBarBuilder_MultipleSymbolsSeq(b *testing.B) {
 	router := bus.NewRouter(1024)
-	builder := NewBuilder(router, BuildModeTickBased, PriceModeMid, false)
+	builder := NewBuilder(router, BuildModeTickBased, PriceModeMid, true)
 
 	symbols := []string{"EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD"}
 	periods := []common.BarPeriod{common.BarPeriodM1, common.BarPeriodM5, common.BarPeriodM15}
@@ -385,7 +385,6 @@ func BenchmarkBarBuilder_MultipleSymbols(b *testing.B) {
 	defer cancel()
 
 	tick := createTick(time.Now(), 100.0, 99.0, 10.0, 10.0)
-	builder.Exec(ctx)
 	router.Exec(ctx)
 
 	b.ResetTimer()

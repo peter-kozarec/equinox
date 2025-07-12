@@ -77,7 +77,7 @@ func (b *Builder) Exec(ctx context.Context) <-chan error {
 	}
 
 	errChan := make(chan error, 1)
-	b.tickChan = make(chan common.Tick, 100)
+	b.tickChan = make(chan common.Tick, 1024)
 
 	go func() {
 		defer close(errChan)

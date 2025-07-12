@@ -13,7 +13,7 @@ import (
 )
 
 func TestBarBuilder_construct(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name      string

@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -36,8 +39,10 @@ func main() {
 	defer slog.Info("connection closed")
 	defer c.Close()
 
-	monitor := middleware.NewMonitor(middleware.MonitorEquity)
+	monitor := middleware.NewMonitor(middleware.MonitorAll)
 	advisor := strategy.NewMrxAdvisor(router)
+	barBuilder := bar.NewBuilder(router, bar.BuildModeTickBased, bar.PriceModeBid, false)
+	barBuilder.Build("BTCUSD", common.BarPeriodM1)
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		slog.Error("unable to authenticate", "error", err)
@@ -50,7 +55,10 @@ func main() {
 	}
 
 	// Initialize middleware
-	router.TickHandler = middleware.Chain(monitor.WithTick)(advisor.OnTick)
+	router.TickHandler = middleware.Chain(monitor.WithTick)(func(ctx context.Context, tick common.Tick) {
+		barBuilder.OnTick(ctx, tick)
+		advisor.OnTick(ctx, tick)
+	})
 	router.BarHandler = middleware.Chain(monitor.WithBar)(advisor.OnBar)
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance)(middleware.NoopBalanceHdl)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity)(middleware.NoopEquityHdl)
@@ -59,12 +67,31 @@ func main() {
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder)(orderHandler)
 
-	go router.Exec(ctx)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		errCh := router.Exec(ctx)
+		select {
+		case e := <-errCh:
+			return e
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+
+	g.Go(func() error {
+		errCh := barBuilder.Exec(ctx)
+		select {
+		case e := <-errCh:
+			return e
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 
 	defer router.PrintStatistics()
 
-	if err := <-router.Done(); err != nil && !errors.Is(err, context.Canceled) {
-		slog.Error("something unexpected happened", "error", err)
+	if e := g.Wait(); e != nil && !errors.Is(e, context.Canceled) {
+		slog.Error("something unexpected happened", "error", e)
 		os.Exit(1)
 	}
 }

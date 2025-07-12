@@ -264,7 +264,7 @@ func (e *MonteCarloExecutor) DoOnce() error {
 	e.tick.AskVolume = e.tick.AskVolume.Rescale(e.normVolumeDigits)
 	e.tick.BidVolume = e.tick.BidVolume.Rescale(e.normVolumeDigits)
 
-	e.tick.Source = componentName
+	e.tick.Source = `monte_carlo-executor`
 	e.tick.Symbol = e.symbol
 	e.tick.ExecutionId = utility.GetExecutionID()
 	e.tick.TraceID = utility.CreateTraceID()

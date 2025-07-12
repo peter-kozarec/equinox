@@ -122,7 +122,7 @@ func TestModelArima_CalculateDiagnostics(t *testing.T) {
 			// Calculate diagnostics
 			m.calculateDiagnostics()
 
-			// Run checks
+			// Exec checks
 			for _, check := range tt.checks {
 				if !check.validator(m.diagnostics) {
 					t.Errorf("Check '%s' failed", check.name)

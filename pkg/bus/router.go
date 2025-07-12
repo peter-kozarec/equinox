@@ -16,11 +16,8 @@ type event struct {
 }
 
 type Router struct {
-	// Channels
-	done   chan error
 	events chan event
 
-	// Handlers
 	TickHandler               TickEventHandler
 	BarHandler                BarEventHandler
 	EquityHandler             EquityEventHandler
@@ -33,7 +30,6 @@ type Router struct {
 	OrderRejectedHandler      OrderRejectedEventHandler
 	SignalHandler             SignalEventHandler
 
-	// Statistics
 	runTime       time.Duration
 	postCount     uint64
 	postFails     uint64
@@ -43,7 +39,6 @@ type Router struct {
 
 func NewRouter(eventCapacity int) *Router {
 	return &Router{
-		done:   make(chan error),
 		events: make(chan event, eventCapacity),
 	}
 }
@@ -59,7 +54,7 @@ func (r *Router) Post(id EventId, data interface{}) error {
 	}
 }
 
-func (r *Router) Exec(ctx context.Context) {
+func (r *Router) Exec(ctx context.Context) <-chan error {
 
 	r.runTime = 0
 	r.dispatchCount = 0
@@ -72,56 +67,68 @@ func (r *Router) Exec(ctx context.Context) {
 		r.runTime += time.Since(start)
 	}()
 
-	for {
-		select {
-		case <-ctx.Done():
-			r.done <- ctx.Err()
-			return
-		case ev := <-r.events:
-			r.dispatchCount++
-			if err := r.dispatch(ctx, ev); err != nil {
-				r.dispatchFails++
-				slog.Warn("dispatch failed", "error", err, "event", ev)
-			}
-		}
-	}
-}
+	errChan := make(chan error)
 
-func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) {
+	go func() {
+		defer close(errChan)
 
-	r.runTime = 0
-	r.dispatchCount = 0
-	r.dispatchFails = 0
-	r.postCount = 0
-	r.postFails = 0
-
-	start := time.Now()
-	defer func() {
-		r.runTime += time.Since(start)
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			r.done <- ctx.Err()
-			return
-		case ev := <-r.events:
-			r.dispatchCount++
-			if err := r.dispatch(ctx, ev); err != nil {
-				r.dispatchFails++
-				slog.Warn("dispatch failed", "error", err, "event", ev)
-			}
-		default:
-			if err := doOnceCb(); err != nil {
-				r.done <- err
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
 				return
+			case ev := <-r.events:
+				r.dispatchCount++
+				if err := r.dispatch(ctx, ev); err != nil {
+					r.dispatchFails++
+					slog.Warn("dispatch failed", "error", err, "event", ev)
+				}
 			}
 		}
-	}
+	}()
+
+	return errChan
 }
 
-func (r *Router) Done() <-chan error {
-	return r.done
+func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan error {
+
+	r.runTime = 0
+	r.dispatchCount = 0
+	r.dispatchFails = 0
+	r.postCount = 0
+	r.postFails = 0
+
+	start := time.Now()
+	defer func() {
+		r.runTime += time.Since(start)
+	}()
+
+	errChan := make(chan error)
+
+	go func() {
+		defer close(errChan)
+
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			case ev := <-r.events:
+				r.dispatchCount++
+				if err := r.dispatch(ctx, ev); err != nil {
+					r.dispatchFails++
+					slog.Warn("dispatch failed", "error", err, "event", ev)
+				}
+			default:
+				if err := doOnceCb(); err != nil {
+					errChan <- err
+					return
+				}
+			}
+		}
+	}()
+
+	return errChan
 }
 
 func (r *Router) PrintStatistics() {

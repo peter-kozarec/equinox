@@ -90,7 +90,7 @@ func (e *Executor) DoOnce() error {
 
 	e.binaryTick.ToModelTick(&e.tick)
 
-	e.tick.Source = componentName
+	e.tick.Source = "mapper-executor"
 	e.tick.Symbol = e.symbol
 	e.tick.ExecutionId = utility.GetExecutionID()
 	e.tick.TraceID = utility.CreateTraceID()

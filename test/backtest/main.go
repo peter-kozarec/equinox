@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -26,7 +28,7 @@ const (
 )
 
 var (
-	barPeriod    = time.Minute
+	barPeriod    = common.BarPeriodM1
 	startBalance = fixed.FromInt(10000, 0)
 
 	instrument = common.Instrument{
@@ -54,8 +56,9 @@ func main() {
 
 	audit := simulation.NewAudit(time.Minute)
 	sim := simulation.NewSimulator(router, audit, instrument, startBalance)
-	aggregator := simulation.NewAggregator(barPeriod, instrument, router)
 	exec := simulation.NewExecutor(router, mp, instrument.Symbol, startTime, endTime)
+	barBuilder := bar.NewBuilder(router, bar.BuildModeTickBased, bar.PriceModeBid, true)
+	barBuilder.Build(instrument.Symbol, barPeriod)
 
 	monitor := middleware.NewMonitor(middleware.MonitorPositionsClosed)
 	performance := middleware.NewPerformance()
@@ -63,7 +66,7 @@ func main() {
 	advisor := strategy.NewMrxAdvisor(router)
 	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(ctx context.Context, tick common.Tick) {
 		sim.OnTick(ctx, tick)
-		aggregator.OnTick(ctx, tick)
+		barBuilder.OnTick(ctx, tick)
 		advisor.OnTick(ctx, tick)
 	})
 	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnBar)
@@ -82,14 +85,23 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	go router.ExecLoop(ctx, exec.DoOnce)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		errCh := router.ExecLoop(ctx, exec.DoOnce)
+		select {
+		case e := <-errCh:
+			return e
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
 
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
 
-	if err := <-router.Done(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
-			slog.Error("unexpected error during execution", "error", err)
+	if e := g.Wait(); e != nil {
+		if !errors.Is(e, context.Canceled) && !errors.Is(e, mapper.ErrEof) {
+			slog.Error("unexpected error during execution", "error", e)
 			os.Exit(1)
 		}
 	}

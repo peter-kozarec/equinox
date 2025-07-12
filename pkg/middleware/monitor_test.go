@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 
@@ -515,6 +516,23 @@ func TestMiddlewareMonitor_FlagCombinations(t *testing.T) {
 }
 
 func BenchmarkMiddlewareMonitor_WithTickEnabled(b *testing.B) {
+	file, err := os.OpenFile("logfileWithTickEnabled.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer func(file *os.File) {
+		e := file.Close()
+		if e != nil {
+			panic(e)
+		}
+		if e := os.Remove("logfileWithTickEnabled.log"); e != nil {
+			panic(e)
+		}
+	}(file)
+
+	logger := slog.New(slog.NewTextHandler(file, nil))
+	slog.SetDefault(logger)
+
 	m := NewMonitor(MonitorTicks)
 	handler := func(ctx context.Context, tick common.Tick) {}
 	wrapped := m.WithTick(handler)
@@ -525,6 +543,7 @@ func BenchmarkMiddlewareMonitor_WithTickEnabled(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		wrapped(ctx, tick)
 	}
+	b.StopTimer()
 }
 
 func BenchmarkMiddlewareMonitor_WithTickDisabled(b *testing.B) {
@@ -541,6 +560,23 @@ func BenchmarkMiddlewareMonitor_WithTickDisabled(b *testing.B) {
 }
 
 func BenchmarkMiddlewareMonitor_WithAllEnabled(b *testing.B) {
+	file, err := os.OpenFile("logfileWithAllEnabled.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer func(file *os.File) {
+		e := file.Close()
+		if e != nil {
+			panic(e)
+		}
+		if e := os.Remove("logfileWithAllEnabled.log"); e != nil {
+			panic(e)
+		}
+	}(file)
+
+	logger := slog.New(slog.NewTextHandler(file, nil))
+	slog.SetDefault(logger)
+
 	m := NewMonitor(MonitorAll)
 	handler := func(ctx context.Context, tick common.Tick) {}
 	wrapped := m.WithTick(handler)
@@ -551,9 +587,27 @@ func BenchmarkMiddlewareMonitor_WithAllEnabled(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		wrapped(ctx, tick)
 	}
+	b.StopTimer()
 }
 
 func BenchmarkMiddlewareMonitor_MultipleHandlers(b *testing.B) {
+	file, err := os.OpenFile("logfileMultipleHandlers.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer func(file *os.File) {
+		e := file.Close()
+		if e != nil {
+			panic(e)
+		}
+		if e := os.Remove("logfileMultipleHandlers.log"); e != nil {
+			panic(e)
+		}
+	}(file)
+
+	logger := slog.New(slog.NewTextHandler(file, nil))
+	slog.SetDefault(logger)
+
 	m := NewMonitor(MonitorAll)
 
 	tickHandler := m.WithTick(func(ctx context.Context, tick common.Tick) {})
@@ -571,4 +625,5 @@ func BenchmarkMiddlewareMonitor_MultipleHandlers(b *testing.B) {
 		barHandler(ctx, bar)
 		orderHandler(ctx, order)
 	}
+	b.StopTimer()
 }

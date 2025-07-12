@@ -67,11 +67,7 @@ func main() {
 
 	advisor := strategy.NewMrxAdvisor(router)
 
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(func(ctx context.Context, tick common.Tick) {
-		sim.OnTick(ctx, tick)
-		barBuilder.OnTick(ctx, tick)
-		advisor.OnTick(ctx, tick)
-	})
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(bus.MergeHandlers(sim.OnTick, barBuilder.OnTick, advisor.OnTick))
 	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnBar)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
 	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(middleware.NoopOrderAccHdl)

@@ -2,24 +2,7 @@ package bus
 
 import (
 	"context"
-
 	"github.com/peter-kozarec/equinox/pkg/common"
-)
-
-type EventId uint8
-
-const (
-	TickEvent EventId = iota
-	BarEvent
-	EquityEvent
-	BalanceEvent
-	PositionOpenedEvent
-	PositionClosedEvent
-	PositionPnLUpdatedEvent
-	OrderEvent
-	OrderRejectedEvent
-	OrderAcceptedEvent
-	SignalEvent
 )
 
 type TickEventHandler func(context.Context, common.Tick)
@@ -33,3 +16,11 @@ type OrderEventHandler func(context.Context, common.Order)
 type OrderRejectedEventHandler func(context.Context, common.OrderRejected)
 type OrderAcceptedEventHandler func(context.Context, common.OrderAccepted)
 type SignalEventHandler func(context.Context, common.Signal)
+
+func MergeHandlers[T any](handlers ...func(context.Context, T)) func(context.Context, T) {
+	return func(ctx context.Context, event T) {
+		for _, handler := range handlers {
+			handler(ctx, event)
+		}
+	}
+}

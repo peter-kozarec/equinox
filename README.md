@@ -6,4 +6,4 @@
 
 ## ⚠️ Warning
 
-This is a public repo only because of github actions, so go away
+This is a public repo only because of github actions usage, so go away

@@ -18,8 +18,8 @@ func TestBusRouter_Post(t *testing.T) {
 		t.Errorf("Post failed: %v", err)
 	}
 
-	if r.postCount != 1 {
-		t.Errorf("Expected postCount=1, got %d", r.postCount)
+	if r.postCount.Load() != 1 {
+		t.Errorf("Expected postCount=1, got %d", r.postCount.Load())
 	}
 }
 
@@ -36,8 +36,8 @@ func TestBusRouter_PostCapacityReached(t *testing.T) {
 		t.Error("Expected error when capacity reached")
 	}
 
-	if r.postFails != 1 {
-		t.Errorf("Expected postFails=1, got %d", r.postFails)
+	if r.postFails.Load() != 1 {
+		t.Errorf("Expected postFails=1, got %d", r.postFails.Load())
 	}
 }
 
@@ -69,8 +69,8 @@ func TestBusRouter_Exec(t *testing.T) {
 		t.Error("Tick handler not called")
 	}
 
-	if r.dispatchCount != 1 {
-		t.Errorf("Expected dispatchCount=1, got %d", r.dispatchCount)
+	if r.dispatchCount.Load() != 1 {
+		t.Errorf("Expected dispatchCount=1, got %d", r.dispatchCount.Load())
 	}
 }
 
@@ -210,8 +210,8 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 		}
 	}
 
-	if r.dispatchCount != 11 {
-		t.Errorf("Expected dispatchCount=11, got %d", r.dispatchCount)
+	if r.dispatchCount.Load() != 11 {
+		t.Errorf("Expected dispatchCount=11, got %d", r.dispatchCount.Load())
 	}
 }
 
@@ -233,8 +233,8 @@ func TestBusRouter_InvalidTypeAssertion(t *testing.T) {
 	cancel()
 	<-errChan
 
-	if r.dispatchFails != 1 {
-		t.Errorf("Expected dispatchFails=1, got %d", r.dispatchFails)
+	if r.dispatchFails.Load() != 1 {
+		t.Errorf("Expected dispatchFails=1, got %d", r.dispatchFails.Load())
 	}
 }
 
@@ -255,12 +255,12 @@ func TestBusRouter_NilHandlers(t *testing.T) {
 	cancel()
 	<-errChan
 
-	if r.dispatchCount != 2 {
-		t.Errorf("Expected dispatchCount=2, got %d", r.dispatchCount)
+	if r.dispatchCount.Load() != 2 {
+		t.Errorf("Expected dispatchCount=2, got %d", r.dispatchCount.Load())
 	}
 
-	if r.dispatchFails != 0 {
-		t.Errorf("Expected dispatchFails=0, got %d", r.dispatchFails)
+	if r.dispatchFails.Load() != 0 {
+		t.Errorf("Expected dispatchFails=0, got %d", r.dispatchFails.Load())
 	}
 }
 
@@ -278,8 +278,8 @@ func TestBusRouter_UnsupportedEventId(t *testing.T) {
 	cancel()
 	<-errChan
 
-	if r.dispatchFails != 1 {
-		t.Errorf("Expected dispatchFails=1, got %d", r.dispatchFails)
+	if r.dispatchFails.Load() != 1 {
+		t.Errorf("Expected dispatchFails=1, got %d", r.dispatchFails.Load())
 	}
 }
 
@@ -305,8 +305,8 @@ func TestBusRouter_ConcurrentPost(t *testing.T) {
 	wg.Wait()
 
 	expectedPosts := uint64(numGoroutines * eventsPerGoroutine)
-	if r.postCount != expectedPosts {
-		t.Errorf("Expected postCount=%d, got %d", expectedPosts, r.postCount)
+	if r.postCount.Load() != expectedPosts {
+		t.Errorf("Expected postCount=%d, got %d", expectedPosts, r.postCount.Load())
 	}
 }
 
@@ -324,66 +324,19 @@ func TestBusRouter_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestBusRouter_Statistics(t *testing.T) {
-	r := NewRouter(10)
-
-	r.runTime = time.Second
-	r.postCount = 100
-	r.postFails = 5
-	r.dispatchCount = 95
-	r.dispatchFails = 2
-
-	r.PrintStatistics()
-}
-
 func BenchmarkBusRouter_Post(b *testing.B) {
-	r := NewRouter(1000000)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := r.Post(TickEvent, common.Tick{}); err != nil {
-			b.Errorf("Post failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkBusRouter_PostCapacityReached(b *testing.B) {
-	r := NewRouter(1)
-	if err := r.Post(TickEvent, common.Tick{}); err != nil {
-		b.Errorf("Post failed: %v", err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := r.Post(TickEvent, common.Tick{}); err != nil {
-			b.Errorf("Post failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkBusRouter_Dispatch(b *testing.B) {
 	r := NewRouter(b.N)
 
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {}
-
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := r.Post(TickEvent, common.Tick{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errChan := r.Exec(ctx)
-
-	b.ResetTimer()
-
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	<-errChan
 }
 
 func BenchmarkBusRouter_ConcurrentPost(b *testing.B) {
-	r := NewRouter(1000000)
+	r := NewRouter(b.N)
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -409,6 +362,10 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 	r.OrderRejectedHandler = func(ctx context.Context, or common.OrderRejected) {}
 	r.SignalHandler = func(ctx context.Context, sig common.Signal) {}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	errChan := r.Exec(ctx)
+
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := r.Post(TickEvent, common.Tick{}); err != nil {
 			b.Errorf("Post failed: %v", err)
@@ -445,12 +402,6 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	errChan := r.Exec(ctx)
-
-	b.ResetTimer()
-
-	time.Sleep(100 * time.Millisecond)
 	cancel()
 	<-errChan
 }

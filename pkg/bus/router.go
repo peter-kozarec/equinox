@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
@@ -31,10 +32,10 @@ type Router struct {
 	SignalHandler             SignalEventHandler
 
 	runTime       time.Duration
-	postCount     uint64
-	postFails     uint64
-	dispatchCount uint64
-	dispatchFails uint64
+	postCount     atomic.Uint64
+	postFails     atomic.Uint64
+	dispatchCount atomic.Uint64
+	dispatchFails atomic.Uint64
 }
 
 func NewRouter(eventCapacity int) *Router {
@@ -46,10 +47,10 @@ func NewRouter(eventCapacity int) *Router {
 func (r *Router) Post(id EventId, data interface{}) error {
 	select {
 	case r.events <- event{id, data}:
-		r.postCount++
+		r.postCount.Add(1)
 		return nil
 	default:
-		r.postFails++
+		r.postFails.Add(1)
 		return errors.New("event capacity reached")
 	}
 }
@@ -57,10 +58,10 @@ func (r *Router) Post(id EventId, data interface{}) error {
 func (r *Router) Exec(ctx context.Context) <-chan error {
 
 	r.runTime = 0
-	r.dispatchCount = 0
-	r.dispatchFails = 0
-	r.postCount = 0
-	r.postFails = 0
+	r.dispatchCount.Store(0)
+	r.dispatchFails.Store(0)
+	r.postCount.Store(0)
+	r.postFails.Store(0)
 
 	start := time.Now()
 	defer func() {
@@ -78,9 +79,9 @@ func (r *Router) Exec(ctx context.Context) <-chan error {
 				errChan <- ctx.Err()
 				return
 			case ev := <-r.events:
-				r.dispatchCount++
+				r.dispatchCount.Add(1)
 				if err := r.dispatch(ctx, ev); err != nil {
-					r.dispatchFails++
+					r.dispatchFails.Add(1)
 					slog.Warn("dispatch failed", "error", err, "event", ev)
 				}
 			}
@@ -93,10 +94,10 @@ func (r *Router) Exec(ctx context.Context) <-chan error {
 func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan error {
 
 	r.runTime = 0
-	r.dispatchCount = 0
-	r.dispatchFails = 0
-	r.postCount = 0
-	r.postFails = 0
+	r.dispatchCount.Store(0)
+	r.dispatchFails.Store(0)
+	r.postCount.Store(0)
+	r.postFails.Store(0)
 
 	start := time.Now()
 	defer func() {
@@ -114,9 +115,9 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 				errChan <- ctx.Err()
 				return
 			case ev := <-r.events:
-				r.dispatchCount++
+				r.dispatchCount.Add(1)
 				if err := r.dispatch(ctx, ev); err != nil {
-					r.dispatchFails++
+					r.dispatchFails.Add(1)
 					slog.Warn("dispatch failed", "error", err, "event", ev)
 				}
 			default:
@@ -134,11 +135,11 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 func (r *Router) PrintStatistics() {
 	slog.Info("router statistics",
 		"run_time", r.runTime,
-		"post_count", r.postCount,
-		"post_fails", r.postFails,
-		"dispatch_count", r.dispatchCount,
-		"dispatch_fails", r.dispatchFails,
-		"throughput", float64(r.postCount)/r.runTime.Seconds())
+		"post_count", r.postCount.Load(),
+		"post_fails", r.postFails.Load(),
+		"dispatch_count", r.dispatchCount.Load(),
+		"dispatch_fails", r.dispatchFails.Load(),
+		"throughput", float64(r.postCount.Load())/r.runTime.Seconds())
 }
 
 func (r *Router) dispatch(ctx context.Context, ev event) error {

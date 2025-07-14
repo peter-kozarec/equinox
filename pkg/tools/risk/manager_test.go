@@ -6,6 +6,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -655,9 +656,9 @@ func TestRiskManager_CheckForBreakEven(t *testing.T) {
 				Ask: fixed.FromFloat64(1.2051),
 			}
 
-			orderPosted := false
+			var orderPosted atomic.Bool
 			r.OrderHandler = func(ctx context.Context, order common.Order) {
-				orderPosted = true
+				orderPosted.Store(true)
 			}
 
 			err := m.checkForBreakEven(tt.position)
@@ -671,8 +672,8 @@ func TestRiskManager_CheckForBreakEven(t *testing.T) {
 			time.Sleep(100 * time.Millisecond) // Should be enough for the event to be dispatched
 			cancel()
 
-			if orderPosted != tt.expectOrder {
-				t.Errorf("expected order posted = %v, got %v", tt.expectOrder, orderPosted)
+			if orderPosted.Load() != tt.expectOrder {
+				t.Errorf("expected order posted = %v, got %v", tt.expectOrder, orderPosted.Load())
 			}
 		})
 	}

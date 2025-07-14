@@ -3,21 +3,19 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/tools/bar"
-	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"math/rand"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/common"
-
 	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/data/mapper"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/simulation"
+	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -75,7 +73,7 @@ func main() {
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
 
-	if err := <- router.ExecLoop(ctx, exec.DoOnce); err != nil {
+	if err := <-router.ExecLoop(ctx, exec.DoOnce); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
 			slog.Error("unexpected error during execution", "error", err)
 			os.Exit(1)

@@ -48,22 +48,16 @@ func main() {
 		router,
 		instrument.Symbol,
 		rand.New(rand.NewSource(time.Now().UnixNano())),
-		30*24*time.Hour, // Duration
-		0.1607143264,    // Your mu
-		0.0698081590,    // Your sigma
+		30*24*time.Hour,
+		0.1607143264,
+		0.0698081590,
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	//db, err := psql.Connect(ctx, "", "", "", "", "")
-	//if err != nil {
-	//	logger.Fatal("unable to connect to postgres", zap.Error(err))
-	//}
-
 	monitor := middleware.NewMonitor(middleware.MonitorBars)
 	performance := middleware.NewPerformance()
-	//ledger := middleware.NewLedger(ctx, logger, db, 13456789, 987654321)
 
 	advisor := strategy.NewMrxAdvisor(router)
 
@@ -78,23 +72,12 @@ func main() {
 	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		errCh := router.ExecLoop(ctx, exec.DoOnce)
-		select {
-		case e := <-errCh:
-			return e
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	})
-
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()
 
-	if e := g.Wait(); e != nil {
-		if !errors.Is(e, context.Canceled) && !errors.Is(e, mapper.ErrEof) {
-			slog.Error("unexpected error during execution", "error", e)
+	if err := <- router.ExecLoop(ctx, exec.DoOnce); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
+			slog.Error("unexpected error during execution", "error", err)
 			os.Exit(1)
 		}
 	}

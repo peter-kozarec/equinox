@@ -63,7 +63,7 @@ func main() {
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance)(middleware.NoopBalanceHdl)
 	router.EquityHandler = middleware.Chain(monitor.WithEquity)(middleware.NoopEquityHdl)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed)(advisor.OnPositionClosed)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed)(middleware.NoopPosClsHdl)
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder)(orderHandler)
 

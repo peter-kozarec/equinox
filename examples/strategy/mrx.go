@@ -2,7 +2,6 @@ package strategy
 
 import (
 	"context"
-
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility"
@@ -26,8 +25,6 @@ type MrxAdvisor struct {
 	lastTick common.Tick
 	closes   *fixed.RingBuffer
 	zScores  *fixed.RingBuffer
-
-	posOpen bool
 }
 
 func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
@@ -35,7 +32,6 @@ func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
 		router:  router,
 		closes:  fixed.NewRingBuffer(60),
 		zScores: fixed.NewRingBuffer(60),
-		posOpen: false,
 	}
 }
 
@@ -61,53 +57,17 @@ func (a *MrxAdvisor) OnBar(_ context.Context, b common.Bar) {
 		return
 	}
 
-	if !a.posOpen && a.canTrade() {
-		if z.Gte(Three) {
-			_ = a.router.Post(bus.OrderEvent, common.Order{
-				Source:      componentName,
-				Symbol:      b.Symbol,
-				ExecutionId: utility.GetExecutionID(),
-				TraceID:     utility.CreateTraceID(),
-				Side:        common.OrderSideSell,
-				TimeStamp:   b.TimeStamp,
-				Command:     common.OrderCommandPositionOpen,
-				Type:        common.OrderTypeMarket,
-				Size:        fixed.FromInt64(1, 2).Neg(),
-				StopLoss:    b.Close.Add(b.Close.Sub(mean)),
-				TakeProfit:  mean,
-			})
-			a.posOpen = true
-		} else if z.Lte(NegativeThree) {
-			_ = a.router.Post(bus.OrderEvent, common.Order{
-				Source:      componentName,
-				Symbol:      b.Symbol,
-				ExecutionId: utility.GetExecutionID(),
-				TraceID:     utility.CreateTraceID(),
-				Command:     common.OrderCommandPositionOpen,
-				Type:        common.OrderTypeMarket,
-				Side:        common.OrderSideBuy,
-				Size:        fixed.FromInt64(1, 2),
-				StopLoss:    b.Close.Sub(mean.Sub(b.Close)),
-				TakeProfit:  mean,
-			})
-			a.posOpen = true
-		}
+	if z.Gte(Three) || z.Lte(NegativeThree) {
+		_ = a.router.Post(bus.SignalEvent, common.Signal{
+			Source:      componentName,
+			Symbol:      b.Symbol,
+			ExecutionID: utility.GetExecutionID(),
+			TraceID:     utility.CreateTraceID(),
+			TimeStamp:   b.TimeStamp,
+			Entry:       a.lastTick.Bid,
+			Target:      mean,
+			Strength:    60,
+			Comment:     z.String(),
+		})
 	}
-}
-
-func (a *MrxAdvisor) OnPositionClosed(_ context.Context, _ common.Position) {
-	a.posOpen = false
-}
-
-func (a *MrxAdvisor) canTrade() bool {
-
-	if a.lastTick.TimeStamp.IsZero() {
-		return false
-	}
-
-	if a.lastTick.TimeStamp.Hour() < 9 || a.lastTick.TimeStamp.Hour() > 18 {
-		return false
-	}
-
-	return true
 }

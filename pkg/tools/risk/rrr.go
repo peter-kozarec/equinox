@@ -2,18 +2,26 @@ package risk
 
 import "github.com/peter-kozarec/equinox/pkg/utility/fixed"
 
-func withRiskRewardRatioCalcSize(baseSize, entry, sl, tp fixed.Point) fixed.Point {
-	risk := entry.Sub(sl).Abs()
-	reward := tp.Sub(entry).Abs()
-	ratio := reward.Div(risk)
+type RRRMultiplierHandler func(rrr fixed.Point) fixed.Point
 
-	if ratio.Gte(fixed.FromFloat64(2.5)) {
-		return baseSize.Mul(fixed.FromFloat64(1.4))
-	} else if ratio.Gte(fixed.FromFloat64(2.0)) {
-		return baseSize.Mul(fixed.FromFloat64(1.2))
-	} else if ratio.Gte(fixed.FromFloat64(1.5)) {
-		return baseSize.Mul(fixed.FromFloat64(1.0))
+func WithRRRMultiplier(h RRRMultiplierHandler) Option {
+	return func(m *Manager) {
+		if m.rrrMulHandler != nil {
+			panic("RRR multiplier handler already set")
+		}
+		m.rrrMulHandler = h
 	}
+}
 
-	return baseSize.Mul(fixed.FromFloat64(0.8))
+func WithDefaultRRRMultiplier() Option {
+	return WithRRRMultiplier(func(rrr fixed.Point) fixed.Point {
+		if rrr.Gte(fixed.FromFloat64(2.5)) {
+			return fixed.FromFloat64(1.4)
+		} else if rrr.Gte(fixed.FromFloat64(2.0)) {
+			return fixed.FromFloat64(1.2)
+		} else if rrr.Gte(fixed.FromFloat64(1.5)) {
+			return fixed.FromFloat64(1.0)
+		}
+		return fixed.FromFloat64(0.8)
+	})
 }

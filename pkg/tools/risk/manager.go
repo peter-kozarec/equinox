@@ -3,19 +3,22 @@ package risk
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"log/slog"
-	"time"
 )
 
+type Option func(*Manager)
+
 type Manager struct {
-	r             *bus.Router
-	instrument    common.Instrument
-	configuration Configuration
+	r          *bus.Router
+	instrument common.Instrument
+	conf       Configuration
 
 	atr *indicators.Atr
 
@@ -28,54 +31,43 @@ type Manager struct {
 	closedPositions []common.Position
 	pendingOrders   []common.Order
 
-	serverTime time.Time
-	lastTick   common.Tick
+	serverTime           time.Time
+	lastPositionOpenTime time.Time
+	lastTick             common.Tick
 
 	totalTrades     int
 	winningTrades   int
 	totalWinAmount  fixed.Point
 	totalLossAmount fixed.Point
+
+	// Optional configuration
+	tradeTimeHandler TradeTimeHandler
+	cooldownHandler  CooldownHandler
+
+	drawdownMulHandler       DrawdownMultiplierHandler
+	signalStrengthMulHandler SignalStrengthMultiplierHandler
+	rrrMulHandler            RRRMultiplierHandler
+	kellyMulHandler          KellyMultiplierHandler
 }
 
-func NewManager(r *bus.Router, instrument common.Instrument, configuration Configuration) *Manager {
-	if err := validateConfiguration(configuration); err != nil {
-		slog.Error("invalid configuration", slog.Any("err", err))
+func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, options ...Option) *Manager {
+	m := &Manager{
+		r:          r,
+		instrument: instrument,
+		conf:       conf,
+		atr:        indicators.NewAtr(conf.AtrPeriod),
 	}
 
-	return &Manager{
-		r:             r,
-		instrument:    instrument,
-		configuration: configuration,
-		atr:           indicators.NewAtr(configuration.AtrPeriod),
+	for _, option := range options {
+		option(m)
 	}
-}
 
-func validateConfiguration(cfg Configuration) error {
-	if cfg.MaxRiskPercentage.Lte(fixed.Zero) || cfg.MaxRiskPercentage.Gt(fixed.FromInt(100, 0)) {
-		return fmt.Errorf("MaxRiskPercentage must be between 0 and 100")
-	}
-	if cfg.MinRiskPercentage.Lte(fixed.Zero) || cfg.MinRiskPercentage.Gt(cfg.MaxRiskPercentage) {
-		return fmt.Errorf("MinRiskPercentage must be between 0 and MaxRiskPercentage")
-	}
-	if cfg.BaseRiskPercentage.Lt(cfg.MinRiskPercentage) || cfg.BaseRiskPercentage.Gt(cfg.MaxRiskPercentage) {
-		return fmt.Errorf("BaseRiskPercentage must be between MinRiskPercentage and MaxRiskPercentage")
-	}
-	if cfg.MaxOpenRiskPercentage.Lte(fixed.Zero) || cfg.MaxOpenRiskPercentage.Gt(fixed.FromInt(100, 0)) {
-		return fmt.Errorf("MaxOpenRiskPercentage must be between 0 and 100")
-	}
-	if cfg.AtrPeriod <= 0 {
-		return fmt.Errorf("AtrPeriod must be positive")
-	}
-	if cfg.SlAtrMultiplier.Lte(fixed.Zero) {
-		return fmt.Errorf("SlAtrMultiplier must be positive")
-	}
-	return nil
+	return m
 }
 
 func (m *Manager) OnTick(_ context.Context, tick common.Tick) {
 	m.serverTime = tick.TimeStamp
 	m.lastTick = tick
-
 	m.checkOpenPositions()
 }
 
@@ -90,8 +82,15 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	if !m.isTimeToTrade() {
-		slog.Info("it is not a time to trade, signal is discarded")
+		slog.Warn("it is not a time to trade, signal is discarded")
 		return
+	}
+
+	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
+		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
+			slog.Warn("cooldown is active, signal is discarded")
+			return
+		}
 	}
 
 	maxBalanceIsZero := m.maxBalance.TimeStamp.IsZero()
@@ -109,21 +108,13 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 
 	atrValue := m.atr.Value()
 
-	// Validate ATR is reasonable (e.g., not more than 10% of price)
-	if atrValue.Gt(signal.Entry.Mul(fixed.FromFloat64(0.1))) {
-		slog.Warn("ATR value seems too high relative to price",
-			slog.String("atr", atrValue.String()),
-			slog.String("entry", signal.Entry.String()))
-		return
-	}
-
-	if signal.Entry.Sub(signal.Target).Abs().Lt(atrValue) {
+	if signal.Entry.Sub(signal.Target).Abs().Lt(atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier)) {
 		slog.Warn("signal is too close to target, signal is discarded")
 		return
 	}
 
 	if err := m.assertPositionCanBeOpened(); err != nil {
-		slog.Info("unable to execute signal", slog.Any("err", err))
+		slog.Warn("unable to execute signal", slog.Any("err", err))
 		return
 	}
 
@@ -134,15 +125,21 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 
 	drawdown := fixed.One.Sub(m.currentEquity.Value.Div(m.maxEquity.Value)).MulInt(100)
 
-	if m.totalTrades >= 20 { // Make 20 configurable
-		winRate := m.getWinRate()
-		avgWinLoss := m.getAvgWinLossRatio()
-		size = withKellyCriterionCalcSize(size, winRate, avgWinLoss, m.configuration.BaseRiskPercentage)
+	if m.kellyMulHandler != nil {
+		size = size.Mul(m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio()))
 	}
-
-	size = withSignalStrengthCalcSize(size, signal.Strength)
-	size = withDrawdownCalcSize(size, drawdown)
-	size = withRiskRewardRatioCalcSize(size, entry, sl, tp)
+	if m.signalStrengthMulHandler != nil {
+		size = size.Mul(m.signalStrengthMulHandler(signal.Strength))
+	}
+	if m.drawdownMulHandler != nil {
+		size = size.Mul(m.drawdownMulHandler(drawdown))
+	}
+	if m.rrrMulHandler != nil {
+		risk := entry.Sub(sl).Abs()
+		reward := tp.Sub(entry).Abs()
+		ratio := reward.Div(risk)
+		size = size.Mul(m.rrrMulHandler(ratio))
+	}
 
 	if size.IsZero() {
 		slog.Info("calculated size is zero, signal is discarded",
@@ -171,12 +168,12 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	additionalRisk := m.calculateRiskPercentage(entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
-	if totalRisk.Gt(m.configuration.MaxOpenRiskPercentage) {
+	if totalRisk.Gt(m.conf.RiskMax) {
 		slog.Info("total risk is greater than max risk percentage, signal is discarded",
 			slog.String("current_open_risk", currentOpenRisk.String()),
 			slog.String("additional_risk", additionalRisk.String()),
 			slog.String("total_risk", totalRisk.String()),
-			slog.String("max_risk_percentage", m.configuration.MaxOpenRiskPercentage.String()))
+			slog.String("max_risk_percentage", m.conf.RiskMax.String()))
 		return
 	}
 
@@ -195,6 +192,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 }
 
 func (m *Manager) OnPositionOpened(_ context.Context, position common.Position) {
+	m.lastPositionOpenTime = m.serverTime
 	m.openPositions = append(m.openPositions, position)
 }
 
@@ -301,7 +299,7 @@ func (m *Manager) checkOpenPositions() {
 }
 
 func (m *Manager) checkForBreakEven(position common.Position) error {
-	if m.configuration.BreakEvenThresholdPercentage.IsZero() || position.TakeProfit.IsZero() {
+	if m.conf.BreakEvenThreshold.IsZero() || position.TakeProfit.IsZero() {
 		return nil
 	}
 
@@ -332,8 +330,8 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 
 	movePercentage := moved.Div(takeProfitPriceDiff).MulInt(100)
 
-	if movePercentage.Gte(m.configuration.BreakEvenThresholdPercentage) {
-		newStopLossMove := takeProfitPriceDiff.Mul(m.configuration.BreakEvenMovePercentage.DivInt(100))
+	if movePercentage.Gte(m.conf.BreakEvenThreshold) {
+		newStopLossMove := takeProfitPriceDiff.Mul(m.conf.BreakEvenMove.DivInt(100))
 
 		var newStopLoss fixed.Point
 		if position.Side == common.PositionSideLong {
@@ -345,19 +343,21 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 		order := common.Order{
 			Source:      "risk-manager",
 			Symbol:      m.instrument.Symbol,
-			ExecutionId: utility.ExecutionID{},
+			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
 			TimeStamp:   serverTime,
-			Command:     common.OrderCommandPositionClose,
+			Command:     common.OrderCommandPositionModify,
 			StopLoss:    newStopLoss,
 			TakeProfit:  position.TakeProfit,
 			PositionId:  position.Id,
-			Comment:     fmt.Sprintf("Break even triggered at %s move", movePercentage.String()),
+			Comment:     fmt.Sprintf("Break even triggered at %s%% move", movePercentage.String()),
 		}
 
 		if err := m.r.Post(bus.OrderEvent, order); err != nil {
 			return fmt.Errorf("unable to post order event: %v", err)
 		}
+
+		m.pendingOrders = append(m.pendingOrders, order)
 	}
 
 	return nil
@@ -370,26 +370,8 @@ func (m *Manager) isTimeToTrade() bool {
 		return false
 	}
 
-	weekDay := serverTime.Weekday()
-
-	// No trading on weekends
-	if weekDay == time.Saturday || weekDay == time.Sunday {
-		return false
-	}
-
-	// No trading Monday before 10:00
-	if weekDay == time.Monday && serverTime.Hour() < 10 {
-		return false
-	}
-
-	// No trading Friday after 16:00
-	if weekDay == time.Friday && serverTime.Hour() > 16 {
-		return false
-	}
-
-	// Only trade between 8:00 and 18:00
-	if serverTime.Hour() < 8 || serverTime.Hour() > 18 {
-		return false
+	if m.tradeTimeHandler != nil {
+		return m.tradeTimeHandler(serverTime)
 	}
 
 	return true
@@ -405,7 +387,6 @@ func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
 	return risk
 }
 
-// calculateRiskPercentage returns the risk as a percentage of equity
 func (m *Manager) calculateRiskPercentage(entry, sl, size fixed.Point) fixed.Point {
 	equity := m.currentEquity.Value
 
@@ -419,18 +400,17 @@ func (m *Manager) calculateRiskPercentage(entry, sl, size fixed.Point) fixed.Poi
 }
 
 func (m *Manager) calculateMaxPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.configuration.MaxRiskPercentage)
+	return m.calculatePositionSize(entry, sl, m.conf.RiskMax)
 }
 
 func (m *Manager) calculateMinPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.configuration.MinRiskPercentage)
+	return m.calculatePositionSize(entry, sl, m.conf.RiskMin)
 }
 
 func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.configuration.BaseRiskPercentage)
+	return m.calculatePositionSize(entry, sl, m.conf.RiskBase)
 }
 
-// calculatePositionSize calculates position size based on risk percentage
 func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
 	equity := m.currentEquity.Value
 
@@ -452,10 +432,10 @@ func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) f
 func (m *Manager) calculateStopLoss(entry, target, atr fixed.Point) fixed.Point {
 	if entry.Gt(target) {
 		// Sell signal
-		return entry.Add(atr.Mul(m.configuration.SlAtrMultiplier))
+		return entry.Add(atr.Mul(m.conf.AtrStopLossMultiplier))
 	}
 	// Buy signal
-	return entry.Sub(atr.Mul(m.configuration.SlAtrMultiplier))
+	return entry.Sub(atr.Mul(m.conf.AtrStopLossMultiplier))
 }
 
 func (m *Manager) assertPositionCanBeOpened() error {

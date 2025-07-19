@@ -1,21 +1,23 @@
 package risk
 
-import "github.com/peter-kozarec/equinox/pkg/utility/fixed"
+import (
+	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+)
 
 type Configuration struct {
-	// Position size
-	MaxRiskPercentage  fixed.Point
-	MinRiskPercentage  fixed.Point
-	BaseRiskPercentage fixed.Point
+	RiskMax  fixed.Point
+	RiskMin  fixed.Point
+	RiskBase fixed.Point
+	RiskOpen fixed.Point
 
-	// Max risk
-	MaxOpenRiskPercentage fixed.Point
+	AtrPeriod                  int
+	AtrStopLossMultiplier      fixed.Point
+	AtrTakeProfitMinMultiplier fixed.Point
 
-	// Stop Loss
-	AtrPeriod       int
-	SlAtrMultiplier fixed.Point
+	BreakEvenMove      fixed.Point
+	BreakEvenThreshold fixed.Point
 
-	// Break Even - percentage of what price has to move towards the take profit to change the stop loss to break even
-	BreakEvenMovePercentage      fixed.Point // Where stop loss will be moved
-	BreakEvenThresholdPercentage fixed.Point // Threshold to move stop loss
+	Cooldown time.Duration
 }

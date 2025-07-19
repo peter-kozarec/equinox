@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -25,10 +27,25 @@ var (
 
 	instrument = common.Instrument{
 		Symbol:           "EURUSD",
+		Digits:           5,
 		PipSize:          fixed.FromInt(1, 4),
 		ContractSize:     fixed.FromInt(100000, 0),
-		CommissionPerLot: fixed.FromInt(3, 0),
-		PipSlippage:      fixed.FromInt(10, 5),
+		CommissionPerLot: fixed.Zero,
+		PipSlippage:      fixed.Zero,
+	}
+
+	riskConf = risk.Configuration{
+		RiskMax:  fixed.FromFloat64(0.3),
+		RiskMin:  fixed.FromFloat64(0.1),
+		RiskBase: fixed.FromFloat64(0.2),
+		RiskOpen: fixed.Ten,
+
+		AtrPeriod:                  44,
+		AtrStopLossMultiplier:      fixed.Five,
+		AtrTakeProfitMinMultiplier: fixed.Two,
+
+		BreakEvenMove:      fixed.FromFloat64(20),
+		BreakEvenThreshold: fixed.FromFloat64(60),
 	}
 )
 
@@ -54,21 +71,45 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	monitor := middleware.NewMonitor(middleware.MonitorBars)
+	monitor := middleware.NewMonitor(middleware.MonitorSignals | middleware.MonitorOrders | middleware.MonitorPositionsClosed)
 	performance := middleware.NewPerformance()
 
 	advisor := strategy.NewMrxAdvisor(router)
+	riskManager := risk.NewManager(router, instrument, riskConf,
+		risk.WithDefaultKellyMultiplier(),
+		risk.WithDefaultDrawdownMultiplier(),
+		risk.WithDefaultRRRMultiplier(),
+		risk.WithOnHourCooldown())
 
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(bus.MergeHandlers(sim.OnTick, barBuilder.OnTick, advisor.OnTick))
-	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(advisor.OnBar)
+	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(bus.MergeHandlers(sim.OnTick, riskManager.OnTick, barBuilder.OnTick, advisor.OnTick))
+	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(bus.MergeHandlers(riskManager.OnBar, advisor.OnBar))
 	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
-	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(middleware.NoopOrderAccHdl)
-	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(middleware.NoopOrderRjctHdl)
-	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(middleware.NoopPosOpnHdl)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(advisor.OnPositionClosed)
-	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
-	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(middleware.NoopEquityHdl)
-	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(middleware.NoopBalanceHdl)
+	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(riskManager.OnOrderAccepted)
+	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(riskManager.OnOrderRejected)
+	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(riskManager.OnPositionOpened)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(riskManager.OnPositionClosed)
+	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(riskManager.OnPositionUpdated)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(riskManager.OnEquity)
+	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(riskManager.OnBalance)
+	router.SignalHandler = middleware.Chain(monitor.WithSignal, performance.WithSignal)(riskManager.OnSignal)
+
+	riskManager.OnEquity(ctx, common.Equity{
+		Source:      "main",
+		Account:     "",
+		ExecutionId: utility.GetExecutionID(),
+		TraceID:     utility.CreateTraceID(),
+		TimeStamp:   time.Now(),
+		Value:       startBalance,
+	})
+
+	riskManager.OnBalance(ctx, common.Balance{
+		Source:      "main",
+		Account:     "",
+		ExecutionId: utility.GetExecutionID(),
+		TraceID:     utility.CreateTraceID(),
+		TimeStamp:   time.Now(),
+		Value:       startBalance,
+	})
 
 	defer performance.PrintStatistics()
 	defer router.PrintStatistics()

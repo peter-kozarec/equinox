@@ -108,9 +108,6 @@ func (b *Builder) construct(symbol string, period common.BarPeriod, mode PriceMo
 	}
 
 	if !found {
-		openTime := tick.TimeStamp
-		openTime = getAlignedPeriodStart(period, tick.TimeStamp)
-
 		bar := common.Bar{
 			Source:      "bar-builder",
 			Symbol:      symbol,
@@ -118,7 +115,7 @@ func (b *Builder) construct(symbol string, period common.BarPeriod, mode PriceMo
 			TraceID:     utility.CreateTraceID(),
 			Period:      period,
 			TimeStamp:   tick.TimeStamp,
-			OpenTime:    openTime,
+			OpenTime:    getAlignedPeriodStart(period, tick.TimeStamp),
 			Open:        price,
 			Close:       price,
 			High:        price,

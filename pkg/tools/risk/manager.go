@@ -82,13 +82,13 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	if !m.isTimeToTrade() {
-		slog.Warn("it is not a time to trade, signal is discarded")
+		slog.Debug("it is not a time to trade, signal is discarded")
 		return
 	}
 
 	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
 		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
-			slog.Warn("cooldown is active, signal is discarded")
+			slog.Debug("cooldown is active, signal is discarded")
 			return
 		}
 	}
@@ -142,7 +142,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	if size.IsZero() {
-		slog.Info("calculated size is zero, signal is discarded",
+		slog.Debug("calculated size is zero, signal is discarded",
 			slog.Uint64("signal_tid", signal.TraceID),
 			slog.String("drawdown", fmt.Sprintf("%s%%", drawdown.String())))
 		return
@@ -169,7 +169,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
 	if totalRisk.Gt(m.conf.RiskMax) {
-		slog.Info("total risk is greater than max risk percentage, signal is discarded",
+		slog.Debug("total risk is greater than max risk percentage, signal is discarded",
 			slog.String("current_open_risk", currentOpenRisk.String()),
 			slog.String("additional_risk", additionalRisk.String()),
 			slog.String("total_risk", totalRisk.String()),
@@ -295,7 +295,7 @@ func (m *Manager) checkOpenPositions() {
 
 		for _, pendingOrder := range m.pendingOrders {
 			if pendingOrder.PositionId == position.Id {
-				slog.Info("position has an open orders, break even is not checked")
+				slog.Debug("position has an open orders, break even is not checked")
 				pendingOrderFound = true
 			}
 		}

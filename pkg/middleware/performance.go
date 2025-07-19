@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -148,8 +149,8 @@ func (p *Performance) PrintStatistics() {
 		if avgTick > 0 {
 			fields = append(fields,
 				slog.Int64("tick_event_count", p.tickEventCounter),
-				slog.Duration("tick_avg_duration", avgTick),
-				slog.Duration("tick_total_duration", p.totalTickHandlerDur),
+				slog.String("tick_avg_duration", fmt.Sprintf("%dns", avgTick.Nanoseconds())),
+				slog.String("tick_total_duration", fmt.Sprintf("%dns", p.totalTickHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -160,8 +161,8 @@ func (p *Performance) PrintStatistics() {
 		if avgBar > 0 {
 			fields = append(fields,
 				slog.Int64("bar_event_count", p.barEventCounter),
-				slog.Duration("bar_avg_duration", avgBar),
-				slog.Duration("bar_total_duration", p.totalBarHandlerDur),
+				slog.String("bar_avg_duration", fmt.Sprintf("%dns", avgBar.Nanoseconds())),
+				slog.String("bar_total_duration", fmt.Sprintf("%dns", p.totalBarHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -172,8 +173,8 @@ func (p *Performance) PrintStatistics() {
 		if avgBalance > 0 {
 			fields = append(fields,
 				slog.Int64("balance_event_count", p.balanceEventCounter),
-				slog.Duration("balance_avg_duration", avgBalance),
-				slog.Duration("balance_total_duration", p.totalBalanceHandlerDur),
+				slog.String("balance_avg_duration", fmt.Sprintf("%dns", avgBalance.Nanoseconds())),
+				slog.String("balance_total_duration", fmt.Sprintf("%dns", p.totalBalanceHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -184,8 +185,8 @@ func (p *Performance) PrintStatistics() {
 		if avgEquity > 0 {
 			fields = append(fields,
 				slog.Int64("equity_event_count", p.equityEventCounter),
-				slog.Duration("equity_avg_duration", avgEquity),
-				slog.Duration("equity_total_duration", p.totalEquityHandlerDur),
+				slog.String("equity_avg_duration", fmt.Sprintf("%dns", avgEquity.Nanoseconds())),
+				slog.String("equity_total_duration", fmt.Sprintf("%dns", p.totalEquityHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -196,8 +197,8 @@ func (p *Performance) PrintStatistics() {
 		if avgPosOpen > 0 {
 			fields = append(fields,
 				slog.Int64("position_open_event_count", p.positionOpenedEventCounter),
-				slog.Duration("position_open_avg_duration", avgPosOpen),
-				slog.Duration("position_open_total_duration", p.totalPosOpenHandlerDur),
+				slog.String("position_open_avg_duration", fmt.Sprintf("%dns", avgPosOpen.Nanoseconds())),
+				slog.String("position_open_total_duration", fmt.Sprintf("%dns", p.totalPosOpenHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -208,8 +209,8 @@ func (p *Performance) PrintStatistics() {
 		if avgPosClosed > 0 {
 			fields = append(fields,
 				slog.Int64("position_closed_event_count", p.positionClosedEventCounter),
-				slog.Duration("position_closed_avg_duration", avgPosClosed),
-				slog.Duration("position_closed_total_duration", p.totalPosClosHandlerDur),
+				slog.String("position_closed_avg_duration", fmt.Sprintf("%dns", avgPosClosed.Nanoseconds())),
+				slog.String("position_closed_total_duration", fmt.Sprintf("%dns", p.totalPosClosHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -220,8 +221,8 @@ func (p *Performance) PrintStatistics() {
 		if avgPosPnlUpd > 0 {
 			fields = append(fields,
 				slog.Int64("position_update_event_count", p.positionPnLUpdatedEventCounter),
-				slog.Duration("position_update_avg_duration", avgPosPnlUpd),
-				slog.Duration("position_update_total_duration", p.totalPosUpdtHandlerDur),
+				slog.String("position_update_avg_duration", fmt.Sprintf("%dns", avgPosPnlUpd.Nanoseconds())),
+				slog.String("position_update_total_duration", fmt.Sprintf("%dns", p.totalPosUpdtHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -232,8 +233,8 @@ func (p *Performance) PrintStatistics() {
 		if avgOrder > 0 {
 			fields = append(fields,
 				slog.Int64("order_event_count", p.orderEventCounter),
-				slog.Duration("order_avg_duration", avgOrder),
-				slog.Duration("order_total_duration", p.totalOrderHandlerDur),
+				slog.String("order_avg_duration", fmt.Sprintf("%dns", avgOrder.Nanoseconds())),
+				slog.String("order_total_duration", fmt.Sprintf("%dns", p.totalOrderHandlerDur.Nanoseconds())),
 			)
 		}
 	}
@@ -244,8 +245,8 @@ func (p *Performance) PrintStatistics() {
 		if avgOrderRejected > 0 {
 			fields = append(fields,
 				slog.Int64("order_rejected_event_count", p.orderRejectedEventCounter),
-				slog.Duration("order_rejected_avg_duration", avgOrderRejected),
-				slog.Duration("order_rejected_total_duration", p.totalOrderRejectedDur),
+				slog.String("order_rejected_avg_duration", fmt.Sprintf("%dns", avgOrderRejected.Nanoseconds())),
+				slog.String("order_rejected_total_duration", fmt.Sprintf("%dns", p.totalOrderRejectedDur.Nanoseconds())),
 			)
 		}
 	}
@@ -256,8 +257,8 @@ func (p *Performance) PrintStatistics() {
 		if avgOrderAccepted > 0 {
 			fields = append(fields,
 				slog.Int64("order_accepted_event_count", p.orderAcceptedEventCounter),
-				slog.Duration("order_accepted_avg_duration", avgOrderAccepted),
-				slog.Duration("order_accepted_total_duration", p.totalOrderAcceptedDur),
+				slog.String("order_accepted_avg_duration", fmt.Sprintf("%dns", avgOrderAccepted.Nanoseconds())),
+				slog.String("order_accepted_total_duration", fmt.Sprintf("%dns", p.totalOrderAcceptedDur.Nanoseconds())),
 			)
 		}
 	}
@@ -268,11 +269,10 @@ func (p *Performance) PrintStatistics() {
 		if avgSignal > 0 {
 			fields = append(fields,
 				slog.Int64("signal_event_count", p.signalEventCounter),
-				slog.Duration("signal_avg_duration", avgSignal),
-				slog.Duration("signal_total_duration", p.totalSignalHandlerDur))
+				slog.String("signal_avg_duration", fmt.Sprintf("%dns", avgSignal.Nanoseconds())),
+				slog.String("signal_total_duration", fmt.Sprintf("%dns", p.totalSignalHandlerDur.Nanoseconds())))
 		}
 	}
 
-	// ToDo: Fix this, not printing all fields
 	slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
 }

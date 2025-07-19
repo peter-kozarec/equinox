@@ -22,7 +22,6 @@ const (
 type Simulator struct {
 	instrument common.Instrument
 	router     *bus.Router
-	audit      *Audit
 
 	equity  fixed.Point
 	balance fixed.Point
@@ -35,11 +34,10 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, audit *Audit, instrument common.Instrument, startBalance fixed.Point) *Simulator {
+func NewSimulator(router *bus.Router, instrument common.Instrument, startBalance fixed.Point) *Simulator {
 	return &Simulator{
 		instrument: instrument,
 		router:     router,
-		audit:      audit,
 		equity:     startBalance,
 		balance:    startBalance,
 	}
@@ -87,8 +85,6 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 			slog.Error("unable to post equity event", "error", err)
 		}
 	}
-
-	s.audit.AddAccountSnapshot(s.balance, s.equity, s.simulationTime)
 }
 
 func (s *Simulator) CloseAllOpenPositions() {
@@ -109,11 +105,9 @@ func (s *Simulator) CloseAllOpenPositions() {
 		position.Status = common.PositionStatusClosed
 		position.ClosePrice = closePrice
 		position.CloseTime = s.lastTick.TimeStamp
-		s.audit.AddClosedPosition(*position)
 	}
 
 	s.balance = s.equity
-	s.audit.addSnapshot(s.balance, s.equity, s.simulationTime)
 }
 
 func (s *Simulator) checkPositions(tick common.Tick) {
@@ -331,7 +325,6 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.CloseTime = tick.TimeStamp
 			s.calcPositionProfits(position, closePrice)
 			s.balance = s.balance.Add(position.NetProfit)
-			s.audit.AddClosedPosition(*position)
 			if err := s.router.Post(bus.PositionClosedEvent, *position); err != nil {
 				slog.Warn("unable to post position closed event", "error", err)
 			}

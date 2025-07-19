@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"log/slog"
@@ -70,14 +71,14 @@ func main() {
 	startTime, _ := time.Parse(time.DateTime, StartTime)
 	endTime, _ := time.Parse(time.DateTime, EndTime)
 
-	audit := simulation.NewAudit(time.Minute)
-	sim := simulation.NewSimulator(router, audit, instrument, startBalance)
+	sim := simulation.NewSimulator(router, instrument, startBalance)
 	exec := simulation.NewExecutor(router, mp, instrument.Symbol, startTime, endTime)
 	barBuilder := bar.NewBuilder(router, bar.With(instrument.Symbol, barPeriod, bar.PriceModeBid))
 
 	monitor := middleware.NewMonitor(middleware.MonitorOrders | middleware.MonitorPositionsOpened | middleware.MonitorPositionsClosed)
 	performance := middleware.NewPerformance()
 
+	audit := metrics.NewAudit()
 	advisor := strategy.NewMrxAdvisor(router)
 	riskManager := risk.NewManager(router, instrument, riskConf,
 		risk.WithDefaultKellyMultiplier(),
@@ -91,9 +92,9 @@ func main() {
 	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(riskManager.OnOrderAccepted)
 	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(riskManager.OnOrderRejected)
 	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(riskManager.OnPositionOpened)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(riskManager.OnPositionClosed)
+	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(bus.MergeHandlers(riskManager.OnPositionClosed, audit.OnPositionClosed))
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(riskManager.OnPositionUpdated)
-	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(riskManager.OnEquity)
+	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(bus.MergeHandlers(riskManager.OnEquity, audit.OnEquity))
 	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(riskManager.OnBalance)
 	router.SignalHandler = middleware.Chain(monitor.WithSignal, performance.WithSignal)(riskManager.OnSignal)
 

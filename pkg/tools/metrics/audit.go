@@ -1,41 +1,34 @@
-package simulation
+package metrics
 
 import (
+	"context"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
-
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
-type accountSnapshot struct {
-	balance fixed.Point
-	equity  fixed.Point
-	t       time.Time
-}
+const (
+	equitySnapshotInterval = time.Minute
+)
 
 type Audit struct {
-	minSnapshotInterval time.Duration
-
-	accountSnapshots []accountSnapshot
-	closedPositions  []common.Position
+	equities  []common.Equity
+	positions []common.Position
 }
 
-func NewAudit(minSnapshotInterval time.Duration) *Audit {
-	return &Audit{
-		minSnapshotInterval: minSnapshotInterval,
+func NewAudit() *Audit {
+	return &Audit{}
+}
+
+func (a *Audit) OnEquity(_ context.Context, equity common.Equity) {
+	if len(a.equities) == 0 || equity.TimeStamp.Sub(a.equities[len(a.equities)-1].TimeStamp) >= equitySnapshotInterval {
+		a.equities = append(a.equities, equity)
 	}
 }
 
-func (a *Audit) AddAccountSnapshot(balance, equity fixed.Point, t time.Time) {
-	if len(a.accountSnapshots) == 0 ||
-		t.Sub(a.accountSnapshots[len(a.accountSnapshots)-1].t) >= a.minSnapshotInterval {
-		a.addSnapshot(balance, equity, t)
-	}
-}
-
-func (a *Audit) AddClosedPosition(position common.Position) {
-	a.closedPositions = append(a.closedPositions, position)
+func (a *Audit) OnPositionClosed(_ context.Context, position common.Position) {
+	a.positions = append(a.positions, position)
 }
 
 func (a *Audit) GenerateReport() Report {
@@ -45,10 +38,10 @@ func (a *Audit) GenerateReport() Report {
 	auditedDays := a.dayCount()
 	year := fixed.FromInt64(36500, 2)
 
-	report.InitialEquity = a.accountSnapshots[0].equity
-	report.StartDate = a.accountSnapshots[0].t
-	report.FinalEquity = a.accountSnapshots[len(a.accountSnapshots)-1].equity
-	report.EndDate = a.accountSnapshots[len(a.accountSnapshots)-1].t
+	report.InitialEquity = a.equities[0].Value
+	report.StartDate = a.equities[0].TimeStamp
+	report.FinalEquity = a.equities[len(a.equities)-1].Value
+	report.EndDate = a.equities[len(a.equities)-1].TimeStamp
 
 	// --- Return Metrics ---
 	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).Sub(fixed.One).MulInt64(100).Rescale(2)
@@ -62,11 +55,11 @@ func (a *Audit) GenerateReport() Report {
 
 	// --- Max Drawdown ---
 	maxEquity := report.InitialEquity
-	for _, snapshot := range a.accountSnapshots {
-		if snapshot.equity.Gt(maxEquity) {
-			maxEquity = snapshot.equity
+	for _, eq := range a.equities {
+		if eq.Value.Gt(maxEquity) {
+			maxEquity = eq.Value
 		}
-		drawdown := maxEquity.Sub(snapshot.equity).Div(maxEquity)
+		drawdown := maxEquity.Sub(eq.Value).Div(maxEquity)
 		if drawdown.Gt(report.MaxDrawdown) {
 			report.MaxDrawdown = drawdown
 		}
@@ -78,7 +71,7 @@ func (a *Audit) GenerateReport() Report {
 		totalProfit   fixed.Point
 		totalLoss     fixed.Point
 	)
-	for _, position := range a.closedPositions {
+	for _, position := range a.positions {
 		report.TotalTrades++
 
 		// Calc duration
@@ -133,43 +126,35 @@ func (a *Audit) GenerateReport() Report {
 	return report
 }
 
-func (a *Audit) addSnapshot(balance, equity fixed.Point, t time.Time) {
-	a.accountSnapshots = append(a.accountSnapshots, accountSnapshot{
-		balance: balance,
-		equity:  equity,
-		t:       t,
-	})
-}
-
 func (a *Audit) dayCount() int {
-	if len(a.accountSnapshots) < 2 {
+	if len(a.equities) < 2 {
 		return 1
 	}
-	start := a.accountSnapshots[0].t
-	end := a.accountSnapshots[len(a.accountSnapshots)-1].t
+	start := a.equities[0].TimeStamp
+	end := a.equities[len(a.equities)-1].TimeStamp
 	return int(end.Sub(start).Hours()/24) + 1
 }
 
 func (a *Audit) dailyReturns() []fixed.Point {
 	var dailyReturns []fixed.Point
-	if len(a.accountSnapshots) < 2 {
+	if len(a.equities) < 2 {
 		return dailyReturns
 	}
 
 	var (
-		prevDate   = a.accountSnapshots[0].t.Truncate(24 * time.Hour)
-		prevEquity = a.accountSnapshots[0].equity
+		prevDate   = a.equities[0].TimeStamp.Truncate(24 * time.Hour)
+		prevEquity = a.equities[0].Value
 	)
 
-	for _, snapshot := range a.accountSnapshots[1:] {
-		currDate := snapshot.t.Truncate(24 * time.Hour)
+	for _, eq := range a.equities[1:] {
+		currDate := eq.TimeStamp.Truncate(24 * time.Hour)
 
 		if currDate.After(prevDate) {
-			ret := snapshot.equity.Div(prevEquity).Sub(fixed.One)
+			ret := eq.Value.Div(prevEquity).Sub(fixed.One)
 			dailyReturns = append(dailyReturns, ret)
 
 			prevDate = currDate
-			prevEquity = snapshot.equity
+			prevEquity = eq.Value
 		}
 	}
 

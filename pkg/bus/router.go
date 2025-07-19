@@ -64,14 +64,13 @@ func (r *Router) Exec(ctx context.Context) <-chan error {
 	r.postFails.Store(0)
 
 	start := time.Now()
-	defer func() {
-		r.runTime += time.Since(start)
-	}()
-
 	errChan := make(chan error)
 
 	go func() {
 		defer close(errChan)
+		defer func() {
+			r.runTime += time.Since(start)
+		}()
 
 		for {
 			select {
@@ -100,14 +99,13 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 	r.postFails.Store(0)
 
 	start := time.Now()
-	defer func() {
-		r.runTime += time.Since(start)
-	}()
-
 	errChan := make(chan error)
 
 	go func() {
 		defer close(errChan)
+		defer func() {
+			r.runTime += time.Since(start)
+		}()
 
 		for {
 			select {
@@ -133,13 +131,25 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 }
 
 func (r *Router) PrintStatistics() {
+	runTimeSec := r.runTime.Seconds()
+
+	postCount := r.postCount.Load()
+	dispatchCount := r.dispatchCount.Load()
+	postFails := r.postFails.Load()
+	dispatchFails := r.dispatchFails.Load()
+
+	throughput := 0.0
+	if runTimeSec > 0 {
+		throughput = float64(postCount) / runTimeSec
+	}
+
 	slog.Info("router statistics",
-		"run_time", r.runTime,
-		"post_count", r.postCount.Load(),
-		"post_fails", r.postFails.Load(),
-		"dispatch_count", r.dispatchCount.Load(),
-		"dispatch_fails", r.dispatchFails.Load(),
-		"throughput", float64(r.postCount.Load())/r.runTime.Seconds())
+		"run_time", fmt.Sprintf("%.2fs", runTimeSec),
+		"post_count", postCount,
+		"post_fails", postFails,
+		"dispatch_count", dispatchCount,
+		"dispatch_fails", dispatchFails,
+		"throughput", fmt.Sprintf("%.2f", throughput))
 }
 
 func (r *Router) dispatch(ctx context.Context, ev event) error {

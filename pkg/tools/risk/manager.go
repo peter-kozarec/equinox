@@ -143,8 +143,8 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 
 	if size.IsZero() {
 		slog.Info("calculated size is zero, signal is discarded",
-			slog.Uint64("signal_strength", uint64(signal.Strength)),
-			slog.String("drawdown", drawdown.String()))
+			slog.Uint64("signal_tid", signal.TraceID),
+			slog.String("drawdown", fmt.Sprintf("%s%%", drawdown.String())))
 		return
 	}
 

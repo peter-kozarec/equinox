@@ -1,4 +1,4 @@
-package simulation
+package metrics
 
 import (
 	"fmt"
@@ -51,7 +51,7 @@ func (r Report) Print() {
 		"average_win", r.AverageWin,
 		"average_loss", r.AverageLoss,
 		"risk_reward_ratio", r.RiskRewardRatio,
-		"average_trade_duration", r.AverageTradeDuration)
+		"average_trade_duration", fmt.Sprintf("%.2fm", r.AverageTradeDuration.Minutes()))
 
 	slog.Info("risk metrics",
 		"sharpe_ratio", r.SharpeRatio,

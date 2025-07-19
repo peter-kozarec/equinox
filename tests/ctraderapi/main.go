@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
-	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -41,8 +40,7 @@ func main() {
 
 	monitor := middleware.NewMonitor(middleware.MonitorAll)
 	advisor := strategy.NewMrxAdvisor(router)
-	barBuilder := bar.NewBuilder(router, bar.BuildModeTickBased, bar.PriceModeBid, false)
-	barBuilder.Build("BTCUSD", common.BarPeriodM1)
+	barBuilder := bar.NewBuilder(router, bar.With("BTCUSD", common.BarPeriodM1, bar.PriceModeBid))
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {
 		slog.Error("unable to authenticate", "error", err)
@@ -67,30 +65,9 @@ func main() {
 	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated)(middleware.NoopPosUpdHdl)
 	router.OrderHandler = middleware.Chain(monitor.WithOrder)(orderHandler)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		errCh := router.Exec(ctx)
-		select {
-		case e := <-errCh:
-			return e
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	})
-
-	g.Go(func() error {
-		errCh := barBuilder.Exec(ctx)
-		select {
-		case e := <-errCh:
-			return e
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	})
-
 	defer router.PrintStatistics()
 
-	if e := g.Wait(); e != nil && !errors.Is(e, context.Canceled) {
+	if e := <-router.Exec(ctx); e != nil && !errors.Is(e, context.Canceled) {
 		slog.Error("something unexpected happened", "error", e)
 		os.Exit(1)
 	}

@@ -56,8 +56,7 @@ func main() {
 
 	audit := simulation.NewAudit(time.Minute)
 	sim := simulation.NewSimulator(router, audit, instrument, startBalance)
-	barBuilder := bar.NewBuilder(router, bar.BuildModeTickBased, bar.PriceModeBid, true)
-	barBuilder.Build(instrument.Symbol, barPeriod)
+	barBuilder := bar.NewBuilder(router, bar.With(instrument.Symbol, barPeriod, bar.PriceModeBid))
 
 	exec := simulation.NewEurUsdMonteCarloTickSimulator(
 		router,

@@ -290,10 +290,20 @@ func (m *Manager) SetPerformanceMetrics(totalTrades, winningTrades int, totalWin
 }
 
 func (m *Manager) checkOpenPositions() {
-
 	for _, position := range m.openPositions {
-		if err := m.checkForBreakEven(position); err != nil {
-			slog.Warn("unable to check for break even", slog.Any("err", err))
+		pendingOrderFound := false
+
+		for _, pendingOrder := range m.pendingOrders {
+			if pendingOrder.PositionId == position.Id {
+				slog.Info("position has an open orders, break even is not checked")
+				pendingOrderFound = true
+			}
+		}
+
+		if !pendingOrderFound {
+			if err := m.checkForBreakEven(position); err != nil {
+				slog.Warn("unable to check for break even", slog.Any("err", err))
+			}
 		}
 	}
 }
@@ -312,11 +322,19 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 			// Stop loss is already at or above the open price
 			return nil
 		}
+		if position.TakeProfit.Lte(lastTick.Bid) {
+			// This should be closed with take profit
+			return nil
+		}
 		moved = lastTick.Bid.Sub(position.OpenPrice)
 		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
 	} else {
 		if position.StopLoss.Lte(position.OpenPrice) {
 			// Stop loss is already at or below open price
+			return nil
+		}
+		if position.TakeProfit.Gte(lastTick.Ask) {
+			// This should be closed with take profit
 			return nil
 		}
 		moved = position.OpenPrice.Sub(lastTick.Ask)

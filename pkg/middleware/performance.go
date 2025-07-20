@@ -274,5 +274,7 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
+	if len(fields) > 0 {
+		slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
+	}
 }

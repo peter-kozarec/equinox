@@ -407,8 +407,8 @@ func TestMiddlewarePerformance_PrintStatisticsEmpty(t *testing.T) {
 	p.PrintStatistics()
 
 	logs := buf.String()
-	if !strings.Contains(logs, "performance statistics") {
-		t.Error("Expected log message not found")
+	if logs != "" {
+		t.Error("Unexpected message found")
 	}
 }
 

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 )
 
 var streamMessageTypes = map[openapi.ProtoOAPayloadType]struct{}{
@@ -78,6 +79,10 @@ func (c *connection) read() {
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
+				if !websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					slog.Debug("websocket closed", "error", err)
+					return
+				}
 				slog.Warn("cannot read data", "error", err)
 				time.Sleep(1 * time.Second) // prevent tight loop
 				return

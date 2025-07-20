@@ -3,19 +3,22 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/ctrader"
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
+	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+)
 
-	"syscall"
+const (
+	meanReversionWindow = 60
 )
 
 var appId = os.Getenv("CtAppId")
@@ -39,7 +42,7 @@ func main() {
 	defer c.Close()
 
 	monitor := middleware.NewMonitor(middleware.MonitorAll)
-	advisor := strategy.NewMrxAdvisor(router)
+	advisor := strategy.NewMeanReversion(router, meanReversionWindow)
 	barBuilder := bar.NewBuilder(router, bar.With("BTCUSD", common.BarPeriodM1, bar.PriceModeBid))
 
 	if err := ctrader.Authenticate(ctx, c, int64(accountId), accessToken, appId, appSecret); err != nil {

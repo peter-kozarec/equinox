@@ -13,6 +13,10 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
+const (
+	riskManagerComponentName = "tools.risk.manager"
+)
+
 type Option func(*Manager)
 
 type Manager struct {
@@ -359,7 +363,7 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 		}
 
 		order := common.Order{
-			Source:      "risk-manager",
+			Source:      riskManagerComponentName,
 			Symbol:      m.instrument.Symbol,
 			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
@@ -528,7 +532,7 @@ func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order
 	}
 
 	return common.Order{
-		Source:      "risk-manager",
+		Source:      riskManagerComponentName,
 		Symbol:      m.instrument.Symbol,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
@@ -550,7 +554,7 @@ func (m *Manager) createBuyOrder(entry, tp, sl, size fixed.Point) (common.Order,
 	}
 
 	return common.Order{
-		Source:      "risk-manager",
+		Source:      riskManagerComponentName,
 		Symbol:      m.instrument.Symbol,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),

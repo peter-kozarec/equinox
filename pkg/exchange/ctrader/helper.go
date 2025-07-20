@@ -6,10 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/common"
-
 	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
 )
 
 func Authenticate(

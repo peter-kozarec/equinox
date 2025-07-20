@@ -5,21 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-
-	"github.com/peter-kozarec/equinox/pkg/bus"
-	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/utility"
-
 	"sync"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/peter-kozarec/equinox/pkg/bus"
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 const (
-	componentName = "ctrader"
+	openapiComponentName = "exchange.ctrader.openapi"
 )
 
 const (
@@ -61,7 +60,7 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 
 	internalTick := common.Tick{}
 	internalTick.Symbol = state.instrument.Symbol
-	internalTick.Source = componentName
+	internalTick.Source = openapiComponentName
 	internalTick.ExecutionId = utility.GetExecutionID()
 	internalTick.TraceID = utility.CreateTraceID()
 	internalTick.Ask = fixed.FromUint64(v.GetAsk(), state.instrument.Digits)
@@ -152,7 +151,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		var internalPosition common.Position
 
 		internalPosition.Symbol = state.instrument.Symbol
-		internalPosition.Source = componentName
+		internalPosition.Source = openapiComponentName
 		internalPosition.ExecutionID = utility.GetExecutionID()
 		internalPosition.TraceID = utility.CreateTraceID()
 		internalPosition.TimeStamp = time.Now()
@@ -192,7 +191,7 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 		var internalPosition common.Position
 
 		internalPosition.Symbol = state.instrument.Symbol
-		internalPosition.Source = componentName
+		internalPosition.Source = openapiComponentName
 		internalPosition.ExecutionID = utility.GetExecutionID()
 		internalPosition.TraceID = utility.CreateTraceID()
 		internalPosition.TimeStamp = time.Now()
@@ -310,7 +309,7 @@ func (state *State) calcEquity() {
 
 	if !oldEquity.Eq(state.equity) {
 		if err := state.router.Post(bus.EquityEvent, common.Equity{
-			Source:      componentName,
+			Source:      openapiComponentName,
 			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
 			TimeStamp:   time.Now(),
@@ -327,7 +326,7 @@ func (state *State) setBalance(newBalance fixed.Point) {
 	if state.postBalance {
 		state.postBalance = false
 		if err := state.router.Post(bus.BalanceEvent, common.Balance{
-			Source:      componentName,
+			Source:      openapiComponentName,
 			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
 			TimeStamp:   time.Now(),

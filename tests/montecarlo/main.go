@@ -28,6 +28,8 @@ var (
 	barPeriod    = common.BarPeriodM1
 	startBalance = fixed.FromInt(10000, 0)
 
+	meanReversionWindow = 60
+
 	genRng      = rand.New(rand.NewSource(time.Now().UnixNano()))
 	genDuration = 30 * 24 * time.Hour
 	genMu       = 0.1607143264
@@ -73,7 +75,7 @@ func main() {
 
 	a := metrics.NewAudit()
 
-	ea := strategy.NewMrxAdvisor(r)
+	ea := strategy.NewMeanReversion(r, meanReversionWindow)
 	rm := risk.NewManager(r, instrument, riskConf,
 		risk.WithDefaultKellyMultiplier(),
 		risk.WithDefaultDrawdownMultiplier(),

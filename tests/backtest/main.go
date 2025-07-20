@@ -27,6 +27,8 @@ const (
 
 	StartTime = "2019-01-01 00:00:00"
 	EndTime   = "2020-01-01 00:00:00"
+
+	meanReversionWindow = 60
 )
 
 var (
@@ -82,7 +84,7 @@ func main() {
 	p := middleware.NewPerformance()
 
 	a := metrics.NewAudit()
-	ea := strategy.NewMrxAdvisor(r)
+	ea := strategy.NewMeanReversion(r, meanReversionWindow)
 	rm := risk.NewManager(r, instrument, riskConf,
 		risk.WithDefaultKellyMultiplier(),
 		risk.WithDefaultDrawdownMultiplier(),

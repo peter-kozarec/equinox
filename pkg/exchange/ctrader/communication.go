@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 )
 
 func send[InType proto.Message](

@@ -17,6 +17,8 @@ const (
 	// Internal position statuses
 	positionStatusPendingOpen  common.PositionStatus = "pending-open"
 	positionStatusPendingClose common.PositionStatus = "pending-close"
+
+	simulatorComponentName = "exchange.simulator"
 )
 
 type Simulator struct {
@@ -64,7 +66,7 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != s.balance {
 		if err := s.router.Post(bus.BalanceEvent, common.Balance{
-			Source:      "exchange-simulator",
+			Source:      simulatorComponentName,
 			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
 			TimeStamp:   s.simulationTime,
@@ -76,7 +78,7 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 	// Post equity event if the current equity changed after the tick was processed
 	if lastEquity != s.equity {
 		if err := s.router.Post(bus.EquityEvent, common.Equity{
-			Source:      "exchange-simulator",
+			Source:      simulatorComponentName,
 			ExecutionId: utility.GetExecutionID(),
 			TraceID:     utility.CreateTraceID(),
 			TimeStamp:   s.simulationTime,
@@ -163,7 +165,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 
 		if orderAccepted {
 			if err := s.router.Post(bus.OrderAcceptedEvent, common.OrderAccepted{
-				Source:        "exchange-simulator",
+				Source:        simulatorComponentName,
 				ExecutionId:   utility.GetExecutionID(),
 				TraceID:       utility.CreateTraceID(),
 				TimeStamp:     s.simulationTime,
@@ -173,7 +175,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 			}
 		} else {
 			if err := s.router.Post(bus.OrderRejectedEvent, common.OrderRejected{
-				Source:        "exchange-simulator",
+				Source:        simulatorComponentName,
 				ExecutionId:   utility.GetExecutionID(),
 				TraceID:       utility.CreateTraceID(),
 				TimeStamp:     s.simulationTime,
@@ -228,7 +230,7 @@ func (s *Simulator) executeOpenOrder(order common.Order) error {
 
 	s.positionIdCounter++
 	s.openPositions = append(s.openPositions, &common.Position{
-		Source:        "exchange-simulator",
+		Source:        simulatorComponentName,
 		Symbol:        s.instrument.Symbol,
 		ExecutionID:   utility.GetExecutionID(),
 		TraceID:       utility.CreateTraceID(),

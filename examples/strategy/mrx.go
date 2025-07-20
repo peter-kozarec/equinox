@@ -2,72 +2,66 @@ package strategy
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility"
-
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 const (
-	componentName = "mrx"
+	mrxComponentName = "example.strategy.mrx"
 )
 
 var (
-	Three         = fixed.FromInt64(3, 0)
-	NegativeThree = fixed.FromInt64(-3, 0)
+	PositiveThreshold = fixed.FromInt64(3, 0)
+	NegativeThreshold = PositiveThreshold.Neg()
 )
 
-// MrxAdvisor is a test strategy, not meant for production
-type MrxAdvisor struct {
+type MeanReversion struct {
 	router *bus.Router
 
-	lastTick common.Tick
-	closes   *fixed.RingBuffer
-	zScores  *fixed.RingBuffer
+	tick    common.Tick
+	closes  *fixed.RingBuffer
+	zScores *fixed.RingBuffer
 }
 
-func NewMrxAdvisor(router *bus.Router) *MrxAdvisor {
-	return &MrxAdvisor{
+func NewMeanReversion(router *bus.Router, window int) *MeanReversion {
+	return &MeanReversion{
 		router:  router,
-		closes:  fixed.NewRingBuffer(60),
-		zScores: fixed.NewRingBuffer(60),
+		closes:  fixed.NewRingBuffer(window),
+		zScores: fixed.NewRingBuffer(window),
 	}
 }
 
-func (a *MrxAdvisor) OnTick(_ context.Context, t common.Tick) {
-	a.lastTick = t
+func (m *MeanReversion) OnTick(_ context.Context, tick common.Tick) {
+	m.tick = tick
 }
 
-func (a *MrxAdvisor) OnBar(_ context.Context, b common.Bar) {
+func (m *MeanReversion) OnBar(_ context.Context, bar common.Bar) {
+	m.closes.Add(bar.Close)
 
-	a.closes.Add(b.Close)
+	if m.closes.IsFull() {
+		mean := m.closes.Mean()
+		stdDev := m.closes.SampleStdDev()
+		z := bar.Close.Sub(mean).Div(stdDev)
+		m.zScores.Add(z)
 
-	if !a.closes.IsFull() {
-		return
-	}
-
-	mean := a.closes.Mean()
-	stdDev := a.closes.SampleStdDev()
-	z := b.Close.Sub(mean).Div(stdDev)
-
-	a.zScores.Add(z)
-
-	if !a.zScores.IsFull() {
-		return
-	}
-
-	if z.Gte(Three) || z.Lte(NegativeThree) {
-		_ = a.router.Post(bus.SignalEvent, common.Signal{
-			Source:      componentName,
-			Symbol:      b.Symbol,
-			ExecutionID: utility.GetExecutionID(),
-			TraceID:     utility.CreateTraceID(),
-			TimeStamp:   b.TimeStamp,
-			Entry:       a.lastTick.Bid,
-			Target:      mean,
-			Strength:    60,
-			Comment:     z.String(),
-		})
+		if m.zScores.IsFull() {
+			if z.Gte(PositiveThreshold) || z.Lte(NegativeThreshold) {
+				_ = m.router.Post(bus.SignalEvent, common.Signal{
+					Source:      mrxComponentName,
+					Symbol:      bar.Symbol,
+					ExecutionID: utility.GetExecutionID(),
+					TraceID:     utility.CreateTraceID(),
+					TimeStamp:   bar.TimeStamp,
+					Entry:       m.tick.Bid.Add(m.tick.Ask).DivInt(2),
+					Target:      mean,
+					Strength:    100,
+					Comment:     fmt.Sprintf("z-score: %v", z),
+				})
+			}
+		}
 	}
 }

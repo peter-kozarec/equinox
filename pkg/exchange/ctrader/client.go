@@ -5,16 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-
-	"github.com/gorilla/websocket"
-	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/ctrader/openapi"
-
 	"strings"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
+	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type Client struct {
@@ -40,7 +39,6 @@ func dial(host, port string) (*Client, error) {
 	return client, nil
 }
 
-//goland:noinspection GoUnusedExportedFunction
 func DialLive() (*Client, error) {
 	return dial("live.ctraderapi.com", "5035")
 }

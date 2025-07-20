@@ -6,17 +6,18 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 )
 
-//goland:noinspection ALL
 var (
-	NoopTickHdl      = func(context.Context, common.Tick) {}
-	NoopBarHdl       = func(context.Context, common.Bar) {}
-	NoopEquityHdl    = func(context.Context, common.Equity) {}
-	NoopBalanceHdl   = func(context.Context, common.Balance) {}
-	NoopPosOpnHdl    = func(context.Context, common.Position) {}
-	NoopPosUpdHdl    = func(context.Context, common.Position) {}
-	NoopPosClsHdl    = func(context.Context, common.Position) {}
-	NoopOrderHdl     = func(context.Context, common.Order) {}
-	NoopOrderRjctHdl = func(context.Context, common.OrderRejected) {}
-	NoopOrderAccHdl  = func(context.Context, common.OrderAccepted) {}
-	NoopSignalHdl    = func(context.Context, common.Signal) {}
+	NoopTickHandler             = func(context.Context, common.Tick) {}
+	NoopBarHandler              = func(context.Context, common.Bar) {}
+	NoopEquityHandler           = func(context.Context, common.Equity) {}
+	NoopBalanceHandler          = func(context.Context, common.Balance) {}
+	NoopPositionOpenHandler     = func(context.Context, common.Position) {}
+	NoopPositionCloseHandler    = func(context.Context, common.Position) {}
+	NoopPositionUpdateHandler   = func(context.Context, common.Position) {}
+	NoopOrderHandler            = func(context.Context, common.Order) {}
+	NoopOrderRejectionHandler   = func(context.Context, common.OrderRejected) {}
+	NoopOrderAcceptanceHandler  = func(context.Context, common.OrderAccepted) {}
+	NoopSignalHandler           = func(context.Context, common.Signal) {}
+	NoopSignalRejectionHandler  = func(context.Context, common.SignalRejected) {}
+	NoopSignalAcceptanceHandler = func(context.Context, common.SignalAccepted) {}
 )

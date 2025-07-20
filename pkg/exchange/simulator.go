@@ -6,15 +6,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/utility"
-
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 const (
-	// Internal position statuses
 	positionStatusPendingOpen  common.PositionStatus = "pending-open"
 	positionStatusPendingClose common.PositionStatus = "pending-close"
 
@@ -25,8 +23,9 @@ type Simulator struct {
 	instrument common.Instrument
 	router     *bus.Router
 
-	equity  fixed.Point
-	balance fixed.Point
+	firstPostDone bool
+	equity        fixed.Point
+	balance       fixed.Point
 
 	simulationTime time.Time
 	lastTick       common.Tick
@@ -50,12 +49,31 @@ func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
 }
 
 func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
+	if !s.firstPostDone {
+		s.firstPostDone = true
+		if err := s.router.Post(bus.BalanceEvent, common.Balance{
+			Source:      simulatorComponentName,
+			ExecutionId: utility.GetExecutionID(),
+			TraceID:     utility.CreateTraceID(),
+			TimeStamp:   s.simulationTime,
+			Value:       s.balance,
+		}); err != nil {
+			slog.Error("unable to post balance event", "error", err)
+		}
+		if err := s.router.Post(bus.EquityEvent, common.Equity{
+			Source:      simulatorComponentName,
+			ExecutionId: utility.GetExecutionID(),
+			TraceID:     utility.CreateTraceID(),
+			TimeStamp:   s.simulationTime,
+			Value:       s.equity,
+		}); err != nil {
+			slog.Error("unable to post balance event", "error", err)
+		}
+	}
 
-	// Set simulation time from a processed tick
 	s.simulationTime = tick.TimeStamp
 	s.lastTick = tick
 
-	// Store balance and equity before processing the tick
 	lastBalance := s.balance
 	lastEquity := s.equity
 
@@ -63,7 +81,6 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 	s.checkOrders(tick)
 	s.processPendingChanges(tick)
 
-	// Post balance event if the current balance changed after the tick was processed
 	if lastBalance != s.balance {
 		if err := s.router.Post(bus.BalanceEvent, common.Balance{
 			Source:      simulatorComponentName,
@@ -75,7 +92,6 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 			slog.Error("unable to post balance event", "error", err)
 		}
 	}
-	// Post equity event if the current equity changed after the tick was processed
 	if lastEquity != s.equity {
 		if err := s.router.Post(bus.EquityEvent, common.Equity{
 			Source:      simulatorComponentName,
@@ -90,7 +106,6 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 }
 
 func (s *Simulator) CloseAllOpenPositions() {
-
 	s.equity = s.balance
 
 	for idx := range s.openPositions {
@@ -113,7 +128,6 @@ func (s *Simulator) CloseAllOpenPositions() {
 }
 
 func (s *Simulator) checkPositions(tick common.Tick) {
-
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
@@ -124,7 +138,6 @@ func (s *Simulator) checkPositions(tick common.Tick) {
 }
 
 func (s *Simulator) checkOrders(tick common.Tick) {
-
 	tmpOpenOrders := make([]*common.Order, 0, len(s.openOrders))
 	orderAccepted := true
 
@@ -164,7 +177,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 		}
 
 		if orderAccepted {
-			if err := s.router.Post(bus.OrderAcceptedEvent, common.OrderAccepted{
+			if err := s.router.Post(bus.OrderAcceptanceEvent, common.OrderAccepted{
 				Source:        simulatorComponentName,
 				ExecutionId:   utility.GetExecutionID(),
 				TraceID:       utility.CreateTraceID(),
@@ -174,7 +187,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 				slog.Warn("unable to post order accepted event", "error", err)
 			}
 		} else {
-			if err := s.router.Post(bus.OrderRejectedEvent, common.OrderRejected{
+			if err := s.router.Post(bus.OrderRejectionEvent, common.OrderRejected{
 				Source:        simulatorComponentName,
 				ExecutionId:   utility.GetExecutionID(),
 				TraceID:       utility.CreateTraceID(),
@@ -192,7 +205,6 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 }
 
 func (s *Simulator) executeCloseOrder(id common.PositionId) error {
-
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
@@ -205,21 +217,17 @@ func (s *Simulator) executeCloseOrder(id common.PositionId) error {
 }
 
 func (s *Simulator) executeOpenOrder(order common.Order) error {
-
-	// Validate position size
 	if order.Size.IsZero() {
 		return fmt.Errorf("position size cannot be zero")
 	}
 
 	var positionSide common.PositionSide
-
-	// Validate stop loss and take profit logic
-	if order.Side == common.OrderSideBuy { // Long position
+	if order.Side == common.OrderSideBuy {
 		if !order.StopLoss.IsZero() && !order.TakeProfit.IsZero() && order.StopLoss.Gte(order.TakeProfit) {
 			return fmt.Errorf("long position: stop loss must be less than take profit")
 		}
 		positionSide = common.PositionSideLong
-	} else if order.Side == common.OrderSideSell { // Short position
+	} else if order.Side == common.OrderSideSell {
 		if !order.StopLoss.IsZero() && !order.TakeProfit.IsZero() && order.StopLoss.Lte(order.TakeProfit) {
 			return fmt.Errorf("short position: stop loss must be greater than take profit")
 		}
@@ -260,12 +268,9 @@ func (s *Simulator) modifyPosition(id common.PositionId, stopLoss, takeProfit fi
 }
 
 func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick) bool {
-
-	// For long limit: trigger when Ask <= limit price
 	if size.Gt(fixed.Zero) && tick.Ask.Lte(price) {
 		return true
 	}
-	// For short limit: trigger when Bid >= limit price
 	if size.Lt(fixed.Zero) && tick.Bid.Gte(price) {
 		return true
 	}
@@ -317,7 +322,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.Status = common.PositionStatusOpen
 			position.OpenPrice = openPrice
 			position.OpenTime = tick.TimeStamp
-			if err := s.router.Post(bus.PositionOpenedEvent, *position); err != nil {
+			if err := s.router.Post(bus.PositionOpenEvent, *position); err != nil {
 				slog.Warn("unable to post position opened event", "error", err)
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
@@ -327,13 +332,13 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.CloseTime = tick.TimeStamp
 			s.calcPositionProfits(position, closePrice)
 			s.balance = s.balance.Add(position.NetProfit)
-			if err := s.router.Post(bus.PositionClosedEvent, *position); err != nil {
+			if err := s.router.Post(bus.PositionCloseEvent, *position); err != nil {
 				slog.Warn("unable to post position closed event", "error", err)
 			}
 		default:
 			s.calcPositionProfits(position, closePrice)
 			s.equity = s.equity.Add(position.NetProfit)
-			if err := s.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
+			if err := s.router.Post(bus.PositionUpdateEvent, *position); err != nil {
 				slog.Warn("unable to post position pnl updated event", "error", err)
 			}
 			tmpOpenPositions = append(tmpOpenPositions, position)
@@ -357,7 +362,6 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 	pipPnL = pipPnL.Sub(s.instrument.PipSlippage.MulInt64(2))
 	pips := pipPnL.Div(s.instrument.PipSize)
 
-	// Use average price for more accurate lot value
 	avgPrice := position.OpenPrice.Add(closePrice).DivInt64(2)
 	currentLotValue := s.instrument.PipSize.Mul(s.instrument.ContractSize).Mul(avgPrice)
 

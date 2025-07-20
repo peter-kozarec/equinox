@@ -23,7 +23,6 @@ func Authenticate(
 	if err := client.AuthorizeApplication(authAppCtx, appId, appSecret); err != nil {
 		return fmt.Errorf("unable to authorize application: %w", err)
 	}
-	slog.Info("application authorized")
 
 	authAccCtx, authAccCancel := context.WithTimeout(ctx, time.Second*5)
 	defer authAccCancel()
@@ -31,7 +30,6 @@ func Authenticate(
 	if err := client.AuthorizeAccount(authAccCtx, accountId, accessToken); err != nil {
 		return fmt.Errorf("unable to authorize account: %w", err)
 	}
-	slog.Info("account authorized")
 
 	return nil
 }
@@ -41,67 +39,59 @@ func InitTradeSession(
 	client *Client,
 	accountId int64,
 	symbol string,
-	router *bus.Router) (func(context.Context, common.Order), error) {
+	router *bus.Router) (bus.OrderEventHandler, error) {
 
 	symbolInfoContext, symbolInfoCancel := context.WithTimeout(ctx, time.Second)
 	defer symbolInfoCancel()
 
-	// Get info about symbol
 	symbolInfo, err := client.GetSymbolInfo(symbolInfoContext, accountId, symbol)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get %s symbol info: %w", symbol, err)
 	}
 	symbolInfo.Digits = 5
-	slog.Info("info",
+	slog.Debug("info",
 		"symbol", symbol,
 		"id", symbolInfo.Id,
 		"digits", symbolInfo.Digits,
 		"lot_size", symbolInfo.ContractSize.String(),
 		"denomination_unit", symbolInfo.DenominationUnit)
 
-	// Create internal state
 	state := NewState(router, symbolInfo)
 
-	// Load balance
 	balanceContext, balanceCancel := context.WithTimeout(ctx, time.Second)
 	defer balanceCancel()
 	if err := state.LoadBalance(balanceContext, client, accountId); err != nil {
 		return nil, fmt.Errorf("unable to load balance: %w", err)
 	}
-	slog.Info("account", "balance", state.balance)
+	slog.Debug("account", "balance", state.balance)
 
-	// Load open positions
 	loadPosContext, loadPosCancel := context.WithTimeout(ctx, time.Second)
 	defer loadPosCancel()
 	if err := state.LoadOpenPositions(loadPosContext, client, accountId); err != nil {
 		return nil, fmt.Errorf("unable to load open positions: %w", err)
 	}
 	if len(state.openPositions) > 0 {
-		slog.Info("opened positions present", "count", len(state.openPositions))
+		slog.Debug("opened positions present", "count", len(state.openPositions))
 	} else {
-		slog.Info("no opened positions")
+		slog.Debug("no opened positions")
 	}
 
-	// Subscribe to spot events
 	spotsContext, spotsCancel := context.WithTimeout(ctx, time.Second)
 	defer spotsCancel()
 	if err := client.SubscribeSpots(spotsContext, accountId, symbolInfo, state.OnSpotsEvent); err != nil {
 		return nil, fmt.Errorf("unable to subscribe to spot changes for %s: %w", symbol, err)
 	}
-	slog.Info("subscribed to spot events")
+	slog.Debug("subscribed to spot events")
 
-	// Subscribe to execution events
 	_, err = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_EXECUTION_EVENT, state.OnExecutionEvent)
 	if err != nil {
 		return nil, fmt.Errorf("unable to subscribe to execution events: %w", err)
 	}
-	slog.Info("subscribed to execution events")
+	slog.Debug("subscribed to execution events")
 
-	// Start balance polling
 	state.StartBalancePolling(ctx, client, accountId, time.Second*10)
-	slog.Info("started balance polling", "poll_interval", time.Second*10)
+	slog.Debug("started balance polling", "poll_interval", time.Second*10)
 
-	// Return callback for making orders
 	return func(ctx context.Context, order common.Order) {
 		switch order.Command {
 		case common.OrderCommandPositionClose:
@@ -119,6 +109,7 @@ func InitTradeSession(
 				slog.Warn("unable to open position", "error", err)
 			}
 		default:
+			slog.Error("unsupported order command type", "order", order)
 		}
 	}, nil
 }

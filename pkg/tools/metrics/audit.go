@@ -32,7 +32,6 @@ func (a *Audit) OnPositionClosed(_ context.Context, position common.Position) {
 }
 
 func (a *Audit) GenerateReport() Report {
-
 	report := Report{}
 
 	auditedDays := a.dayCount()
@@ -43,17 +42,15 @@ func (a *Audit) GenerateReport() Report {
 	report.FinalEquity = a.equities[len(a.equities)-1].Value
 	report.EndDate = a.equities[len(a.equities)-1].TimeStamp
 
-	// --- Return Metrics ---
 	report.TotalProfit = report.FinalEquity.Div(report.InitialEquity).Sub(fixed.One).MulInt64(100).Rescale(2)
 	if auditedDays > 0 && report.InitialEquity.Gt(fixed.Zero) && report.FinalEquity.Gt(fixed.Zero) {
 		ratio := report.FinalEquity.Div(report.InitialEquity)
 		exponent := year.DivInt64(int64(auditedDays))
 		report.AnnualizedReturn = ratio.Pow(exponent).Sub(fixed.One).MulInt64(100).Rescale(2)
 	} else {
-		report.AnnualizedReturn = fixed.Zero // or some error/NaN marker
+		report.AnnualizedReturn = fixed.Zero
 	}
 
-	// --- Max Drawdown ---
 	maxEquity := report.InitialEquity
 	for _, eq := range a.equities {
 		if eq.Value.Gt(maxEquity) {
@@ -65,7 +62,6 @@ func (a *Audit) GenerateReport() Report {
 		}
 	}
 
-	// --- Trade Statistics ---
 	var (
 		totalDuration time.Duration
 		totalProfit   fixed.Point
@@ -74,12 +70,10 @@ func (a *Audit) GenerateReport() Report {
 	for _, position := range a.positions {
 		report.TotalTrades++
 
-		// Calc duration
 		if !position.OpenTime.IsZero() && !position.CloseTime.IsZero() && position.CloseTime.After(position.OpenTime) {
 			totalDuration += position.CloseTime.Sub(position.OpenTime)
 		}
 
-		// Aggregate profit
 		if position.NetProfit.Gt(fixed.Zero) {
 			totalProfit = totalProfit.Add(position.NetProfit)
 			report.WinningTrades++
@@ -89,7 +83,6 @@ func (a *Audit) GenerateReport() Report {
 		}
 	}
 
-	// --- Averages & Ratios ---
 	if report.WinningTrades > 0 {
 		report.AverageWin = totalProfit.DivInt64(int64(report.WinningTrades))
 	}
@@ -112,7 +105,6 @@ func (a *Audit) GenerateReport() Report {
 	}
 	report.MaxDrawdown = report.MaxDrawdown.MulInt64(100).Rescale(2)
 
-	// --- Risk Metrics: Volatility, Sharpe, Sortino ---
 	dailyReturns := a.dailyReturns()
 	meanReturn := fixed.Mean(dailyReturns)
 	vol := fixed.StdDev(dailyReturns, meanReturn)

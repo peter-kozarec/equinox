@@ -18,9 +18,9 @@ func setupTestLogger(_ *testing.T) *bytes.Buffer {
 }
 
 func TestMiddlewareMonitor_NewMonitor(t *testing.T) {
-	m := NewMonitor(MonitorTicks | MonitorBars)
-	if m.flags != (MonitorTicks | MonitorBars) {
-		t.Errorf("Expected flags %d, got %d", MonitorTicks|MonitorBars, m.flags)
+	m := NewMonitor(MonitorTick | MonitorBar)
+	if m.flags != (MonitorTick | MonitorBar) {
+		t.Errorf("Expected flags %d, got %d", MonitorTick|MonitorBar, m.flags)
 	}
 }
 
@@ -32,7 +32,7 @@ func TestMiddlewareMonitor_WithTick(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorTicks)
+	m := NewMonitor(MonitorTick)
 	wrapped := m.WithTick(handler)
 
 	wrapped(context.Background(), common.Tick{})
@@ -91,7 +91,7 @@ func TestMiddlewareMonitor_WithBar(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorBars)
+	m := NewMonitor(MonitorBar)
 	wrapped := m.WithBar(handler)
 
 	wrapped(context.Background(), common.Bar{})
@@ -157,8 +157,8 @@ func TestMiddlewareMonitor_WithPositionOpened(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorPositionsOpened)
-	wrapped := m.WithPositionOpened(handler)
+	m := NewMonitor(MonitorPositionOpen)
+	wrapped := m.WithPositionOpen(handler)
 
 	wrapped(context.Background(), common.Position{})
 
@@ -179,8 +179,8 @@ func TestMiddlewareMonitor_WithPositionClosed(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorPositionsClosed)
-	wrapped := m.WithPositionClosed(handler)
+	m := NewMonitor(MonitorPositionClose)
+	wrapped := m.WithPositionClose(handler)
 
 	wrapped(context.Background(), common.Position{})
 
@@ -201,8 +201,8 @@ func TestMiddlewareMonitor_WithPositionPnLUpdated(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorPositionsPnLUpdated)
-	wrapped := m.WithPositionPnLUpdated(handler)
+	m := NewMonitor(MonitorPositionUpdate)
+	wrapped := m.WithPositionUpdate(handler)
 
 	wrapped(context.Background(), common.Position{})
 
@@ -223,7 +223,7 @@ func TestMiddlewareMonitor_WithOrder(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorOrders)
+	m := NewMonitor(MonitorOrder)
 	wrapped := m.WithOrder(handler)
 
 	wrapped(context.Background(), common.Order{})
@@ -245,8 +245,8 @@ func TestMiddlewareMonitor_WithOrderRejected(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorOrdersRejected)
-	wrapped := m.WithOrderRejected(handler)
+	m := NewMonitor(MonitorOrderRejection)
+	wrapped := m.WithOrderRejection(handler)
 
 	wrapped(context.Background(), common.OrderRejected{})
 
@@ -267,8 +267,8 @@ func TestMiddlewareMonitor_WithOrderAccepted(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorOrdersAccepted)
-	wrapped := m.WithOrderAccepted(handler)
+	m := NewMonitor(MonitorOrderAcceptance)
+	wrapped := m.WithOrderAcceptance(handler)
 
 	wrapped(context.Background(), common.OrderAccepted{})
 
@@ -289,7 +289,7 @@ func TestMiddlewareMonitor_WithSignal(t *testing.T) {
 		handlerCalled = true
 	}
 
-	m := NewMonitor(MonitorSignals)
+	m := NewMonitor(MonitorSignal)
 	wrapped := m.WithSignal(handler)
 
 	wrapped(context.Background(), common.Signal{})
@@ -303,10 +303,54 @@ func TestMiddlewareMonitor_WithSignal(t *testing.T) {
 	}
 }
 
+func TestMiddlewareMonitor_WithSignalAcceptance(t *testing.T) {
+	buf := setupTestLogger(t)
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, signal common.SignalAccepted) {
+		handlerCalled = true
+	}
+
+	m := NewMonitor(MonitorSignalAcceptance)
+	wrapped := m.WithSignalAcceptance(handler)
+
+	wrapped(context.Background(), common.SignalAccepted{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if !strings.Contains(buf.String(), "signal") {
+		t.Error("Log entry not found")
+	}
+}
+
+func TestMiddlewareMonitor_WithSignalRejection(t *testing.T) {
+	buf := setupTestLogger(t)
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, signal common.SignalRejected) {
+		handlerCalled = true
+	}
+
+	m := NewMonitor(MonitorSignalRejection)
+	wrapped := m.WithSignalRejection(handler)
+
+	wrapped(context.Background(), common.SignalRejected{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if !strings.Contains(buf.String(), "signal") {
+		t.Error("Log entry not found")
+	}
+}
+
 func TestMiddlewareMonitor_MultipleFlags(t *testing.T) {
 	buf := setupTestLogger(t)
 
-	m := NewMonitor(MonitorTicks | MonitorBars | MonitorSignals)
+	m := NewMonitor(MonitorTick | MonitorBar | MonitorSignal)
 
 	tickHandler := m.WithTick(func(ctx context.Context, tick common.Tick) {})
 	barHandler := m.WithBar(func(ctx context.Context, bar common.Bar) {})
@@ -380,21 +424,21 @@ func TestMiddlewareMonitor_MonitorAllOverride(t *testing.T) {
 		{
 			"position_open",
 			func() {
-				h := m.WithPositionOpened(func(ctx context.Context, position common.Position) {})
+				h := m.WithPositionOpen(func(ctx context.Context, position common.Position) {})
 				h(context.Background(), common.Position{})
 			},
 		},
 		{
 			"position_closed",
 			func() {
-				h := m.WithPositionClosed(func(ctx context.Context, position common.Position) {})
+				h := m.WithPositionClose(func(ctx context.Context, position common.Position) {})
 				h(context.Background(), common.Position{})
 			},
 		},
 		{
 			"position_update",
 			func() {
-				h := m.WithPositionPnLUpdated(func(ctx context.Context, position common.Position) {})
+				h := m.WithPositionUpdate(func(ctx context.Context, position common.Position) {})
 				h(context.Background(), common.Position{})
 			},
 		},
@@ -408,14 +452,14 @@ func TestMiddlewareMonitor_MonitorAllOverride(t *testing.T) {
 		{
 			"order_rejected",
 			func() {
-				h := m.WithOrderRejected(func(ctx context.Context, rejected common.OrderRejected) {})
+				h := m.WithOrderRejection(func(ctx context.Context, rejected common.OrderRejected) {})
 				h(context.Background(), common.OrderRejected{})
 			},
 		},
 		{
 			"order_accepted",
 			func() {
-				h := m.WithOrderAccepted(func(ctx context.Context, accepted common.OrderAccepted) {})
+				h := m.WithOrderAcceptance(func(ctx context.Context, accepted common.OrderAccepted) {})
 				h(context.Background(), common.OrderAccepted{})
 			},
 		},
@@ -424,6 +468,20 @@ func TestMiddlewareMonitor_MonitorAllOverride(t *testing.T) {
 			func() {
 				h := m.WithSignal(func(ctx context.Context, signal common.Signal) {})
 				h(context.Background(), common.Signal{})
+			},
+		},
+		{
+			"signal_accepted",
+			func() {
+				h := m.WithSignalAcceptance(func(ctx context.Context, signal common.SignalAccepted) {})
+				h(context.Background(), common.SignalAccepted{})
+			},
+		},
+		{
+			"signal_rejected",
+			func() {
+				h := m.WithSignalRejection(func(ctx context.Context, signal common.SignalRejected) {})
+				h(context.Background(), common.SignalRejected{})
 			},
 		},
 	}
@@ -471,18 +529,18 @@ func TestMiddlewareMonitor_FlagCombinations(t *testing.T) {
 		},
 		{
 			name:     "Single flag",
-			flags:    MonitorTicks,
+			flags:    MonitorTick,
 			expected: []string{"tick"},
 		},
 		{
 			name:     "Multiple flags",
-			flags:    MonitorTicks | MonitorBars | MonitorOrders,
+			flags:    MonitorTick | MonitorBar | MonitorOrder,
 			expected: []string{"tick", "bar", "order"},
 		},
 		{
 			name:     "All flags",
 			flags:    MonitorAll,
-			expected: []string{"tick", "bar", "equity", "balance", "position_open", "position_closed", "position_update", "order", "order_rejected", "order_accepted", "signal"},
+			expected: []string{"tick", "bar", "equity", "balance", "position_open", "position_closed", "position_update", "order", "order_rejected", "order_accepted", "signal", "signal_accepted", "signal_rejected"},
 		},
 	}
 
@@ -496,13 +554,15 @@ func TestMiddlewareMonitor_FlagCombinations(t *testing.T) {
 			m.WithBar(func(ctx context.Context, bar common.Bar) {})(ctx, common.Bar{})
 			m.WithEquity(func(ctx context.Context, equity common.Equity) {})(ctx, common.Equity{})
 			m.WithBalance(func(ctx context.Context, balance common.Balance) {})(ctx, common.Balance{})
-			m.WithPositionOpened(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
-			m.WithPositionClosed(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
-			m.WithPositionPnLUpdated(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
+			m.WithPositionOpen(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
+			m.WithPositionClose(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
+			m.WithPositionUpdate(func(ctx context.Context, position common.Position) {})(ctx, common.Position{})
 			m.WithOrder(func(ctx context.Context, order common.Order) {})(ctx, common.Order{})
-			m.WithOrderRejected(func(ctx context.Context, rejected common.OrderRejected) {})(ctx, common.OrderRejected{})
-			m.WithOrderAccepted(func(ctx context.Context, accepted common.OrderAccepted) {})(ctx, common.OrderAccepted{})
+			m.WithOrderRejection(func(ctx context.Context, rejected common.OrderRejected) {})(ctx, common.OrderRejected{})
+			m.WithOrderAcceptance(func(ctx context.Context, accepted common.OrderAccepted) {})(ctx, common.OrderAccepted{})
 			m.WithSignal(func(ctx context.Context, signal common.Signal) {})(ctx, common.Signal{})
+			m.WithSignalAcceptance(func(ctx context.Context, signal common.SignalAccepted) {})(ctx, common.SignalAccepted{})
+			m.WithSignalRejection(func(ctx context.Context, signal common.SignalRejected) {})(ctx, common.SignalRejected{})
 
 			logs := buf.String()
 			for _, expected := range test.expected {
@@ -519,7 +579,7 @@ func BenchmarkMiddlewareMonitor_WithTickEnabled(b *testing.B) {
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 	slog.SetDefault(logger)
 
-	m := NewMonitor(MonitorTicks)
+	m := NewMonitor(MonitorTick)
 	handler := func(ctx context.Context, tick common.Tick) {}
 	wrapped := m.WithTick(handler)
 	ctx := context.Background()

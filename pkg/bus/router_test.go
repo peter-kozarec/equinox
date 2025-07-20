@@ -45,7 +45,7 @@ func TestBusRouter_Exec(t *testing.T) {
 	r := NewRouter(10)
 
 	var tickHandled bool
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {
+	r.OnTick = func(ctx context.Context, tick common.Tick) {
 		tickHandled = true
 	}
 
@@ -78,7 +78,7 @@ func TestBusRouter_ExecLoop(t *testing.T) {
 	r := NewRouter(10)
 
 	var barHandled bool
-	r.BarHandler = func(ctx context.Context, bar common.Bar) {
+	r.OnBar = func(ctx context.Context, bar common.Bar) {
 		barHandled = true
 	}
 
@@ -116,50 +116,50 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 	r := NewRouter(20)
 
 	handlers := map[EventId]bool{
-		TickEvent:               false,
-		BarEvent:                false,
-		EquityEvent:             false,
-		BalanceEvent:            false,
-		PositionOpenedEvent:     false,
-		PositionClosedEvent:     false,
-		PositionPnLUpdatedEvent: false,
-		OrderEvent:              false,
-		OrderAcceptedEvent:      false,
-		OrderRejectedEvent:      false,
-		SignalEvent:             false,
+		TickEvent:            false,
+		BarEvent:             false,
+		EquityEvent:          false,
+		BalanceEvent:         false,
+		PositionOpenEvent:    false,
+		PositionCloseEvent:   false,
+		PositionUpdateEvent:  false,
+		OrderEvent:           false,
+		OrderAcceptanceEvent: false,
+		OrderRejectionEvent:  false,
+		SignalEvent:          false,
 	}
 
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {
+	r.OnTick = func(ctx context.Context, tick common.Tick) {
 		handlers[TickEvent] = true
 	}
-	r.BarHandler = func(ctx context.Context, bar common.Bar) {
+	r.OnBar = func(ctx context.Context, bar common.Bar) {
 		handlers[BarEvent] = true
 	}
-	r.EquityHandler = func(ctx context.Context, eq common.Equity) {
+	r.OnEquity = func(ctx context.Context, eq common.Equity) {
 		handlers[EquityEvent] = true
 	}
-	r.BalanceHandler = func(ctx context.Context, bal common.Balance) {
+	r.OnBalance = func(ctx context.Context, bal common.Balance) {
 		handlers[BalanceEvent] = true
 	}
-	r.PositionOpenedHandler = func(ctx context.Context, pos common.Position) {
-		handlers[PositionOpenedEvent] = true
+	r.OnPositionOpen = func(ctx context.Context, pos common.Position) {
+		handlers[PositionOpenEvent] = true
 	}
-	r.PositionClosedHandler = func(ctx context.Context, pos common.Position) {
-		handlers[PositionClosedEvent] = true
+	r.OnPositionClose = func(ctx context.Context, pos common.Position) {
+		handlers[PositionCloseEvent] = true
 	}
-	r.PositionPnLUpdatedHandler = func(ctx context.Context, pos common.Position) {
-		handlers[PositionPnLUpdatedEvent] = true
+	r.OnPositionUpdate = func(ctx context.Context, pos common.Position) {
+		handlers[PositionUpdateEvent] = true
 	}
-	r.OrderHandler = func(ctx context.Context, order common.Order) {
+	r.OnOrder = func(ctx context.Context, order common.Order) {
 		handlers[OrderEvent] = true
 	}
-	r.OrderAcceptedHandler = func(ctx context.Context, oa common.OrderAccepted) {
-		handlers[OrderAcceptedEvent] = true
+	r.OnOrderAcceptance = func(ctx context.Context, oa common.OrderAccepted) {
+		handlers[OrderAcceptanceEvent] = true
 	}
-	r.OrderRejectedHandler = func(ctx context.Context, or common.OrderRejected) {
-		handlers[OrderRejectedEvent] = true
+	r.OnOrderRejection = func(ctx context.Context, or common.OrderRejected) {
+		handlers[OrderRejectionEvent] = true
 	}
-	r.SignalHandler = func(ctx context.Context, sig common.Signal) {
+	r.OnSignal = func(ctx context.Context, sig common.Signal) {
 		handlers[SignalEvent] = true
 	}
 
@@ -178,22 +178,22 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 	if err := r.Post(BalanceEvent, common.Balance{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
-	if err := r.Post(PositionOpenedEvent, common.Position{}); err != nil {
+	if err := r.Post(PositionOpenEvent, common.Position{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
-	if err := r.Post(PositionClosedEvent, common.Position{}); err != nil {
+	if err := r.Post(PositionCloseEvent, common.Position{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
-	if err := r.Post(PositionPnLUpdatedEvent, common.Position{}); err != nil {
+	if err := r.Post(PositionUpdateEvent, common.Position{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
 	if err := r.Post(OrderEvent, common.Order{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
-	if err := r.Post(OrderAcceptedEvent, common.OrderAccepted{}); err != nil {
+	if err := r.Post(OrderAcceptanceEvent, common.OrderAccepted{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
-	if err := r.Post(OrderRejectedEvent, common.OrderRejected{}); err != nil {
+	if err := r.Post(OrderRejectionEvent, common.OrderRejected{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
 	if err := r.Post(SignalEvent, common.Signal{}); err != nil {
@@ -218,7 +218,7 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 func TestBusRouter_InvalidTypeAssertion(t *testing.T) {
 	r := NewRouter(10)
 
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {
+	r.OnTick = func(ctx context.Context, tick common.Tick) {
 		t.Error("Handler should not be called")
 	}
 
@@ -350,17 +350,17 @@ func BenchmarkBusRouter_ConcurrentPost(b *testing.B) {
 func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 	r := NewRouter(b.N * 11)
 
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {}
-	r.BarHandler = func(ctx context.Context, bar common.Bar) {}
-	r.EquityHandler = func(ctx context.Context, eq common.Equity) {}
-	r.BalanceHandler = func(ctx context.Context, bal common.Balance) {}
-	r.PositionOpenedHandler = func(ctx context.Context, pos common.Position) {}
-	r.PositionClosedHandler = func(ctx context.Context, pos common.Position) {}
-	r.PositionPnLUpdatedHandler = func(ctx context.Context, pos common.Position) {}
-	r.OrderHandler = func(ctx context.Context, order common.Order) {}
-	r.OrderAcceptedHandler = func(ctx context.Context, oa common.OrderAccepted) {}
-	r.OrderRejectedHandler = func(ctx context.Context, or common.OrderRejected) {}
-	r.SignalHandler = func(ctx context.Context, sig common.Signal) {}
+	r.OnTick = func(ctx context.Context, tick common.Tick) {}
+	r.OnBar = func(ctx context.Context, bar common.Bar) {}
+	r.OnEquity = func(ctx context.Context, eq common.Equity) {}
+	r.OnBalance = func(ctx context.Context, bal common.Balance) {}
+	r.OnPositionOpen = func(ctx context.Context, pos common.Position) {}
+	r.OnPositionClose = func(ctx context.Context, pos common.Position) {}
+	r.OnPositionUpdate = func(ctx context.Context, pos common.Position) {}
+	r.OnOrder = func(ctx context.Context, order common.Order) {}
+	r.OnOrderAcceptance = func(ctx context.Context, oa common.OrderAccepted) {}
+	r.OnOrderRejection = func(ctx context.Context, or common.OrderRejected) {}
+	r.OnSignal = func(ctx context.Context, sig common.Signal) {}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errChan := r.Exec(ctx)
@@ -379,22 +379,22 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 		if err := r.Post(BalanceEvent, common.Balance{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
-		if err := r.Post(PositionOpenedEvent, common.Position{}); err != nil {
+		if err := r.Post(PositionOpenEvent, common.Position{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
-		if err := r.Post(PositionClosedEvent, common.Position{}); err != nil {
+		if err := r.Post(PositionCloseEvent, common.Position{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
-		if err := r.Post(PositionPnLUpdatedEvent, common.Position{}); err != nil {
+		if err := r.Post(PositionUpdateEvent, common.Position{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
 		if err := r.Post(OrderEvent, common.Order{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
-		if err := r.Post(OrderAcceptedEvent, common.OrderAccepted{}); err != nil {
+		if err := r.Post(OrderAcceptanceEvent, common.OrderAccepted{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
-		if err := r.Post(OrderRejectedEvent, common.OrderRejected{}); err != nil {
+		if err := r.Post(OrderRejectionEvent, common.OrderRejected{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
 		if err := r.Post(SignalEvent, common.Signal{}); err != nil {
@@ -409,7 +409,7 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 func BenchmarkBusRouter_ExecLoop(b *testing.B) {
 	r := NewRouter(1000)
 
-	r.TickHandler = func(ctx context.Context, tick common.Tick) {}
+	r.OnTick = func(ctx context.Context, tick common.Tick) {}
 
 	callCount := 0
 	doOnceCb := func() error {

@@ -121,7 +121,7 @@ func TestMiddlewarePerformance_WithPositionOpened(t *testing.T) {
 		handlerCalled = true
 	}
 
-	wrapped := p.WithPositionOpened(handler)
+	wrapped := p.WithPositionOpen(handler)
 	wrapped(context.Background(), common.Position{})
 
 	if !handlerCalled {
@@ -141,7 +141,7 @@ func TestMiddlewarePerformance_WithPositionClosed(t *testing.T) {
 		handlerCalled = true
 	}
 
-	wrapped := p.WithPositionClosed(handler)
+	wrapped := p.WithPositionClose(handler)
 	wrapped(context.Background(), common.Position{})
 
 	if !handlerCalled {
@@ -161,7 +161,7 @@ func TestMiddlewarePerformance_WithPositionPnLUpdated(t *testing.T) {
 		handlerCalled = true
 	}
 
-	wrapped := p.WithPositionPnLUpdated(handler)
+	wrapped := p.WithPositionUpdate(handler)
 	wrapped(context.Background(), common.Position{})
 
 	if !handlerCalled {
@@ -201,7 +201,7 @@ func TestMiddlewarePerformance_WithOrderRejected(t *testing.T) {
 		handlerCalled = true
 	}
 
-	wrapped := p.WithOrderRejected(handler)
+	wrapped := p.WithOrderRejection(handler)
 	wrapped(context.Background(), common.OrderRejected{})
 
 	if !handlerCalled {
@@ -221,7 +221,7 @@ func TestMiddlewarePerformance_WithOrderAccepted(t *testing.T) {
 		handlerCalled = true
 	}
 
-	wrapped := p.WithOrderAccepted(handler)
+	wrapped := p.WithOrderAcceptance(handler)
 	wrapped(context.Background(), common.OrderAccepted{})
 
 	if !handlerCalled {
@@ -255,6 +255,56 @@ func TestMiddlewarePerformance_WithSignal(t *testing.T) {
 
 	if p.totalSignalHandlerDur < 15*time.Millisecond {
 		t.Errorf("Expected duration >= 15ms, got %v", p.totalSignalHandlerDur)
+	}
+}
+
+func TestMiddlewarePerformance_WithSignalAcceptance(t *testing.T) {
+	p := NewPerformance()
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, signal common.SignalAccepted) {
+		handlerCalled = true
+		time.Sleep(15 * time.Millisecond)
+	}
+
+	wrapped := p.WithSignalAcceptance(handler)
+	wrapped(context.Background(), common.SignalAccepted{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if p.signalAcceptedEventCounter != 1 {
+		t.Errorf("Expected signalAcceptedEventCounter=1, got %d", p.signalAcceptedEventCounter)
+	}
+
+	if p.totalSignalAcceptedDur < 15*time.Millisecond {
+		t.Errorf("Expected duration >= 15ms, got %v", p.totalSignalAcceptedDur)
+	}
+}
+
+func TestMiddlewarePerformance_WithSignalRejection(t *testing.T) {
+	p := NewPerformance()
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, signal common.SignalRejected) {
+		handlerCalled = true
+		time.Sleep(15 * time.Millisecond)
+	}
+
+	wrapped := p.WithSignalRejection(handler)
+	wrapped(context.Background(), common.SignalRejected{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if p.signalRejectedEventCounter != 1 {
+		t.Errorf("Expected signalRejectedEventCounter=1, got %d", p.signalRejectedEventCounter)
+	}
+
+	if p.totalSignalRejectedDur < 15*time.Millisecond {
+		t.Errorf("Expected duration >= 15ms, got %v", p.totalSignalRejectedDur)
 	}
 }
 
@@ -301,6 +351,8 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 		"orderRejected":  false,
 		"orderAccepted":  false,
 		"signal":         false,
+		"signalAccepted": false,
+		"signalRejected": false,
 	}
 
 	p.WithTick(func(ctx context.Context, tick common.Tick) {
@@ -319,15 +371,15 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 		handlers["equity"] = true
 	})(context.Background(), common.Equity{})
 
-	p.WithPositionOpened(func(ctx context.Context, position common.Position) {
+	p.WithPositionOpen(func(ctx context.Context, position common.Position) {
 		handlers["positionOpened"] = true
 	})(context.Background(), common.Position{})
 
-	p.WithPositionClosed(func(ctx context.Context, position common.Position) {
+	p.WithPositionClose(func(ctx context.Context, position common.Position) {
 		handlers["positionClosed"] = true
 	})(context.Background(), common.Position{})
 
-	p.WithPositionPnLUpdated(func(ctx context.Context, position common.Position) {
+	p.WithPositionUpdate(func(ctx context.Context, position common.Position) {
 		handlers["positionPnL"] = true
 	})(context.Background(), common.Position{})
 
@@ -335,17 +387,25 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 		handlers["order"] = true
 	})(context.Background(), common.Order{})
 
-	p.WithOrderRejected(func(ctx context.Context, rejected common.OrderRejected) {
+	p.WithOrderRejection(func(ctx context.Context, rejected common.OrderRejected) {
 		handlers["orderRejected"] = true
 	})(context.Background(), common.OrderRejected{})
 
-	p.WithOrderAccepted(func(ctx context.Context, accepted common.OrderAccepted) {
+	p.WithOrderAcceptance(func(ctx context.Context, accepted common.OrderAccepted) {
 		handlers["orderAccepted"] = true
 	})(context.Background(), common.OrderAccepted{})
 
 	p.WithSignal(func(ctx context.Context, signal common.Signal) {
 		handlers["signal"] = true
 	})(context.Background(), common.Signal{})
+
+	p.WithSignalAcceptance(func(ctx context.Context, signal common.SignalAccepted) {
+		handlers["signalAccepted"] = true
+	})(context.Background(), common.SignalAccepted{})
+
+	p.WithSignalRejection(func(ctx context.Context, signal common.SignalRejected) {
+		handlers["signalRejected"] = true
+	})(context.Background(), common.SignalRejected{})
 
 	for name, called := range handlers {
 		if !called {
@@ -356,9 +416,9 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 	totalEvents := p.tickEventCounter + p.barEventCounter + p.balanceEventCounter +
 		p.equityEventCounter + p.positionOpenedEventCounter + p.positionClosedEventCounter +
 		p.positionPnLUpdatedEventCounter + p.orderEventCounter + p.orderRejectedEventCounter +
-		p.orderAcceptedEventCounter + p.signalEventCounter
+		p.orderAcceptedEventCounter + p.signalEventCounter + p.signalAcceptedEventCounter + p.signalRejectedEventCounter
 
-	if totalEvents != 11 {
+	if totalEvents != 13 {
 		t.Errorf("Expected total events=11, got %d", totalEvents)
 	}
 }

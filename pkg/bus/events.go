@@ -7,11 +7,13 @@ const (
 	BarEvent
 	EquityEvent
 	BalanceEvent
-	PositionOpenedEvent
-	PositionClosedEvent
-	PositionPnLUpdatedEvent
+	PositionOpenEvent
+	PositionCloseEvent
+	PositionUpdateEvent
 	OrderEvent
-	OrderRejectedEvent
-	OrderAcceptedEvent
+	OrderRejectionEvent
+	OrderAcceptanceEvent
 	SignalEvent
+	SignalRejectionEvent
+	SignalAcceptanceEvent
 )

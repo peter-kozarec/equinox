@@ -26,10 +26,10 @@ type Manager struct {
 
 	atr *indicators.Atr
 
-	currentEquity  common.Equity
-	maxEquity      common.Equity
-	currentBalance common.Balance
-	maxBalance     common.Balance
+	currentEquity  fixed.Point
+	maxEquity      fixed.Point
+	currentBalance fixed.Point
+	maxBalance     fixed.Point
 
 	openPositions   []common.Position
 	closedPositions []common.Position
@@ -44,7 +44,6 @@ type Manager struct {
 	totalWinAmount  fixed.Point
 	totalLossAmount fixed.Point
 
-	// Optional configuration
 	tradeTimeHandler TradeTimeHandler
 	cooldownHandler  CooldownHandler
 
@@ -69,6 +68,22 @@ func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration,
 	return m
 }
 
+func (m *Manager) SetMaxBalance(balance fixed.Point) {
+	m.maxBalance = balance
+}
+
+func (m *Manager) SetBalance(balance fixed.Point) {
+	m.currentBalance = balance
+}
+
+func (m *Manager) SetMaxEquity(equity fixed.Point) {
+	m.maxEquity = equity
+}
+
+func (m *Manager) SetEquity(equity fixed.Point) {
+	m.currentEquity = equity
+}
+
 func (m *Manager) OnTick(_ context.Context, tick common.Tick) {
 	m.serverTime = tick.TimeStamp
 	m.lastTick = tick
@@ -81,44 +96,92 @@ func (m *Manager) OnBar(_ context.Context, bar common.Bar) {
 
 func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	if !m.atr.Ready() {
-		slog.Warn("atr is not ready, signal is discarded")
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "atr is not ready",
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
 	if !m.isTimeToTrade() {
-		slog.Debug("it is not a time to trade, signal is discarded")
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "it is not time to trade",
+			Comment:        fmt.Sprintf("server time: %s", m.serverTime.String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
 	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
 		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
-			slog.Debug("cooldown is active, signal is discarded")
+			if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+				Reason:         "cooldown period is not over",
+				OriginalSignal: signal,
+				Source:         riskManagerComponentName,
+				ExecutionID:    utility.GetExecutionID(),
+				TraceID:        utility.CreateTraceID(),
+				TimeStamp:      m.serverTime,
+			}); err != nil {
+				slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+			}
 			return
 		}
 	}
 
-	maxBalanceIsZero := m.maxBalance.TimeStamp.IsZero()
-	currentEquityIsZero := m.currentEquity.TimeStamp.IsZero()
-
-	if maxBalanceIsZero {
-		slog.Warn("max balance is not set, signal is discarded")
+	if m.maxBalance.IsZero() || m.currentBalance.IsZero() {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "balance is not set",
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
-	if currentEquityIsZero {
-		slog.Warn("current equity is not set, signal is discarded")
+	if m.maxEquity.IsZero() || m.currentEquity.IsZero() {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "equity is not set",
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
 	atrValue := m.atr.Value()
 
 	if signal.Entry.Sub(signal.Target).Abs().Lt(atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier)) {
-		slog.Warn("signal is too close to target, signal is discarded")
-		return
-	}
-
-	if err := m.assertPositionCanBeOpened(); err != nil {
-		slog.Warn("unable to execute signal", slog.Any("err", err))
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "target is too close to entry",
+			Comment:        fmt.Sprintf("atr: %s; adjustedAtr: %s", atrValue.String(), atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier).String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
@@ -127,29 +190,57 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	sl := m.calculateStopLoss(entry, tp, atrValue).Rescale(m.instrument.Digits)
 	size := m.calculateBasePositionSize(entry, sl)
 
-	drawdown := fixed.One.Sub(m.currentEquity.Value.Div(m.maxEquity.Value)).MulInt(100)
+	drawdown := fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
 
+	comment := ""
 	if m.kellyMulHandler != nil {
-		size = size.Mul(m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio()))
+		multiplier := m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio())
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("kelly multiplier: %s;", multiplier.String())
 	}
 	if m.signalStrengthMulHandler != nil {
-		size = size.Mul(m.signalStrengthMulHandler(signal.Strength))
+		multiplier := m.signalStrengthMulHandler(signal.Strength)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("signal strength multiplier: %s;", multiplier.String())
 	}
 	if m.drawdownMulHandler != nil {
-		size = size.Mul(m.drawdownMulHandler(drawdown))
+		multiplier := m.drawdownMulHandler(drawdown)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("drawdown multiplier: %s;", multiplier.String())
 	}
 	if m.rrrMulHandler != nil {
 		risk := entry.Sub(sl).Abs()
 		reward := tp.Sub(entry).Abs()
 		ratio := reward.Div(risk)
-		size = size.Mul(m.rrrMulHandler(ratio))
+		multiplier := m.rrrMulHandler(ratio)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("rrr multiplier: %s;rrr risk %s; rrr reward%s; rrr ratio %s;", multiplier.String(), risk.String(), reward.String(), ratio.String())
 	}
 
 	if size.IsZero() {
-		slog.Debug("calculated size is zero, signal is discarded",
-			slog.Uint64("signal_tid", signal.TraceID),
-			slog.String("drawdown", fmt.Sprintf("%s%%", drawdown.String())))
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "position size is zero",
+			Comment:        fmt.Sprintf("drawdown: %s; %s", drawdown.String(), comment),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
+	} else {
+		if err := m.r.Post(bus.SignalAcceptanceEvent, common.SignalAccepted{
+			Comment:        comment,
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal acceptance event", slog.Any("err", err))
+		}
 	}
 
 	maxSize := m.calculateMaxPositionSize(entry, sl)
@@ -271,17 +362,17 @@ func (m *Manager) OnOrderRejected(_ context.Context, rejectedOrder common.OrderR
 }
 
 func (m *Manager) OnEquity(_ context.Context, equity common.Equity) {
-	m.currentEquity = equity
+	m.currentEquity = equity.Value
 
-	if m.maxEquity.TimeStamp.IsZero() || m.currentEquity.Value.Gt(m.maxEquity.Value) {
+	if m.maxEquity.IsZero() || m.currentEquity.Gt(m.maxEquity) {
 		m.maxEquity = m.currentEquity
 	}
 }
 
 func (m *Manager) OnBalance(_ context.Context, balance common.Balance) {
-	m.currentBalance = balance
+	m.currentBalance = balance.Value
 
-	if m.maxBalance.TimeStamp.IsZero() || m.currentBalance.Value.Gt(m.maxBalance.Value) {
+	if m.maxBalance.IsZero() || m.currentBalance.Gt(m.maxBalance) {
 		m.maxBalance = m.currentBalance
 	}
 }
@@ -322,23 +413,13 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 
 	var moved, takeProfitPriceDiff fixed.Point
 	if position.Side == common.PositionSideLong {
-		if position.StopLoss.Gte(position.OpenPrice) {
-			// Stop loss is already at or above the open price
-			return nil
-		}
-		if position.TakeProfit.Lte(lastTick.Bid) {
-			// This should be closed with take profit
+		if position.StopLoss.Gte(position.OpenPrice) || position.TakeProfit.Lte(lastTick.Bid) {
 			return nil
 		}
 		moved = lastTick.Bid.Sub(position.OpenPrice)
 		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
 	} else {
-		if position.StopLoss.Lte(position.OpenPrice) {
-			// Stop loss is already at or below open price
-			return nil
-		}
-		if position.TakeProfit.Gte(lastTick.Ask) {
-			// This should be closed with take profit
+		if position.StopLoss.Lte(position.OpenPrice) || position.TakeProfit.Gte(lastTick.Ask) {
 			return nil
 		}
 		moved = position.OpenPrice.Sub(lastTick.Ask)
@@ -346,7 +427,6 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 	}
 
 	if moved.Lt(fixed.Zero) {
-		// Price hasn't moved in a favorable direction
 		return nil
 	}
 
@@ -386,38 +466,27 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 }
 
 func (m *Manager) isTimeToTrade() bool {
-	serverTime := m.serverTime
-
-	if serverTime.IsZero() {
+	if m.serverTime.IsZero() {
 		return false
 	}
-
 	if m.tradeTimeHandler != nil {
-		return m.tradeTimeHandler(serverTime)
+		return m.tradeTimeHandler(m.serverTime)
 	}
-
 	return true
 }
 
 func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
-
 	risk := fixed.Zero
 	for _, position := range m.openPositions {
 		risk = risk.Add(m.calculateRiskPercentage(position.OpenPrice, position.StopLoss, position.Size))
 	}
-
 	return risk
 }
 
 func (m *Manager) calculateRiskPercentage(entry, sl, size fixed.Point) fixed.Point {
-	equity := m.currentEquity.Value
-
 	priceDiff := entry.Sub(sl).Abs()
-	// Calculate monetary risk: price difference * size * contract size * pip size
 	monetaryRisk := priceDiff.Mul(size).Mul(m.instrument.ContractSize)
-
-	// Convert to percentage of equity
-	riskPercentage := monetaryRisk.Div(equity).MulInt(100)
+	riskPercentage := monetaryRisk.Div(m.currentEquity).MulInt(100)
 	return riskPercentage
 }
 
@@ -434,18 +503,9 @@ func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
 }
 
 func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
-	equity := m.currentEquity.Value
-
-	// Calculate pip difference
 	priceDiff := entry.Sub(sl).Abs()
 	pipDiff := priceDiff.Div(m.instrument.PipSize)
-
-	// Calculate risk amount in account currency
-	riskAmount := equity.Mul(riskPercentage.DivInt(100))
-
-	// Calculate position size
-	// Formula: Position Size = Risk Amount / (Pip Difference * Pip Value)
-	// Where Pip Value = Contract Size * Pip Size
+	riskAmount := m.currentEquity.Mul(riskPercentage.DivInt(100))
 	pipValue := m.instrument.ContractSize.Mul(m.instrument.PipSize)
 	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
 	return positionSize
@@ -453,20 +513,9 @@ func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) f
 
 func (m *Manager) calculateStopLoss(entry, target, atr fixed.Point) fixed.Point {
 	if entry.Gt(target) {
-		// Sell signal
 		return entry.Add(atr.Mul(m.conf.AtrStopLossMultiplier))
 	}
-	// Buy signal
 	return entry.Sub(atr.Mul(m.conf.AtrStopLossMultiplier))
-}
-
-func (m *Manager) assertPositionCanBeOpened() error {
-	pendingCount := len(m.pendingOrders)
-
-	if pendingCount > 0 {
-		return fmt.Errorf("pending orders exist (%d), unable to open position", pendingCount)
-	}
-	return nil
 }
 
 func (m *Manager) getWinRate() fixed.Point {
@@ -487,7 +536,6 @@ func (m *Manager) getAvgWinLossRatio() fixed.Point {
 	if avgLoss.IsZero() {
 		return fixed.FromFloat64(2.0)
 	}
-
 	return avgWin.Div(avgLoss)
 }
 

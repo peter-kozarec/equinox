@@ -19,17 +19,19 @@ type event struct {
 type Router struct {
 	events chan event
 
-	TickHandler               TickEventHandler
-	BarHandler                BarEventHandler
-	EquityHandler             EquityEventHandler
-	BalanceHandler            BalanceEventHandler
-	PositionOpenedHandler     PositionOpenedEventHandler
-	PositionClosedHandler     PositionClosedEventHandler
-	PositionPnLUpdatedHandler PositionPnLUpdatedEventHandler
-	OrderHandler              OrderEventHandler
-	OrderAcceptedHandler      OrderAcceptedEventHandler
-	OrderRejectedHandler      OrderRejectedEventHandler
-	SignalHandler             SignalEventHandler
+	OnTick             TickEventHandler
+	OnBar              BarEventHandler
+	OnEquity           EquityEventHandler
+	OnBalance          BalanceEventHandler
+	OnPositionOpen     PositionOpenEventHandler
+	OnPositionClose    PositionCloseEventHandler
+	OnPositionUpdate   PositionUpdateEventHandler
+	OnOrder            OrderEventHandler
+	OnOrderAcceptance  OrderAcceptanceHandler
+	OnOrderRejection   OrderRejectionEventHandler
+	OnSignal           SignalEventHandler
+	OnSignalAcceptance SignalAcceptanceEventHandler
+	OnSignalRejection  SignalRejectionEventHandler
 
 	runTime       time.Duration
 	postCount     atomic.Uint64
@@ -130,26 +132,20 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 	return errChan
 }
 
-func (r *Router) PrintStatistics() {
-	runTimeSec := r.runTime.Seconds()
+func (r *Router) GetStatistics() Statistics {
+	stats := Statistics{}
 
-	postCount := r.postCount.Load()
-	dispatchCount := r.dispatchCount.Load()
-	postFails := r.postFails.Load()
-	dispatchFails := r.dispatchFails.Load()
+	stats.RunTime = r.runTime
+	stats.PostCount = r.postCount.Load()
+	stats.DispatchCount = r.dispatchCount.Load()
+	stats.PostFails = r.postFails.Load()
+	stats.DispatchFails = r.dispatchFails.Load()
 
-	throughput := 0.0
-	if runTimeSec > 0 {
-		throughput = float64(postCount) / runTimeSec
+	if stats.RunTime > 0 {
+		stats.Throughput = float64(stats.PostCount) / stats.RunTime.Seconds()
 	}
 
-	slog.Info("router statistics",
-		"run_time", fmt.Sprintf("%.2fs", runTimeSec),
-		"post_count", postCount,
-		"post_fails", postFails,
-		"dispatch_count", dispatchCount,
-		"dispatch_fails", dispatchFails,
-		"throughput", fmt.Sprintf("%.2f", throughput))
+	return stats
 }
 
 func (r *Router) dispatch(ctx context.Context, ev event) error {
@@ -159,8 +155,8 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for tick event")
 		}
-		if r.TickHandler != nil {
-			r.TickHandler(ctx, tick)
+		if r.OnTick != nil {
+			r.OnTick(ctx, tick)
 		} else {
 			slog.Debug("tick handler is nil")
 		}
@@ -169,8 +165,8 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for bar event")
 		}
-		if r.BarHandler != nil {
-			r.BarHandler(ctx, bar)
+		if r.OnBar != nil {
+			r.OnBar(ctx, bar)
 		} else {
 			slog.Debug("bar handler is nil")
 		}
@@ -179,8 +175,8 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for equity event")
 		}
-		if r.EquityHandler != nil {
-			r.EquityHandler(ctx, eq)
+		if r.OnEquity != nil {
+			r.OnEquity(ctx, eq)
 		} else {
 			slog.Debug("equity handler is nil")
 		}
@@ -189,38 +185,38 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for balance event")
 		}
-		if r.BalanceHandler != nil {
-			r.BalanceHandler(ctx, bal)
+		if r.OnBalance != nil {
+			r.OnBalance(ctx, bal)
 		} else {
 			slog.Debug("balance handler is nil")
 		}
-	case PositionOpenedEvent:
+	case PositionOpenEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position opened event")
 		}
-		if r.PositionOpenedHandler != nil {
-			r.PositionOpenedHandler(ctx, pos)
+		if r.OnPositionOpen != nil {
+			r.OnPositionOpen(ctx, pos)
 		} else {
 			slog.Debug("position opened handler is nil")
 		}
-	case PositionClosedEvent:
+	case PositionCloseEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position closed event")
 		}
-		if r.PositionClosedHandler != nil {
-			r.PositionClosedHandler(ctx, pos)
+		if r.OnPositionClose != nil {
+			r.OnPositionClose(ctx, pos)
 		} else {
 			slog.Debug("position closed handler is nil")
 		}
-	case PositionPnLUpdatedEvent:
+	case PositionUpdateEvent:
 		pos, ok := ev.data.(common.Position)
 		if !ok {
 			return errors.New("invalid type assertion for position pnl updated event")
 		}
-		if r.PositionPnLUpdatedHandler != nil {
-			r.PositionPnLUpdatedHandler(ctx, pos)
+		if r.OnPositionUpdate != nil {
+			r.OnPositionUpdate(ctx, pos)
 		} else {
 			slog.Debug("position pnl updated handler is nil")
 		}
@@ -229,38 +225,60 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 		if !ok {
 			return errors.New("invalid type assertion for order event")
 		}
-		if r.OrderHandler != nil {
-			r.OrderHandler(ctx, order)
+		if r.OnOrder != nil {
+			r.OnOrder(ctx, order)
 		} else {
 			slog.Debug("order handler is nil")
 		}
-	case OrderAcceptedEvent:
+	case OrderAcceptanceEvent:
 		orderAccepted, ok := ev.data.(common.OrderAccepted)
 		if !ok {
 			return errors.New("invalid type assertion for order accepted event")
 		}
-		if r.OrderAcceptedHandler != nil {
-			r.OrderAcceptedHandler(ctx, orderAccepted)
+		if r.OnOrderAcceptance != nil {
+			r.OnOrderAcceptance(ctx, orderAccepted)
 		} else {
 			slog.Debug("order accepted handler is nil")
 		}
-	case OrderRejectedEvent:
+	case OrderRejectionEvent:
 		orderRejected, ok := ev.data.(common.OrderRejected)
 		if !ok {
 			return errors.New("invalid type assertion for order rejected event")
 		}
-		if r.OrderRejectedHandler != nil {
-			r.OrderRejectedHandler(ctx, orderRejected)
+		if r.OnOrderRejection != nil {
+			r.OnOrderRejection(ctx, orderRejected)
+		} else {
+			slog.Debug("order rejected handler is nil")
 		}
 	case SignalEvent:
 		sig, ok := ev.data.(common.Signal)
 		if !ok {
 			return errors.New("invalid type assertion for signal event")
 		}
-		if r.SignalHandler != nil {
-			r.SignalHandler(ctx, sig)
+		if r.OnSignal != nil {
+			r.OnSignal(ctx, sig)
 		} else {
 			slog.Debug("signal handler is nil")
+		}
+	case SignalAcceptanceEvent:
+		sigAccepted, ok := ev.data.(common.SignalAccepted)
+		if !ok {
+			return errors.New("invalid type assertion for signal accepted event")
+		}
+		if r.OnSignalAcceptance != nil {
+			r.OnSignalAcceptance(ctx, sigAccepted)
+		} else {
+			slog.Debug("signal accepted handler is nil")
+		}
+	case SignalRejectionEvent:
+		sigRejected, ok := ev.data.(common.SignalRejected)
+		if !ok {
+			return errors.New("invalid type assertion for signal rejected event")
+		}
+		if r.OnSignalRejection != nil {
+			r.OnSignalRejection(ctx, sigRejected)
+		} else {
+			slog.Debug("signal rejected handler is nil")
 		}
 	default:
 		return fmt.Errorf("unsupported event id: %v", ev.id)

@@ -134,7 +134,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 				// Remove the closed position
 				state.openPositions = append(state.openPositions[:idx], state.openPositions[idx+1:]...)
 
-				if err := state.router.Post(bus.PositionClosedEvent, *internalPosition); err != nil {
+				if err := state.router.Post(bus.PositionCloseEvent, *internalPosition); err != nil {
 					slog.Warn("unable to post position closed event", "error", err)
 				}
 
@@ -172,7 +172,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 
 		state.openPositions = append(state.openPositions, internalPosition)
 
-		if err := state.router.Post(bus.PositionOpenedEvent, internalPosition); err != nil {
+		if err := state.router.Post(bus.PositionOpenEvent, internalPosition); err != nil {
 			slog.Warn("unable to post position opened event", "error", err)
 			return
 		}
@@ -290,7 +290,7 @@ func (state *State) calcPnL() {
 
 		if !oldProfit.Eq(position.NetProfit) {
 			position.TimeStamp = time.Now()
-			if err := state.router.Post(bus.PositionPnLUpdatedEvent, *position); err != nil {
+			if err := state.router.Post(bus.PositionUpdateEvent, *position); err != nil {
 				slog.Warn("unable to post position updated event", "error", err)
 			}
 		}

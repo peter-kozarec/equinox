@@ -19,7 +19,6 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -42,8 +41,8 @@ var (
 		Digits:           5,
 		PipSize:          fixed.FromInt(1, 4),
 		ContractSize:     fixed.FromInt(100000, 0),
-		CommissionPerLot: fixed.Zero,
-		PipSlippage:      fixed.Zero,
+		CommissionPerLot: fixed.FromInt(3, 0),
+		PipSlippage:      fixed.FromInt(2, 5),
 	}
 
 	riskConf = risk.Configuration{
@@ -62,71 +61,51 @@ var (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
-	r := bus.NewRouter(routerCapacity)
+	router := bus.NewRouter(routerCapacity)
+	simulator := exchange.NewSimulator(router, instrument, startBalance)
 
-	s := exchange.NewSimulator(r, instrument, startBalance)
-	b := bar.NewBuilder(r, bar.With(symbol, barPeriod, bar.PriceModeBid))
-	g := synthetic.NewEURUSDTickGenerator(symbol, genRng, genDuration, genMu, genSigma)
+	builder := bar.NewBuilder(router, bar.With(symbol, barPeriod, bar.PriceModeBid))
+	generator := synthetic.NewEURUSDTickGenerator(symbol, genRng, genDuration, genMu, genSigma)
 
-	m := middleware.NewMonitor(middleware.MonitorSignals | middleware.MonitorOrders | middleware.MonitorPositionsClosed)
-	p := middleware.NewPerformance()
+	flags := middleware.MonitorSignal | middleware.MonitorOrder | middleware.MonitorSignalAcceptance | middleware.MonitorSignalRejection | middleware.MonitorPositionClose
+	monitor := middleware.NewMonitor(flags)
+	perf := middleware.NewPerformance()
 
-	a := metrics.NewAudit()
+	audit := metrics.NewAudit()
+	reversionStrategy := strategy.NewMeanReversion(router, meanReversionWindow)
 
-	ea := strategy.NewMeanReversion(r, meanReversionWindow)
-	rm := risk.NewManager(r, instrument, riskConf,
-		risk.WithDefaultKellyMultiplier(),
-		risk.WithDefaultDrawdownMultiplier(),
-		risk.WithDefaultRRRMultiplier(),
-		risk.WithOnHourCooldown())
+	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown()}
+	riskManager := risk.NewManager(router, instrument, riskConf, riskOptions...)
 
-	r.TickHandler = middleware.Chain(m.WithTick, p.WithTick)(bus.MergeHandlers(s.OnTick, rm.OnTick, b.OnTick, ea.OnTick))
-	r.BarHandler = middleware.Chain(m.WithBar, p.WithBar)(bus.MergeHandlers(rm.OnBar, ea.OnBar))
-	r.OrderHandler = middleware.Chain(m.WithOrder, p.WithOrder)(s.OnOrder)
-	r.OrderAcceptedHandler = middleware.Chain(m.WithOrderAccepted, p.WithOrderAccepted)(rm.OnOrderAccepted)
-	r.OrderRejectedHandler = middleware.Chain(m.WithOrderRejected, p.WithOrderRejected)(rm.OnOrderRejected)
-	r.PositionOpenedHandler = middleware.Chain(m.WithPositionOpened, p.WithPositionOpened)(rm.OnPositionOpened)
-	r.PositionClosedHandler = middleware.Chain(m.WithPositionClosed, p.WithPositionClosed)(bus.MergeHandlers(rm.OnPositionClosed, a.OnPositionClosed))
-	r.PositionPnLUpdatedHandler = middleware.Chain(m.WithPositionPnLUpdated, p.WithPositionPnLUpdated)(rm.OnPositionUpdated)
-	r.EquityHandler = middleware.Chain(m.WithEquity, p.WithEquity)(bus.MergeHandlers(rm.OnEquity, a.OnEquity))
-	r.BalanceHandler = middleware.Chain(m.WithBalance, p.WithBalance)(rm.OnBalance)
-	r.SignalHandler = middleware.Chain(m.WithSignal, p.WithSignal)(rm.OnSignal)
+	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, builder.OnTick, reversionStrategy.OnTick))
+	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(riskManager.OnBar, reversionStrategy.OnBar))
+	router.OnOrder = middleware.Chain(monitor.WithOrder, perf.WithOrder)(simulator.OnOrder)
+	router.OnOrderAcceptance = middleware.Chain(monitor.WithOrderAcceptance, perf.WithOrderAcceptance)(riskManager.OnOrderAccepted)
+	router.OnOrderRejection = middleware.Chain(monitor.WithOrderRejection, perf.WithOrderRejection)(riskManager.OnOrderRejected)
+	router.OnPositionOpen = middleware.Chain(monitor.WithPositionOpen, perf.WithPositionOpen)(riskManager.OnPositionOpened)
+	router.OnPositionClose = middleware.Chain(monitor.WithPositionClose, perf.WithPositionClose)(bus.MergeHandlers(riskManager.OnPositionClosed, audit.OnPositionClosed))
+	router.OnPositionUpdate = middleware.Chain(monitor.WithPositionUpdate, perf.WithPositionUpdate)(riskManager.OnPositionUpdated)
+	router.OnEquity = middleware.Chain(monitor.WithEquity, perf.WithEquity)(bus.MergeHandlers(riskManager.OnEquity, audit.OnEquity))
+	router.OnBalance = middleware.Chain(monitor.WithBalance, perf.WithBalance)(riskManager.OnBalance)
+	router.OnSignal = middleware.Chain(monitor.WithSignal, perf.WithSignal)(riskManager.OnSignal)
+	router.OnSignalAcceptance = middleware.Chain(monitor.WithSignalAcceptance, perf.WithSignalAcceptance)(middleware.NoopSignalAcceptanceHandler)
+	router.OnSignalRejection = middleware.Chain(monitor.WithSignalRejection, perf.WithSignalRejection)(middleware.NoopSignalRejectionHandler)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	rm.OnEquity(ctx, common.Equity{
-		Source:      "main",
-		Account:     "",
-		ExecutionId: utility.GetExecutionID(),
-		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   time.Now(),
-		Value:       startBalance,
-	})
-
-	rm.OnBalance(ctx, common.Balance{
-		Source:      "main",
-		Account:     "",
-		ExecutionId: utility.GetExecutionID(),
-		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   time.Now(),
-		Value:       startBalance,
-	})
-
-	defer p.PrintStatistics()
-	defer r.PrintStatistics()
-
-	if err := <-r.ExecLoop(ctx, datasource.CreateTickDispatcher(r, g)); err != nil {
+	if err := <-router.ExecLoop(ctx, datasource.CreateTickDispatcher(router, generator)); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, synthetic.ErrEof) {
 			slog.Error("unexpected error during execution", "error", err)
 			os.Exit(1)
 		}
 	}
 
-	s.CloseAllOpenPositions()
+	simulator.CloseAllOpenPositions()
 
-	report := a.GenerateReport()
-	report.Print()
+	perf.PrintStatistics()
+	router.GetStatistics().Print()
+	audit.GenerateReport().Print()
 }

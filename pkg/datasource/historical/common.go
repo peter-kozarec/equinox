@@ -1,9 +1,10 @@
 package historical
 
 import (
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"time"
 )
 
 type BinaryTick struct {

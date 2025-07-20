@@ -22,6 +22,8 @@ type Performance struct {
 	orderRejectedEventCounter      int64
 	orderAcceptedEventCounter      int64
 	signalEventCounter             int64
+	signalRejectedEventCounter     int64
+	signalAcceptedEventCounter     int64
 
 	totalTickHandlerDur    time.Duration
 	totalBarHandlerDur     time.Duration
@@ -34,6 +36,8 @@ type Performance struct {
 	totalOrderRejectedDur  time.Duration
 	totalOrderAcceptedDur  time.Duration
 	totalSignalHandlerDur  time.Duration
+	totalSignalRejectedDur time.Duration
+	totalSignalAcceptedDur time.Duration
 }
 
 func NewPerformance() *Performance {
@@ -76,7 +80,7 @@ func (p *Performance) WithEquity(handler bus.EquityEventHandler) bus.EquityEvent
 	}
 }
 
-func (p *Performance) WithPositionOpened(handler bus.PositionOpenedEventHandler) bus.PositionOpenedEventHandler {
+func (p *Performance) WithPositionOpen(handler bus.PositionOpenEventHandler) bus.PositionOpenEventHandler {
 	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
 		handler(ctx, position)
@@ -85,7 +89,7 @@ func (p *Performance) WithPositionOpened(handler bus.PositionOpenedEventHandler)
 	}
 }
 
-func (p *Performance) WithPositionClosed(handler bus.PositionClosedEventHandler) bus.PositionClosedEventHandler {
+func (p *Performance) WithPositionClose(handler bus.PositionCloseEventHandler) bus.PositionCloseEventHandler {
 	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
 		handler(ctx, position)
@@ -94,7 +98,7 @@ func (p *Performance) WithPositionClosed(handler bus.PositionClosedEventHandler)
 	}
 }
 
-func (p *Performance) WithPositionPnLUpdated(handler bus.PositionPnLUpdatedEventHandler) bus.PositionPnLUpdatedEventHandler {
+func (p *Performance) WithPositionUpdate(handler bus.PositionUpdateEventHandler) bus.PositionUpdateEventHandler {
 	return func(ctx context.Context, position common.Position) {
 		startTime := time.Now()
 		handler(ctx, position)
@@ -112,7 +116,7 @@ func (p *Performance) WithOrder(handler bus.OrderEventHandler) bus.OrderEventHan
 	}
 }
 
-func (p *Performance) WithOrderRejected(handler bus.OrderRejectedEventHandler) bus.OrderRejectedEventHandler {
+func (p *Performance) WithOrderRejection(handler bus.OrderRejectionEventHandler) bus.OrderRejectionEventHandler {
 	return func(ctx context.Context, rejected common.OrderRejected) {
 		startTime := time.Now()
 		handler(ctx, rejected)
@@ -121,7 +125,7 @@ func (p *Performance) WithOrderRejected(handler bus.OrderRejectedEventHandler) b
 	}
 }
 
-func (p *Performance) WithOrderAccepted(handler bus.OrderAcceptedEventHandler) bus.OrderAcceptedEventHandler {
+func (p *Performance) WithOrderAcceptance(handler bus.OrderAcceptanceHandler) bus.OrderAcceptanceHandler {
 	return func(ctx context.Context, accepted common.OrderAccepted) {
 		startTime := time.Now()
 		handler(ctx, accepted)
@@ -139,11 +143,28 @@ func (p *Performance) WithSignal(handler bus.SignalEventHandler) bus.SignalEvent
 	}
 }
 
+func (p *Performance) WithSignalRejection(handler bus.SignalRejectionEventHandler) bus.SignalRejectionEventHandler {
+	return func(ctx context.Context, rejected common.SignalRejected) {
+		startTime := time.Now()
+		handler(ctx, rejected)
+		p.totalSignalRejectedDur += time.Since(startTime)
+		p.signalRejectedEventCounter++
+	}
+}
+
+func (p *Performance) WithSignalAcceptance(handler bus.SignalAcceptanceEventHandler) bus.SignalAcceptanceEventHandler {
+	return func(ctx context.Context, accepted common.SignalAccepted) {
+		startTime := time.Now()
+		handler(ctx, accepted)
+		p.totalSignalAcceptedDur += time.Since(startTime)
+		p.signalAcceptedEventCounter++
+	}
+}
+
 func (p *Performance) PrintStatistics() {
 
 	var fields []slog.Attr
 
-	// Tick events
 	if p.tickEventCounter > 0 {
 		avgTick := p.totalTickHandlerDur / time.Duration(p.tickEventCounter)
 		if avgTick > 0 {
@@ -155,7 +176,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Bar events
 	if p.barEventCounter > 0 {
 		avgBar := p.totalBarHandlerDur / time.Duration(p.barEventCounter)
 		if avgBar > 0 {
@@ -167,7 +187,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Balance events
 	if p.balanceEventCounter > 0 {
 		avgBalance := p.totalBalanceHandlerDur / time.Duration(p.balanceEventCounter)
 		if avgBalance > 0 {
@@ -179,7 +198,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Equity events
 	if p.equityEventCounter > 0 {
 		avgEquity := p.totalEquityHandlerDur / time.Duration(p.equityEventCounter)
 		if avgEquity > 0 {
@@ -191,7 +209,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Position opened events
 	if p.positionOpenedEventCounter > 0 {
 		avgPosOpen := p.totalPosOpenHandlerDur / time.Duration(p.positionOpenedEventCounter)
 		if avgPosOpen > 0 {
@@ -203,7 +220,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Position closed events
 	if p.positionClosedEventCounter > 0 {
 		avgPosClosed := p.totalPosClosHandlerDur / time.Duration(p.positionClosedEventCounter)
 		if avgPosClosed > 0 {
@@ -215,7 +231,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Position PnL updated events
 	if p.positionPnLUpdatedEventCounter > 0 {
 		avgPosPnlUpd := p.totalPosUpdtHandlerDur / time.Duration(p.positionPnLUpdatedEventCounter)
 		if avgPosPnlUpd > 0 {
@@ -227,7 +242,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Order events
 	if p.orderEventCounter > 0 {
 		avgOrder := p.totalOrderHandlerDur / time.Duration(p.orderEventCounter)
 		if avgOrder > 0 {
@@ -239,7 +253,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Order rejected events
 	if p.orderRejectedEventCounter > 0 {
 		avgOrderRejected := p.totalOrderRejectedDur / time.Duration(p.orderRejectedEventCounter)
 		if avgOrderRejected > 0 {
@@ -251,7 +264,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Order accepted events
 	if p.orderAcceptedEventCounter > 0 {
 		avgOrderAccepted := p.totalOrderAcceptedDur / time.Duration(p.orderAcceptedEventCounter)
 		if avgOrderAccepted > 0 {
@@ -263,7 +275,6 @@ func (p *Performance) PrintStatistics() {
 		}
 	}
 
-	// Signal events
 	if p.signalEventCounter > 0 {
 		avgSignal := p.totalSignalHandlerDur / time.Duration(p.signalEventCounter)
 		if avgSignal > 0 {
@@ -271,6 +282,26 @@ func (p *Performance) PrintStatistics() {
 				slog.Int64("signal_event_count", p.signalEventCounter),
 				slog.String("signal_avg_duration", fmt.Sprintf("%dns", avgSignal.Nanoseconds())),
 				slog.String("signal_total_duration", fmt.Sprintf("%dns", p.totalSignalHandlerDur.Nanoseconds())))
+		}
+	}
+
+	if p.signalRejectedEventCounter > 0 {
+		avgSignalRejected := p.totalSignalRejectedDur / time.Duration(p.signalRejectedEventCounter)
+		if avgSignalRejected > 0 {
+			fields = append(fields,
+				slog.Int64("signal_rejected_event_count", p.signalRejectedEventCounter),
+				slog.String("signal_rejected_avg_duration", fmt.Sprintf("%dns", avgSignalRejected.Nanoseconds())),
+				slog.String("signal_rejected_total_duration", fmt.Sprintf("%dns", p.totalSignalRejectedDur.Nanoseconds())))
+		}
+	}
+
+	if p.signalAcceptedEventCounter > 0 {
+		avgSignalAccepted := p.totalSignalAcceptedDur / time.Duration(p.signalAcceptedEventCounter)
+		if avgSignalAccepted > 0 {
+			fields = append(fields,
+				slog.Int64("signal_accepted_event_count", p.signalAcceptedEventCounter),
+				slog.String("signal_accepted_avg_duration", fmt.Sprintf("%dns", avgSignalAccepted.Nanoseconds())),
+				slog.String("signal_accepted_total_duration", fmt.Sprintf("%dns", p.totalSignalAcceptedDur.Nanoseconds())))
 		}
 	}
 

@@ -24,15 +24,15 @@ import (
 const (
 	TickBinDir = "C:\\Users\\peter\\market_data\\"
 
-	StartTime = "2019-01-01 00:00:00"
-	EndTime   = "2020-01-01 00:00:00"
+	StartTime = "2018-01-01 00:00:00"
+	EndTime   = "2025-01-01 00:00:00"
 
 	meanReversionWindow = 60
 )
 
 var (
 	symbol       = "EURUSD"
-	barPeriod    = common.BarPeriodM1
+	barPeriod    = common.BarPeriodH1
 	startBalance = fixed.FromInt(10000, 0)
 
 	routerCapacity = 1000

@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	PositiveThreshold = fixed.FromInt64(3, 0)
+	PositiveThreshold = fixed.FromInt64(4, 0)
 	NegativeThreshold = PositiveThreshold.Neg()
 )
 

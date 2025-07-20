@@ -1,4 +1,4 @@
-package mapper
+package historical
 
 import (
 	"github.com/peter-kozarec/equinox/pkg/common"

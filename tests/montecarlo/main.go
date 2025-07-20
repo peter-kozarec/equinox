@@ -3,9 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
-	"github.com/peter-kozarec/equinox/pkg/tools/risk"
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -15,19 +12,31 @@ import (
 	"github.com/peter-kozarec/equinox/examples/strategy"
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
-	"github.com/peter-kozarec/equinox/pkg/data/mapper"
+	"github.com/peter-kozarec/equinox/pkg/datasource"
+	"github.com/peter-kozarec/equinox/pkg/datasource/synthetic"
+	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
-	"github.com/peter-kozarec/equinox/pkg/simulation"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk"
+	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 var (
+	symbol       = "EURUSD"
 	barPeriod    = common.BarPeriodM1
 	startBalance = fixed.FromInt(10000, 0)
 
+	genRng      = rand.New(rand.NewSource(time.Now().UnixNano()))
+	genDuration = 30 * 24 * time.Hour
+	genMu       = 0.1607143264
+	genSigma    = 0.0698081590
+
+	routerCapacity = 1000
+
 	instrument = common.Instrument{
-		Symbol:           "EURUSD",
+		Symbol:           symbol,
 		Digits:           5,
 		PipSize:          fixed.FromInt(1, 4),
 		ContractSize:     fixed.FromInt(100000, 0),
@@ -53,47 +62,40 @@ var (
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-	router := bus.NewRouter(1000)
+	r := bus.NewRouter(routerCapacity)
 
-	sim := simulation.NewSimulator(router, instrument, startBalance)
-	barBuilder := bar.NewBuilder(router, bar.With(instrument.Symbol, barPeriod, bar.PriceModeBid))
+	s := exchange.NewSimulator(r, instrument, startBalance)
+	b := bar.NewBuilder(r, bar.With(symbol, barPeriod, bar.PriceModeBid))
+	g := synthetic.NewEURUSDTickGenerator(symbol, genRng, genDuration, genMu, genSigma)
 
-	exec := simulation.NewEurUsdMonteCarloTickSimulator(
-		router,
-		instrument.Symbol,
-		rand.New(rand.NewSource(time.Now().UnixNano())),
-		30*24*time.Hour,
-		0.1607143264,
-		0.0698081590,
-	)
+	m := middleware.NewMonitor(middleware.MonitorSignals | middleware.MonitorOrders | middleware.MonitorPositionsClosed)
+	p := middleware.NewPerformance()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
+	a := metrics.NewAudit()
 
-	monitor := middleware.NewMonitor(middleware.MonitorSignals | middleware.MonitorOrders | middleware.MonitorPositionsClosed)
-	audit := metrics.NewAudit()
-	performance := middleware.NewPerformance()
-
-	advisor := strategy.NewMrxAdvisor(router)
-	riskManager := risk.NewManager(router, instrument, riskConf,
+	ea := strategy.NewMrxAdvisor(r)
+	rm := risk.NewManager(r, instrument, riskConf,
 		risk.WithDefaultKellyMultiplier(),
 		risk.WithDefaultDrawdownMultiplier(),
 		risk.WithDefaultRRRMultiplier(),
 		risk.WithOnHourCooldown())
 
-	router.TickHandler = middleware.Chain(monitor.WithTick, performance.WithTick)(bus.MergeHandlers(sim.OnTick, riskManager.OnTick, barBuilder.OnTick, advisor.OnTick))
-	router.BarHandler = middleware.Chain(monitor.WithBar, performance.WithBar)(bus.MergeHandlers(riskManager.OnBar, advisor.OnBar))
-	router.OrderHandler = middleware.Chain(monitor.WithOrder, performance.WithOrder)(sim.OnOrder)
-	router.OrderAcceptedHandler = middleware.Chain(monitor.WithOrderAccepted, performance.WithOrderAccepted)(riskManager.OnOrderAccepted)
-	router.OrderRejectedHandler = middleware.Chain(monitor.WithOrderRejected, performance.WithOrderRejected)(riskManager.OnOrderRejected)
-	router.PositionOpenedHandler = middleware.Chain(monitor.WithPositionOpened, performance.WithPositionOpened)(riskManager.OnPositionOpened)
-	router.PositionClosedHandler = middleware.Chain(monitor.WithPositionClosed, performance.WithPositionClosed)(bus.MergeHandlers(riskManager.OnPositionClosed, audit.OnPositionClosed))
-	router.PositionPnLUpdatedHandler = middleware.Chain(monitor.WithPositionPnLUpdated, performance.WithPositionPnLUpdated)(riskManager.OnPositionUpdated)
-	router.EquityHandler = middleware.Chain(monitor.WithEquity, performance.WithEquity)(bus.MergeHandlers(riskManager.OnEquity, audit.OnEquity))
-	router.BalanceHandler = middleware.Chain(monitor.WithBalance, performance.WithBalance)(riskManager.OnBalance)
-	router.SignalHandler = middleware.Chain(monitor.WithSignal, performance.WithSignal)(riskManager.OnSignal)
+	r.TickHandler = middleware.Chain(m.WithTick, p.WithTick)(bus.MergeHandlers(s.OnTick, rm.OnTick, b.OnTick, ea.OnTick))
+	r.BarHandler = middleware.Chain(m.WithBar, p.WithBar)(bus.MergeHandlers(rm.OnBar, ea.OnBar))
+	r.OrderHandler = middleware.Chain(m.WithOrder, p.WithOrder)(s.OnOrder)
+	r.OrderAcceptedHandler = middleware.Chain(m.WithOrderAccepted, p.WithOrderAccepted)(rm.OnOrderAccepted)
+	r.OrderRejectedHandler = middleware.Chain(m.WithOrderRejected, p.WithOrderRejected)(rm.OnOrderRejected)
+	r.PositionOpenedHandler = middleware.Chain(m.WithPositionOpened, p.WithPositionOpened)(rm.OnPositionOpened)
+	r.PositionClosedHandler = middleware.Chain(m.WithPositionClosed, p.WithPositionClosed)(bus.MergeHandlers(rm.OnPositionClosed, a.OnPositionClosed))
+	r.PositionPnLUpdatedHandler = middleware.Chain(m.WithPositionPnLUpdated, p.WithPositionPnLUpdated)(rm.OnPositionUpdated)
+	r.EquityHandler = middleware.Chain(m.WithEquity, p.WithEquity)(bus.MergeHandlers(rm.OnEquity, a.OnEquity))
+	r.BalanceHandler = middleware.Chain(m.WithBalance, p.WithBalance)(rm.OnBalance)
+	r.SignalHandler = middleware.Chain(m.WithSignal, p.WithSignal)(rm.OnSignal)
 
-	riskManager.OnEquity(ctx, common.Equity{
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	rm.OnEquity(ctx, common.Equity{
 		Source:      "main",
 		Account:     "",
 		ExecutionId: utility.GetExecutionID(),
@@ -102,7 +104,7 @@ func main() {
 		Value:       startBalance,
 	})
 
-	riskManager.OnBalance(ctx, common.Balance{
+	rm.OnBalance(ctx, common.Balance{
 		Source:      "main",
 		Account:     "",
 		ExecutionId: utility.GetExecutionID(),
@@ -111,18 +113,18 @@ func main() {
 		Value:       startBalance,
 	})
 
-	defer performance.PrintStatistics()
-	defer router.PrintStatistics()
+	defer p.PrintStatistics()
+	defer r.PrintStatistics()
 
-	if err := <-router.ExecLoop(ctx, exec.DoOnce); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, mapper.ErrEof) {
+	if err := <-r.ExecLoop(ctx, datasource.CreateTickDispatcher(r, g)); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, synthetic.ErrEof) {
 			slog.Error("unexpected error during execution", "error", err)
 			os.Exit(1)
 		}
 	}
 
-	sim.CloseAllOpenPositions()
+	s.CloseAllOpenPositions()
 
-	report := audit.GenerateReport()
+	report := a.GenerateReport()
 	report.Print()
 }

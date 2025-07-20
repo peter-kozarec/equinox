@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/data/mapper"
+	"github.com/peter-kozarec/equinox/pkg/datasource/historical"
 )
 
 type Quote struct {
@@ -71,7 +71,7 @@ func dumpIt(csvPath string, binFile *os.File) error {
 	}
 
 	for _, q := range quotes {
-		d := mapper.BinaryTick{
+		d := historical.BinaryTick{
 			TimeStamp: q.Timestamp.UnixNano(),
 			Bid:       q.BidPrice,
 			Ask:       q.AskPrice,
@@ -99,8 +99,7 @@ func dumpAll(symbol string) error {
 	for i := 2018; i <= 2025; i++ {
 		s := symbol + "_" + strconv.Itoa(i) + ".csv"
 		if err := dumpIt(s, binFile); err != nil {
-			os.Remove(symbol + ".bin")
-			return err
+			return os.Remove(symbol + ".bin")
 		}
 		slog.Info("dump finished", "symbol", symbol, "file", s)
 	}

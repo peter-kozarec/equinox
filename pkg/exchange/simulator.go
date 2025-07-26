@@ -365,14 +365,10 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 
 	pipPnL = pipPnL.Sub(s.instrument.PipSlippage.MulInt64(2))
 	pips := pipPnL.Div(s.instrument.PipSize)
-
-	avgPrice := position.OpenPrice.Add(closePrice).DivInt64(2)
-	currentLotValue := s.instrument.PipSize.Mul(s.instrument.ContractSize).Mul(avgPrice)
-
-	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(currentLotValue)
+	pipValue := s.instrument.ContractSize.Mul(s.instrument.PipSize)
+	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(pipValue)
 
 	commission := s.instrument.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
-
 	position.Commission = commission
 	position.NetProfit = position.GrossProfit.Sub(commission)
 }

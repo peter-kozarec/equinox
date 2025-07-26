@@ -241,8 +241,9 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 		return
 	}
 
-	maxSize := m.calculateMaxPositionSize(entry, sl)
-	minSize := m.calculateMinPositionSize(entry, sl)
+	maxSize := m.calculateMaxPositionSize(entry, sl).Rescale(2)
+	minSize := m.calculateMinPositionSize(entry, sl).Rescale(2)
+	size = size.Rescale(2)
 
 	originalSize := size
 	size = clamp(size, minSize, maxSize)
@@ -254,8 +255,6 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 			slog.String("min", minSize.String()),
 			slog.String("max", maxSize.String()))
 	}
-
-	size = size.Rescale(2)
 
 	if !m.hasEnoughMargin(signal.Symbol, entry, size) {
 		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
@@ -323,7 +322,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	if err := m.r.Post(bus.SignalAcceptanceEvent, common.SignalAccepted{
-		Comment:        comment,
+		Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s; comment: %s", entry.String(), tp.String(), sl.String(), size.String(), comment),
 		OriginalSignal: signal,
 		Source:         riskManagerComponentName,
 		ExecutionID:    utility.GetExecutionID(),
@@ -573,7 +572,7 @@ func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
 	}
 
 	positionValue := entry.Mul(size).Mul(m.instrument.ContractSize)
-	requiredMargin := positionValue.Mul(margin).DivInt(100)
+	requiredMargin := positionValue.Mul(margin.DivInt(100))
 	return m.currentEquity.Gte(requiredMargin)
 }
 

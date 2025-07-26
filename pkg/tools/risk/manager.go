@@ -308,7 +308,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
-	if totalRisk.Gt(m.conf.RiskMax) {
+	if totalRisk.Gt(m.conf.RiskOpen) {
 		slog.Debug("total risk is greater than max risk percentage, signal is discarded",
 			slog.String("current_open_risk", currentOpenRisk.String()),
 			slog.String("additional_risk", additionalRisk.String()),

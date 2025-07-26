@@ -132,6 +132,19 @@ func (r *Router) ExecLoop(ctx context.Context, doOnceCb func() error) <-chan err
 	return errChan
 }
 
+func (r *Router) DrainEvents(ctx context.Context) error {
+	for {
+		select {
+		case ev := <-r.events:
+			if r := r.dispatch(ctx, ev); r != nil {
+				return fmt.Errorf("dispatch failed: %w", r)
+			}
+		default:
+			return nil
+		}
+	}
+}
+
 func (r *Router) GetStatistics() Statistics {
 	stats := Statistics{}
 

@@ -122,6 +122,10 @@ func (s *Simulator) CloseAllOpenPositions() {
 		position.Status = common.PositionStatusClosed
 		position.ClosePrice = closePrice
 		position.CloseTime = s.lastTick.TimeStamp
+
+		if err := s.router.Post(bus.PositionCloseEvent, *position); err != nil {
+			slog.Warn("unable to post position closed event", "error", err)
+		}
 	}
 
 	s.balance = s.equity

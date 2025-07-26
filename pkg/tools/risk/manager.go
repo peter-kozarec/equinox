@@ -320,12 +320,7 @@ func (m *Manager) validateRiskLimits(signal common.Signal, entry, sl, size fixed
 	currentOpenRisk := m.calculateCurrentOpenRisk()
 	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
-
-	if totalRisk.Gt(m.conf.RiskOpen) {
-		return false
-	}
-
-	return true
+	return !totalRisk.Gt(m.conf.RiskOpen)
 }
 
 func (m *Manager) rejectSignal(signal common.Signal, reason, comment string) {

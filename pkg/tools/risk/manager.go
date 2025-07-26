@@ -58,11 +58,14 @@ type Manager struct {
 
 func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, options ...Option) *Manager {
 	m := &Manager{
-		r:          r,
-		instrument: instrument,
-		conf:       conf,
-		atr:        indicators.NewAtr(conf.AtrPeriod),
-		margins:    make(map[string]fixed.Point),
+		r:               r,
+		instrument:      instrument,
+		conf:            conf,
+		atr:             indicators.NewAtr(conf.AtrPeriod),
+		margins:         make(map[string]fixed.Point),
+		openPositions:   make([]common.Position, 0),
+		closedPositions: make([]common.Position, 0),
+		pendingOrders:   make([]common.Order, 0),
 	}
 
 	for _, option := range options {
@@ -99,148 +102,202 @@ func (m *Manager) OnBar(_ context.Context, bar common.Bar) {
 }
 
 func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
-	if !m.atr.Ready() {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "atr is not ready",
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-
-	if !m.isTimeToTrade() {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "it is not time to trade",
-			Comment:        fmt.Sprintf("server time: %s", m.serverTime.String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-
-	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
-		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
-			if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-				Reason:         "cooldown period is not over",
-				OriginalSignal: signal,
-				Source:         riskManagerComponentName,
-				ExecutionID:    utility.GetExecutionID(),
-				TraceID:        utility.CreateTraceID(),
-				TimeStamp:      m.serverTime,
-			}); err != nil {
-				slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-			}
-			return
-		}
-	}
-
-	if m.maxBalance.IsZero() || m.currentBalance.IsZero() {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "balance is not set",
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-
-	if m.maxEquity.IsZero() || m.currentEquity.IsZero() {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "equity is not set",
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
+	rejection := m.validateSignal(signal)
+	if rejection != nil {
+		m.rejectSignal(signal, rejection.reason, rejection.comment)
 		return
 	}
 
 	atrValue := m.atr.Value()
-
-	if signal.Entry.Sub(signal.Target).Abs().Lt(atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier)) {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "target is too close to entry",
-			Comment:        fmt.Sprintf("atr: %s; adjustedAtr: %s", atrValue.String(), atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier).String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-
 	tp := signal.Target.Rescale(m.instrument.Digits)
 	entry := signal.Entry.Rescale(m.instrument.Digits)
 	sl := m.calculateStopLoss(entry, tp, atrValue).Rescale(m.instrument.Digits)
-	size := m.calculateBasePositionSize(entry, sl)
 
-	drawdown := fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
-
-	comment := ""
-	if m.kellyMulHandler != nil {
-		multiplier := m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio())
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("kelly multiplier: %s;", multiplier.String())
-	}
-	if m.signalStrengthMulHandler != nil {
-		multiplier := m.signalStrengthMulHandler(signal.Strength)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("signal strength multiplier: %s;", multiplier.String())
-	}
-	if m.drawdownMulHandler != nil {
-		multiplier := m.drawdownMulHandler(drawdown)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("drawdown multiplier: %s;", multiplier.String())
-	}
-	if m.rrrMulHandler != nil {
-		risk := entry.Sub(sl).Abs()
-		reward := tp.Sub(entry).Abs()
-		ratio := reward.Div(risk)
-		multiplier := m.rrrMulHandler(ratio)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("rrr multiplier: %s;", multiplier.String())
-	}
-	if m.martingaleMulHandler != nil {
-		martingaleMultiplier := m.martingaleMulHandler(m.closedPositions)
-		size = size.Mul(martingaleMultiplier)
-		comment += fmt.Sprintf("martingale multiplier: %s;", martingaleMultiplier.String())
-	}
-
+	size, comment := m.applySizeMultipliers(signal, entry, sl)
 	if size.IsZero() {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "position size is zero",
-			Comment:        fmt.Sprintf("drawdown: %s; %s", drawdown.String(), comment),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
+		drawdown := m.calculateDrawdown()
+		m.rejectSignal(signal,
+			"position size is zero",
+			fmt.Sprintf("drawdown: %s; %s", drawdown.String(), comment))
 		return
 	}
 
+	size = m.clampPositionSize(size, entry, sl)
+
+	if !m.hasEnoughMargin(signal.Symbol, entry, size) {
+		margin := m.getMargin(signal.Symbol)
+		m.rejectSignal(signal,
+			"not enough margin",
+			fmt.Sprintf("margin_requirement: %s%%; equity: %s; expected_size: %s", margin.String(), m.currentEquity.String(), size.String()))
+		return
+	}
+
+	if !m.validateRiskLimits(signal, entry, sl, size) {
+		m.rejectSignal(signal,
+			"risk limit is exceeded",
+			fmt.Sprintf("risk_limit: %s%%; equity: %s; expected_size: %s", m.conf.RiskOpen.String(), m.currentEquity.String(), size.String()))
+		return
+	}
+
+	order, err := m.createMarketOrder(entry, tp, sl, size)
+	if err != nil {
+		m.rejectSignal(signal, "unable to create market order", err.Error())
+		return
+	}
+
+	if err := m.r.Post(bus.OrderEvent, order); err != nil {
+		m.rejectSignal(signal, "unable to post order event", err.Error())
+		return
+	}
+
+	m.acceptSignal(signal, entry, tp, sl, size, comment)
+	m.pendingOrders = append(m.pendingOrders, order)
+}
+
+func (m *Manager) OnPositionOpened(_ context.Context, position common.Position) {
+	m.lastPositionOpenTime = m.serverTime
+	m.openPositions = append(m.openPositions, position)
+}
+
+func (m *Manager) OnPositionClosed(_ context.Context, position common.Position) {
+	idx := m.findOpenPosition(position.TraceID)
+	if idx == -1 {
+		slog.Warn("position not found in open positions", slog.Uint64("traceId", position.TraceID))
+		return
+	}
+
+	m.openPositions = append(m.openPositions[:idx], m.openPositions[idx+1:]...)
+	m.closedPositions = append(m.closedPositions, position)
+	m.updatePerformanceStats(position)
+}
+
+func (m *Manager) OnPositionUpdated(_ context.Context, position common.Position) {
+	idx := m.findOpenPosition(position.TraceID)
+	if idx == -1 {
+		slog.Warn("position not found in open positions", slog.Uint64("traceId", position.TraceID))
+		return
+	}
+	m.openPositions[idx] = position
+}
+
+func (m *Manager) OnOrderAccepted(_ context.Context, acceptedOrder common.OrderAccepted) {
+	m.removePendingOrder(acceptedOrder.OriginalOrder.TraceID)
+}
+
+func (m *Manager) OnOrderRejected(_ context.Context, rejectedOrder common.OrderRejected) {
+	m.removePendingOrder(rejectedOrder.OriginalOrder.TraceID)
+}
+
+func (m *Manager) OnEquity(_ context.Context, equity common.Equity) {
+	m.currentEquity = equity.Value
+	if m.maxEquity.IsZero() || m.currentEquity.Gt(m.maxEquity) {
+		m.maxEquity = m.currentEquity
+	}
+}
+
+func (m *Manager) OnBalance(_ context.Context, balance common.Balance) {
+	m.currentBalance = balance.Value
+	if m.maxBalance.IsZero() || m.currentBalance.Gt(m.maxBalance) {
+		m.maxBalance = m.currentBalance
+	}
+}
+
+func (m *Manager) SetPerformanceMetrics(totalTrades, winningTrades int, totalWinAmount, totalLossAmount fixed.Point) {
+	m.totalTrades = totalTrades
+	m.winningTrades = winningTrades
+	m.totalWinAmount = totalWinAmount
+	m.totalLossAmount = totalLossAmount
+}
+
+func (m *Manager) SetMargin(symbol string, margin fixed.Point) {
+	m.margins[symbol] = margin
+}
+
+type signalRejection struct {
+	reason  string
+	comment string
+}
+
+func (m *Manager) validateSignal(signal common.Signal) *signalRejection {
+	if !m.atr.Ready() {
+		return &signalRejection{reason: "atr is not ready"}
+	}
+
+	if !m.isTimeToTrade() {
+		return &signalRejection{
+			reason:  "it is not time to trade",
+			comment: fmt.Sprintf("server time: %s", m.serverTime.String()),
+		}
+	}
+
+	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
+		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
+			return &signalRejection{reason: "cooldown period is not over"}
+		}
+	}
+
+	if m.maxBalance.IsZero() || m.currentBalance.IsZero() {
+		return &signalRejection{reason: "balance is not set"}
+	}
+
+	if m.maxEquity.IsZero() || m.currentEquity.IsZero() {
+		return &signalRejection{reason: "equity is not set"}
+	}
+
+	atrValue := m.atr.Value()
+	minTargetDistance := atrValue.Mul(m.conf.AtrTakeProfitMinMultiplier)
+	targetDistance := signal.Entry.Sub(signal.Target).Abs()
+
+	if targetDistance.Lt(minTargetDistance) {
+		return &signalRejection{
+			reason:  "target is too close to entry",
+			comment: fmt.Sprintf("atr: %s; min_distance: %s; actual_distance: %s", atrValue.String(), minTargetDistance.String(), targetDistance.String()),
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) applySizeMultipliers(signal common.Signal, entry, sl fixed.Point) (fixed.Point, string) {
+	size := m.calculateBasePositionSize(entry, sl)
+	drawdown := m.calculateDrawdown()
+	comment := ""
+
+	if m.kellyMulHandler != nil {
+		multiplier := m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio())
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("kelly: %s; ", multiplier.String())
+	}
+
+	if m.signalStrengthMulHandler != nil {
+		multiplier := m.signalStrengthMulHandler(signal.Strength)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("strength: %s; ", multiplier.String())
+	}
+
+	if m.drawdownMulHandler != nil {
+		multiplier := m.drawdownMulHandler(drawdown)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("drawdown: %s; ", multiplier.String())
+	}
+
+	if m.rrrMulHandler != nil {
+		ratio := m.calculateRRR(entry, sl, signal.Target)
+		multiplier := m.rrrMulHandler(ratio)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("rrr: %s; ", multiplier.String())
+	}
+
+	if m.martingaleMulHandler != nil {
+		multiplier := m.martingaleMulHandler(m.closedPositions)
+		size = size.Mul(multiplier)
+		comment += fmt.Sprintf("martingale: %s; ", multiplier.String())
+	}
+
+	return size, comment
+}
+
+func (m *Manager) clampPositionSize(size, entry, sl fixed.Point) fixed.Point {
 	maxSize := m.calculateMaxPositionSize(entry, sl).Rescale(2)
 	minSize := m.calculateMinPositionSize(entry, sl).Rescale(2)
 	size = size.Rescale(2)
@@ -256,197 +313,65 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 			slog.String("max", maxSize.String()))
 	}
 
-	if !m.hasEnoughMargin(signal.Symbol, entry, size) {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "not enough margin",
-			Comment:        fmt.Sprintf("margin_reuirement: %s%%; equity: %s; size: %s", m.margins[signal.Symbol].String(), m.currentEquity.String(), size.String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
+	return size
+}
 
+func (m *Manager) validateRiskLimits(signal common.Signal, entry, sl, size fixed.Point) bool {
 	currentOpenRisk := m.calculateCurrentOpenRisk()
 	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
 	if totalRisk.Gt(m.conf.RiskOpen) {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "total risk is greater than open risk percentage",
-			Comment:        fmt.Sprintf("current_open_risk: %s%%; additional_risk: %s%%; total_risk: %s%%", currentOpenRisk.String(), additionalRisk.String(), totalRisk.String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Error("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
+		return false
 	}
 
-	order, err := m.createMarketOrder(entry, tp, sl, size)
-	if err != nil {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "unable to create market order",
-			Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s", entry.String(), tp.String(), sl.String(), size.String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Error("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
+	return true
+}
 
-	if err := m.r.Post(bus.OrderEvent, order); err != nil {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "unable to post order event",
-			Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s", entry.String(), tp.String(), sl.String(), size.String()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Error("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-
-	if err := m.r.Post(bus.SignalAcceptanceEvent, common.SignalAccepted{
-		Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s; comment: %s", entry.String(), tp.String(), sl.String(), size.String(), comment),
+func (m *Manager) rejectSignal(signal common.Signal, reason, comment string) {
+	rejection := common.SignalRejected{
+		Reason:         reason,
+		Comment:        comment,
 		OriginalSignal: signal,
 		Source:         riskManagerComponentName,
 		ExecutionID:    utility.GetExecutionID(),
 		TraceID:        utility.CreateTraceID(),
-		TimeStamp:      m.serverTime}); err != nil {
+		TimeStamp:      m.serverTime,
+	}
+
+	if err := m.r.Post(bus.SignalRejectionEvent, rejection); err != nil {
+		slog.Error("unable to post signal rejection event",
+			slog.String("reason", reason),
+			slog.Any("err", err))
+	}
+}
+
+func (m *Manager) acceptSignal(signal common.Signal, entry, tp, sl, size fixed.Point, comment string) {
+	acceptance := common.SignalAccepted{
+		Comment: fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s; %s",
+			entry.String(), tp.String(), sl.String(), size.String(), comment),
+		OriginalSignal: signal,
+		Source:         riskManagerComponentName,
+		ExecutionID:    utility.GetExecutionID(),
+		TraceID:        utility.CreateTraceID(),
+		TimeStamp:      m.serverTime,
+	}
+
+	if err := m.r.Post(bus.SignalAcceptanceEvent, acceptance); err != nil {
 		slog.Error("unable to post signal acceptance event", slog.Any("err", err))
 	}
-
-	m.pendingOrders = append(m.pendingOrders, order)
-}
-
-func (m *Manager) OnPositionOpened(_ context.Context, position common.Position) {
-	m.lastPositionOpenTime = m.serverTime
-	m.openPositions = append(m.openPositions, position)
-}
-
-func (m *Manager) OnPositionClosed(_ context.Context, position common.Position) {
-	found := false
-	for idx := range m.openPositions {
-		openPosition := &m.openPositions[idx]
-		if openPosition.TraceID == position.TraceID {
-			m.openPositions = append(m.openPositions[:idx], m.openPositions[idx+1:]...)
-			found = true
-			break
-		}
-	}
-	if !found {
-		slog.Warn("position is not open, closed position is discarded")
-		return
-	}
-
-	m.closedPositions = append(m.closedPositions, position)
-	m.updatePerformanceStats(position)
-}
-
-func (m *Manager) OnPositionUpdated(_ context.Context, position common.Position) {
-	found := false
-	for idx := range m.openPositions {
-		openPosition := &m.openPositions[idx]
-		if openPosition.TraceID == position.TraceID {
-			*openPosition = position
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		slog.Warn("position is not open, updated position is discarded")
-		return
-	}
-}
-
-func (m *Manager) OnOrderAccepted(_ context.Context, acceptedOrder common.OrderAccepted) {
-	found := false
-	for idx := range m.pendingOrders {
-		pendingOrder := &m.pendingOrders[idx]
-		if pendingOrder.TraceID == acceptedOrder.OriginalOrder.TraceID {
-			m.pendingOrders = append(m.pendingOrders[:idx], m.pendingOrders[idx+1:]...)
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		slog.Warn("order is not pending, accepted order is discarded")
-		return
-	}
-}
-
-func (m *Manager) OnOrderRejected(_ context.Context, rejectedOrder common.OrderRejected) {
-	found := false
-	for idx := range m.pendingOrders {
-		pendingOrder := &m.pendingOrders[idx]
-		if pendingOrder.TraceID == rejectedOrder.OriginalOrder.TraceID {
-			m.pendingOrders = append(m.pendingOrders[:idx], m.pendingOrders[idx+1:]...)
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		slog.Warn("order is not pending, rejected order is discarded")
-		return
-	}
-}
-
-func (m *Manager) OnEquity(_ context.Context, equity common.Equity) {
-	m.currentEquity = equity.Value
-
-	if m.maxEquity.IsZero() || m.currentEquity.Gt(m.maxEquity) {
-		m.maxEquity = m.currentEquity
-	}
-}
-
-func (m *Manager) OnBalance(_ context.Context, balance common.Balance) {
-	m.currentBalance = balance.Value
-
-	if m.maxBalance.IsZero() || m.currentBalance.Gt(m.maxBalance) {
-		m.maxBalance = m.currentBalance
-	}
-}
-
-func (m *Manager) SetPerformanceMetrics(totalTrades, winningTrades int, totalWinAmount, totalLossAmount fixed.Point) {
-	m.totalTrades = totalTrades
-	m.winningTrades = winningTrades
-	m.totalWinAmount = totalWinAmount
-	m.totalLossAmount = totalLossAmount
 }
 
 func (m *Manager) checkOpenPositions() {
 	for _, position := range m.openPositions {
-		pendingOrderFound := false
-
-		for _, pendingOrder := range m.pendingOrders {
-			if pendingOrder.PositionId == position.Id {
-				slog.Debug("position has an open orders, break even is not checked")
-				pendingOrderFound = true
-			}
+		if m.hasOpenOrdersForPosition(position.Id) {
+			continue
 		}
 
-		if !pendingOrderFound {
-			if err := m.checkForBreakEven(position); err != nil {
-				slog.Warn("unable to check for break even", slog.Any("err", err))
-			}
+		if err := m.checkForBreakEven(position); err != nil {
+			slog.Warn("unable to check for break even",
+				slog.Int64("positionId", position.Id),
+				slog.Any("err", err))
 		}
 	}
 }
@@ -456,61 +381,80 @@ func (m *Manager) checkForBreakEven(position common.Position) error {
 		return nil
 	}
 
-	lastTick := m.lastTick
-	serverTime := m.serverTime
+	if m.isBreakEvenAlreadySet(position) {
+		return nil
+	}
 
-	var moved, takeProfitPriceDiff fixed.Point
+	movePercentage := m.calculateMovePercentage(position)
+	if movePercentage.Lt(m.conf.BreakEvenThreshold) {
+		return nil
+	}
+
+	newStopLoss := m.calculateBreakEvenStopLoss(position)
+	order := m.createBreakEvenOrder(position, newStopLoss, movePercentage)
+
+	if err := m.r.Post(bus.OrderEvent, order); err != nil {
+		return fmt.Errorf("unable to post break even order: %w", err)
+	}
+
+	m.pendingOrders = append(m.pendingOrders, order)
+	return nil
+}
+
+func (m *Manager) isBreakEvenAlreadySet(position common.Position) bool {
 	if position.Side == common.PositionSideLong {
-		if position.StopLoss.Gte(position.OpenPrice) || position.TakeProfit.Lte(lastTick.Bid) {
-			return nil
+		return position.StopLoss.Gte(position.OpenPrice)
+	}
+	return position.StopLoss.Lte(position.OpenPrice)
+}
+
+func (m *Manager) calculateMovePercentage(position common.Position) fixed.Point {
+	var moved, takeProfitPriceDiff fixed.Point
+
+	if position.Side == common.PositionSideLong {
+		if position.TakeProfit.Lte(m.lastTick.Bid) {
+			return fixed.FromInt(100, 0)
 		}
-		moved = lastTick.Bid.Sub(position.OpenPrice)
+		moved = m.lastTick.Bid.Sub(position.OpenPrice)
 		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
 	} else {
-		if position.StopLoss.Lte(position.OpenPrice) || position.TakeProfit.Gte(lastTick.Ask) {
-			return nil
+		if position.TakeProfit.Gte(m.lastTick.Ask) {
+			return fixed.FromInt(100, 0)
 		}
-		moved = position.OpenPrice.Sub(lastTick.Ask)
+		moved = position.OpenPrice.Sub(m.lastTick.Ask)
 		takeProfitPriceDiff = position.OpenPrice.Sub(position.TakeProfit)
 	}
 
 	if moved.Lt(fixed.Zero) {
-		return nil
+		return fixed.Zero
 	}
 
-	movePercentage := moved.Div(takeProfitPriceDiff).MulInt(100)
+	return moved.Div(takeProfitPriceDiff).MulInt(100)
+}
 
-	if movePercentage.Gte(m.conf.BreakEvenThreshold) {
-		newStopLossMove := takeProfitPriceDiff.Mul(m.conf.BreakEvenMove.DivInt(100))
+func (m *Manager) calculateBreakEvenStopLoss(position common.Position) fixed.Point {
+	takeProfitPriceDiff := position.TakeProfit.Sub(position.OpenPrice).Abs()
+	newStopLossMove := takeProfitPriceDiff.Mul(m.conf.BreakEvenMove.DivInt(100))
 
-		var newStopLoss fixed.Point
-		if position.Side == common.PositionSideLong {
-			newStopLoss = position.OpenPrice.Add(newStopLossMove)
-		} else {
-			newStopLoss = position.OpenPrice.Sub(newStopLossMove)
-		}
-
-		order := common.Order{
-			Source:      riskManagerComponentName,
-			Symbol:      m.instrument.Symbol,
-			ExecutionId: utility.GetExecutionID(),
-			TraceID:     utility.CreateTraceID(),
-			TimeStamp:   serverTime,
-			Command:     common.OrderCommandPositionModify,
-			StopLoss:    newStopLoss,
-			TakeProfit:  position.TakeProfit,
-			PositionId:  position.Id,
-			Comment:     fmt.Sprintf("Break even triggered at %s%% move", movePercentage.String()),
-		}
-
-		if err := m.r.Post(bus.OrderEvent, order); err != nil {
-			return fmt.Errorf("unable to post order event: %v", err)
-		}
-
-		m.pendingOrders = append(m.pendingOrders, order)
+	if position.Side == common.PositionSideLong {
+		return position.OpenPrice.Add(newStopLossMove)
 	}
+	return position.OpenPrice.Sub(newStopLossMove)
+}
 
-	return nil
+func (m *Manager) createBreakEvenOrder(position common.Position, newStopLoss fixed.Point, movePercentage fixed.Point) common.Order {
+	return common.Order{
+		Source:      riskManagerComponentName,
+		Symbol:      m.instrument.Symbol,
+		ExecutionId: utility.GetExecutionID(),
+		TraceID:     utility.CreateTraceID(),
+		TimeStamp:   m.serverTime,
+		Command:     common.OrderCommandPositionModify,
+		StopLoss:    newStopLoss,
+		TakeProfit:  position.TakeProfit,
+		PositionId:  position.Id,
+		Comment:     fmt.Sprintf("Break even at %s%% move", movePercentage.String()),
+	}
 }
 
 func (m *Manager) isTimeToTrade() bool {
@@ -532,13 +476,10 @@ func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
 }
 
 func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.Point) fixed.Point {
-	margin, ok := m.margins[symbol]
-	if !ok {
-		margin = fixed.FromInt(100, 0)
-	}
+	margin := m.getMargin(symbol)
 	priceDiff := entry.Sub(sl).Abs()
 	monetaryRisk := priceDiff.Mul(size).Mul(m.instrument.ContractSize)
-	leverageMultiplier := fixed.FromInt(100, 1).Div(margin)
+	leverageMultiplier := fixed.FromInt(100, 0).Div(margin)
 	effectiveRisk := monetaryRisk.Mul(leverageMultiplier)
 	riskPercentage := effectiveRisk.Div(m.currentEquity).MulInt(100)
 	return riskPercentage
@@ -566,21 +507,34 @@ func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) f
 }
 
 func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
-	margin, ok := m.margins[symbol]
-	if !ok {
-		margin = fixed.FromInt(100, 0)
-	}
-
+	margin := m.getMargin(symbol)
 	positionValue := entry.Mul(size).Mul(m.instrument.ContractSize)
 	requiredMargin := positionValue.Mul(margin.DivInt(100))
 	return m.currentEquity.Gte(requiredMargin)
 }
 
 func (m *Manager) calculateStopLoss(entry, target, atr fixed.Point) fixed.Point {
+	stopLossDistance := atr.Mul(m.conf.AtrStopLossMultiplier)
 	if entry.Gt(target) {
-		return entry.Add(atr.Mul(m.conf.AtrStopLossMultiplier))
+		return entry.Add(stopLossDistance)
 	}
-	return entry.Sub(atr.Mul(m.conf.AtrStopLossMultiplier))
+	return entry.Sub(stopLossDistance)
+}
+
+func (m *Manager) calculateDrawdown() fixed.Point {
+	if m.maxEquity.IsZero() {
+		return fixed.Zero
+	}
+	return fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
+}
+
+func (m *Manager) calculateRRR(entry, sl, tp fixed.Point) fixed.Point {
+	risk := entry.Sub(sl).Abs()
+	reward := tp.Sub(entry).Abs()
+	if risk.IsZero() {
+		return fixed.Zero
+	}
+	return reward.Div(risk)
 }
 
 func (m *Manager) getWinRate() fixed.Point {
@@ -595,8 +549,13 @@ func (m *Manager) getAvgWinLossRatio() fixed.Point {
 		return fixed.FromFloat64(1.5)
 	}
 
+	losingTrades := m.totalTrades - m.winningTrades
+	if losingTrades == 0 {
+		return fixed.FromFloat64(2.0)
+	}
+
 	avgWin := m.totalWinAmount.Div(fixed.FromInt(m.winningTrades, 0))
-	avgLoss := m.totalLossAmount.Div(fixed.FromInt(m.totalTrades-m.winningTrades, 0))
+	avgLoss := m.totalLossAmount.Div(fixed.FromInt(losingTrades, 0))
 
 	if avgLoss.IsZero() {
 		return fixed.FromFloat64(2.0)
@@ -621,14 +580,12 @@ func (m *Manager) createMarketOrder(entry, tp, sl, size fixed.Point) (common.Ord
 
 	if entry.Gt(tp) {
 		order, err = m.createSellOrder(entry, tp, sl, size)
-		if err != nil {
-			return common.Order{}, fmt.Errorf("unable to create sell order: %v", err)
-		}
 	} else {
 		order, err = m.createBuyOrder(entry, tp, sl, size)
-		if err != nil {
-			return common.Order{}, fmt.Errorf("unable to create buy order: %v", err)
-		}
+	}
+
+	if err != nil {
+		return common.Order{}, err
 	}
 
 	order.Command = common.OrderCommandPositionOpen
@@ -637,11 +594,11 @@ func (m *Manager) createMarketOrder(entry, tp, sl, size fixed.Point) (common.Ord
 }
 
 func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order, error) {
-	if tp.Gt(entry) {
-		return common.Order{}, fmt.Errorf("target price is greater than entry price, unable to create sell order")
+	if tp.Gte(entry) {
+		return common.Order{}, fmt.Errorf("target price must be less than entry price for sell order")
 	}
-	if sl.Lt(entry) {
-		return common.Order{}, fmt.Errorf("stop loss is less than entry price, unable to create sell order")
+	if sl.Lte(entry) {
+		return common.Order{}, fmt.Errorf("stop loss must be greater than entry price for sell order")
 	}
 
 	return common.Order{
@@ -649,7 +606,7 @@ func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order
 		Symbol:      m.instrument.Symbol,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   time.Now(),
+		TimeStamp:   m.serverTime,
 		Side:        common.OrderSideSell,
 		Price:       entry,
 		TakeProfit:  tp,
@@ -659,11 +616,11 @@ func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order
 }
 
 func (m *Manager) createBuyOrder(entry, tp, sl, size fixed.Point) (common.Order, error) {
-	if tp.Lt(entry) {
-		return common.Order{}, fmt.Errorf("target price is less than entry price, unable to create buy order")
+	if tp.Lte(entry) {
+		return common.Order{}, fmt.Errorf("target price must be greater than entry price for buy order")
 	}
-	if sl.Gt(entry) {
-		return common.Order{}, fmt.Errorf("stop loss is greater than entry price, unable to create buy order")
+	if sl.Gte(entry) {
+		return common.Order{}, fmt.Errorf("stop loss must be less than entry price for buy order")
 	}
 
 	return common.Order{
@@ -671,11 +628,47 @@ func (m *Manager) createBuyOrder(entry, tp, sl, size fixed.Point) (common.Order,
 		Symbol:      m.instrument.Symbol,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   time.Now(),
+		TimeStamp:   m.serverTime,
 		Side:        common.OrderSideBuy,
 		Price:       entry,
 		TakeProfit:  tp,
 		StopLoss:    sl,
 		Size:        size,
 	}, nil
+}
+
+func (m *Manager) findOpenPosition(traceID utility.TraceID) int {
+	for idx, position := range m.openPositions {
+		if position.TraceID == traceID {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (m *Manager) hasOpenOrdersForPosition(positionID common.PositionId) bool {
+	for _, order := range m.pendingOrders {
+		if order.PositionId == positionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) removePendingOrder(traceID utility.TraceID) {
+	for idx, order := range m.pendingOrders {
+		if order.TraceID == traceID {
+			m.pendingOrders = append(m.pendingOrders[:idx], m.pendingOrders[idx+1:]...)
+			return
+		}
+	}
+	slog.Warn("pending order not found", slog.Uint64("traceId", traceID))
+}
+
+func (m *Manager) getMargin(symbol string) fixed.Point {
+	margin, ok := m.margins[symbol]
+	if !ok {
+		return fixed.FromInt(100, 0)
+	}
+	return margin
 }

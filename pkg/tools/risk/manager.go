@@ -51,6 +51,7 @@ type Manager struct {
 	signalStrengthMulHandler SignalStrengthMultiplierHandler
 	rrrMulHandler            RRRMultiplierHandler
 	kellyMulHandler          KellyMultiplierHandler
+	martingaleMulHandler     MartingaleMultiplierHandler
 
 	margins map[string]fixed.Point
 }
@@ -191,21 +192,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	tp := signal.Target.Rescale(m.instrument.Digits)
 	entry := signal.Entry.Rescale(m.instrument.Digits)
 	sl := m.calculateStopLoss(entry, tp, atrValue).Rescale(m.instrument.Digits)
-	size, err := m.calculateBasePositionSize(signal.Symbol, entry, sl)
-	if err != nil {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "unable to calculate base position size",
-			Comment:        fmt.Sprintf("error: %s", err.Error()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
+	size := m.calculateBasePositionSize(entry, sl)
 
 	drawdown := fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
 
@@ -231,7 +218,12 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 		ratio := reward.Div(risk)
 		multiplier := m.rrrMulHandler(ratio)
 		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("rrr multiplier: %s;rrr risk %s; rrr reward%s; rrr ratio %s;", multiplier.String(), risk.String(), reward.String(), ratio.String())
+		comment += fmt.Sprintf("rrr multiplier: %s;", multiplier.String())
+	}
+	if m.martingaleMulHandler != nil {
+		martingaleMultiplier := m.martingaleMulHandler(m.closedPositions)
+		size = size.Mul(martingaleMultiplier)
+		comment += fmt.Sprintf("martingale multiplier: %s;", martingaleMultiplier.String())
 	}
 
 	if size.IsZero() {
@@ -247,49 +239,10 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
 		}
 		return
-	} else {
-		if err := m.r.Post(bus.SignalAcceptanceEvent, common.SignalAccepted{
-			Comment:        comment,
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal acceptance event", slog.Any("err", err))
-		}
 	}
 
-	maxSize, err := m.calculateMaxPositionSize(signal.Symbol, entry, sl)
-	if err != nil {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "unable to calculate max position size",
-			Comment:        fmt.Sprintf("error: %s", err.Error()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
-	minSize, err := m.calculateMinPositionSize(signal.Symbol, entry, sl)
-	if err != nil {
-		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
-			Reason:         "unable to calculate min position size",
-			Comment:        fmt.Sprintf("error: %s", err.Error()),
-			OriginalSignal: signal,
-			Source:         riskManagerComponentName,
-			ExecutionID:    utility.GetExecutionID(),
-			TraceID:        utility.CreateTraceID(),
-			TimeStamp:      m.serverTime,
-		}); err != nil {
-			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
-		}
-		return
-	}
+	maxSize := m.calculateMaxPositionSize(entry, sl)
+	minSize := m.calculateMinPositionSize(entry, sl)
 
 	originalSize := size
 	size = clamp(size, minSize, maxSize)
@@ -304,28 +257,79 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 
 	size = size.Rescale(2)
 
+	if !m.hasEnoughMargin(signal.Symbol, entry, size) {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "not enough margin",
+			Comment:        fmt.Sprintf("margin_reuirement: %s%%; equity: %s; size: %s", m.margins[signal.Symbol].String(), m.currentEquity.String(), size.String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
+		return
+	}
+
 	currentOpenRisk := m.calculateCurrentOpenRisk()
 	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
 	if totalRisk.Gt(m.conf.RiskOpen) {
-		slog.Debug("total risk is greater than max risk percentage, signal is discarded",
-			slog.String("current_open_risk", currentOpenRisk.String()),
-			slog.String("additional_risk", additionalRisk.String()),
-			slog.String("total_risk", totalRisk.String()),
-			slog.String("max_risk_percentage", m.conf.RiskMax.String()))
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "total risk is greater than open risk percentage",
+			Comment:        fmt.Sprintf("current_open_risk: %s%%; additional_risk: %s%%; total_risk: %s%%", currentOpenRisk.String(), additionalRisk.String(), totalRisk.String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Error("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
 	order, err := m.createMarketOrder(entry, tp, sl, size)
 	if err != nil {
-		slog.Warn("unable to create market order", slog.Any("err", err))
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "unable to create market order",
+			Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s", entry.String(), tp.String(), sl.String(), size.String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Error("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
 	}
 
 	if err := m.r.Post(bus.OrderEvent, order); err != nil {
-		slog.Warn("unable to post order event", slog.Any("err", err))
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "unable to post order event",
+			Comment:        fmt.Sprintf("entry: %s; target: %s; stop_loss: %s; size: %s", entry.String(), tp.String(), sl.String(), size.String()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Error("unable to post signal rejection event", slog.Any("err", err))
+		}
 		return
+	}
+
+	if err := m.r.Post(bus.SignalAcceptanceEvent, common.SignalAccepted{
+		Comment:        comment,
+		OriginalSignal: signal,
+		Source:         riskManagerComponentName,
+		ExecutionID:    utility.GetExecutionID(),
+		TraceID:        utility.CreateTraceID(),
+		TimeStamp:      m.serverTime}); err != nil {
+		slog.Error("unable to post signal acceptance event", slog.Any("err", err))
 	}
 
 	m.pendingOrders = append(m.pendingOrders, order)
@@ -541,28 +545,25 @@ func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.P
 	return riskPercentage
 }
 
-func (m *Manager) calculateMaxPositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
-	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskMax)
+func (m *Manager) calculateMaxPositionSize(entry, sl fixed.Point) fixed.Point {
+	return m.calculatePositionSize(entry, sl, m.conf.RiskMax)
 }
 
-func (m *Manager) calculateMinPositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
-	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskMin)
+func (m *Manager) calculateMinPositionSize(entry, sl fixed.Point) fixed.Point {
+	return m.calculatePositionSize(entry, sl, m.conf.RiskMin)
 }
 
-func (m *Manager) calculateBasePositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
-	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskBase)
+func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
+	return m.calculatePositionSize(entry, sl, m.conf.RiskBase)
 }
 
-func (m *Manager) calculatePositionSize(symbol string, entry, sl, riskPercentage fixed.Point) (fixed.Point, error) {
-	if m.hasEnoughMargin(symbol, entry, riskPercentage) {
-		return fixed.Zero, fmt.Errorf("not enough margin")
-	}
+func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
 	priceDiff := entry.Sub(sl).Abs()
 	pipDiff := priceDiff.Div(m.instrument.PipSize)
 	riskAmount := m.currentEquity.Mul(riskPercentage.DivInt(100))
 	pipValue := m.instrument.ContractSize.Mul(m.instrument.PipSize)
 	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
-	return positionSize, nil
+	return positionSize
 }
 
 func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {

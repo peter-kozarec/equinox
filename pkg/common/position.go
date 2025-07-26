@@ -25,13 +25,13 @@ type Position struct {
 	Id          PositionId     `json:"id"`
 	Status      PositionStatus `json:"status"`
 	Side        PositionSide   `json:"side"`
+	Size        fixed.Point    `json:"size"`
 	GrossProfit fixed.Point    `json:"gross_profit"`
 	NetProfit   fixed.Point    `json:"net_profit"`
 	OpenPrice   fixed.Point    `json:"open_price"`
 	ClosePrice  fixed.Point    `json:"close_price,omitempty"`
 	OpenTime    time.Time      `json:"open_time"`
 	CloseTime   time.Time      `json:"close_time,omitempty"`
-	Size        fixed.Point    `json:"size"`
 	StopLoss    fixed.Point    `json:"stop_loss,omitempty"`
 	TakeProfit  fixed.Point    `json:"take_profit,omitempty"`
 	Commission  fixed.Point    `json:"commission"`

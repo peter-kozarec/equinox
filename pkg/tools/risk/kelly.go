@@ -15,12 +15,13 @@ func WithKellyMultiplier(h KellyMultiplierHandler) Option {
 
 func WithDefaultKellyMultiplier() Option {
 	const (
-		tradeCountLimit  = 10
-		kellyFraction    = 0.25 // Conservative Kelly (25% of full Kelly)
-		maxMultiplier    = 3.0
-		minMultiplier    = 0.3
-		defaultFallback  = 0.5
-		maxKellyPosition = 0.25 // Max 25% position size
+		tradeCountLimit      = 10
+		kellyFraction        = 0.25
+		maxMultiplier        = 3.0
+		minMultiplier        = 0.3
+		defaultFallback      = 1.0
+		noPositionMultiplier = 0.0
+		maxKellyPosition     = 0.25
 	)
 
 	return WithKellyMultiplier(func(tradeCount int, winRate, avgWinLoss fixed.Point) fixed.Point {
@@ -33,30 +34,25 @@ func WithDefaultKellyMultiplier() Option {
 			return fixed.FromFloat64(defaultFallback)
 		}
 
-		// Kelly formula: f = p - q/b
-		// where p = win probability, q = loss probability, b = win/loss ratio
 		q := fixed.One.Sub(winRate)
 		kellyPercentage := winRate.Sub(q.Div(avgWinLoss))
 
-		// If Kelly suggests no position or negative position
 		if kellyPercentage.Lte(fixed.Zero) {
-			return fixed.FromFloat64(defaultFallback)
+			if winRate.Lt(fixed.FromFloat64(0.4)) {
+				return fixed.FromFloat64(noPositionMultiplier)
+			}
+			return fixed.FromFloat64(minMultiplier)
 		}
 
-		// Apply conservative fraction (25% of full Kelly)
 		conservativeKelly := kellyPercentage.Mul(fixed.FromFloat64(kellyFraction))
 
-		// Cap at maximum position size
 		if conservativeKelly.Gt(fixed.FromFloat64(maxKellyPosition)) {
 			conservativeKelly = fixed.FromFloat64(maxKellyPosition)
 		}
 
-		// Convert to multiplier (assuming base risk of 1%)
-		// You might want to make this configurable
 		baseRisk := fixed.FromFloat64(0.01)
 		multiplier := conservativeKelly.Div(baseRisk)
 
-		// Apply multiplier bounds
 		if multiplier.Gt(fixed.FromFloat64(maxMultiplier)) {
 			return fixed.FromFloat64(maxMultiplier)
 		} else if multiplier.Lt(fixed.FromFloat64(minMultiplier)) {
@@ -84,19 +80,15 @@ func WithConfigurableKellyMultiplier(tradeCountLimit int, kellyFraction, maxMult
 			return fixed.FromFloat64(minMultiplier)
 		}
 
-		// Apply Kelly fraction
 		conservativeKelly := kellyPercentage.Mul(fixed.FromFloat64(kellyFraction))
 
-		// Cap at 25% position size
 		if conservativeKelly.Gt(fixed.FromFloat64(0.25)) {
 			conservativeKelly = fixed.FromFloat64(0.25)
 		}
 
-		// Convert to multiplier based on base risk
 		baseRisk := fixed.FromFloat64(baseRiskPercentage / 100.0)
 		multiplier := conservativeKelly.Div(baseRisk)
 
-		// Apply bounds
 		if multiplier.Gt(fixed.FromFloat64(maxMultiplier)) {
 			return fixed.FromFloat64(maxMultiplier)
 		} else if multiplier.Lt(fixed.FromFloat64(minMultiplier)) {

@@ -294,8 +294,6 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	originalSize := size
 	size = clamp(size, minSize, maxSize)
 
-	size = size.Rescale(2)
-
 	if !size.Eq(originalSize) {
 		slog.Debug("position size adjusted",
 			slog.String("original", originalSize.String()),
@@ -303,6 +301,8 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 			slog.String("min", minSize.String()),
 			slog.String("max", maxSize.String()))
 	}
+
+	size = size.Rescale(2)
 
 	currentOpenRisk := m.calculateCurrentOpenRisk()
 	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)

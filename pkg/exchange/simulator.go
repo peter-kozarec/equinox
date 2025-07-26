@@ -49,6 +49,9 @@ func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
 }
 
 func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
+	s.simulationTime = tick.TimeStamp
+	s.lastTick = tick
+
 	if !s.firstPostDone {
 		s.firstPostDone = true
 		if err := s.router.Post(bus.BalanceEvent, common.Balance{
@@ -70,9 +73,6 @@ func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 			slog.Error("unable to post balance event", "error", err)
 		}
 	}
-
-	s.simulationTime = tick.TimeStamp
-	s.lastTick = tick
 
 	lastBalance := s.balance
 	lastEquity := s.equity

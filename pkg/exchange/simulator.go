@@ -284,14 +284,12 @@ func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick
 func (s *Simulator) shouldClosePosition(position common.Position, tick common.Tick) bool {
 
 	if position.Side == common.PositionSideLong {
-		// Long, check if take profit or stop loss has been reached
 		if (!position.TakeProfit.IsZero() && tick.Bid.Gte(position.TakeProfit)) ||
 			(!position.StopLoss.IsZero() && tick.Bid.Lte(position.StopLoss)) {
 			return true
 		}
 		return false
 	} else if position.Side == common.PositionSideShort {
-		// Short, check if take profit or stop loss has been reached
 		if (!position.TakeProfit.IsZero() && tick.Ask.Lte(position.TakeProfit)) ||
 			(!position.StopLoss.IsZero() && tick.Ask.Gte(position.StopLoss)) {
 			return true
@@ -353,22 +351,20 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	var pipPnL fixed.Point
+	var priceDiff fixed.Point
 
 	if position.Side == common.PositionSideLong {
-		pipPnL = closePrice.Sub(position.OpenPrice)
-	} else if position.Side == common.PositionSideShort {
-		pipPnL = position.OpenPrice.Sub(closePrice)
+		priceDiff = closePrice.Sub(position.OpenPrice)
 	} else {
-		panic("invalid position, unable to determine long/short side")
+		priceDiff = position.OpenPrice.Sub(closePrice)
 	}
 
-	pipPnL = pipPnL.Sub(s.instrument.PipSlippage.MulInt64(2))
-	pips := pipPnL.Div(s.instrument.PipSize)
-	pipValue := s.instrument.ContractSize.Mul(s.instrument.PipSize)
-	position.GrossProfit = pips.Mul(position.Size.Abs()).Mul(pipValue)
+	priceDiff = priceDiff.Sub(s.instrument.PipSlippage.MulInt64(2))
 
-	commission := s.instrument.CommissionPerLot.MulInt64(2).Mul(position.Size.Abs())
-	position.Commission = commission
-	position.NetProfit = position.GrossProfit.Sub(commission)
+	if position.Commission.IsZero() {
+		position.Commission = s.instrument.CommissionPerLot.Mul(position.Size.Abs()).MulInt(2)
+	}
+
+	position.GrossProfit = priceDiff.Mul(position.Size.Abs()).Mul(s.instrument.ContractSize)
+	position.NetProfit = position.GrossProfit.Sub(position.Commission)
 }

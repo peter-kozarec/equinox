@@ -51,6 +51,8 @@ type Manager struct {
 	signalStrengthMulHandler SignalStrengthMultiplierHandler
 	rrrMulHandler            RRRMultiplierHandler
 	kellyMulHandler          KellyMultiplierHandler
+
+	margins map[string]fixed.Point
 }
 
 func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, options ...Option) *Manager {
@@ -59,6 +61,7 @@ func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration,
 		instrument: instrument,
 		conf:       conf,
 		atr:        indicators.NewAtr(conf.AtrPeriod),
+		margins:    make(map[string]fixed.Point),
 	}
 
 	for _, option := range options {
@@ -188,7 +191,21 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	tp := signal.Target.Rescale(m.instrument.Digits)
 	entry := signal.Entry.Rescale(m.instrument.Digits)
 	sl := m.calculateStopLoss(entry, tp, atrValue).Rescale(m.instrument.Digits)
-	size := m.calculateBasePositionSize(entry, sl)
+	size, err := m.calculateBasePositionSize(signal.Symbol, entry, sl)
+	if err != nil {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "unable to calculate base position size",
+			Comment:        fmt.Sprintf("error: %s", err.Error()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
+		return
+	}
 
 	drawdown := fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
 
@@ -243,8 +260,36 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 		}
 	}
 
-	maxSize := m.calculateMaxPositionSize(entry, sl)
-	minSize := m.calculateMinPositionSize(entry, sl)
+	maxSize, err := m.calculateMaxPositionSize(signal.Symbol, entry, sl)
+	if err != nil {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "unable to calculate max position size",
+			Comment:        fmt.Sprintf("error: %s", err.Error()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
+		return
+	}
+	minSize, err := m.calculateMinPositionSize(signal.Symbol, entry, sl)
+	if err != nil {
+		if err := m.r.Post(bus.SignalRejectionEvent, common.SignalRejected{
+			Reason:         "unable to calculate min position size",
+			Comment:        fmt.Sprintf("error: %s", err.Error()),
+			OriginalSignal: signal,
+			Source:         riskManagerComponentName,
+			ExecutionID:    utility.GetExecutionID(),
+			TraceID:        utility.CreateTraceID(),
+			TimeStamp:      m.serverTime,
+		}); err != nil {
+			slog.Warn("unable to post signal rejection event", slog.Any("err", err))
+		}
+		return
+	}
 
 	originalSize := size
 	size = clamp(size, minSize, maxSize)
@@ -260,7 +305,7 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	currentOpenRisk := m.calculateCurrentOpenRisk()
-	additionalRisk := m.calculateRiskPercentage(entry, sl, size)
+	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
 	totalRisk := currentOpenRisk.Add(additionalRisk)
 
 	if totalRisk.Gt(m.conf.RiskMax) {
@@ -478,37 +523,57 @@ func (m *Manager) isTimeToTrade() bool {
 func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
 	risk := fixed.Zero
 	for _, position := range m.openPositions {
-		risk = risk.Add(m.calculateRiskPercentage(position.OpenPrice, position.StopLoss, position.Size))
+		risk = risk.Add(m.calculateRiskPercentage(position.Symbol, position.OpenPrice, position.StopLoss, position.Size))
 	}
 	return risk
 }
 
-func (m *Manager) calculateRiskPercentage(entry, sl, size fixed.Point) fixed.Point {
+func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.Point) fixed.Point {
+	margin, ok := m.margins[symbol]
+	if !ok {
+		margin = fixed.FromInt(100, 0)
+	}
 	priceDiff := entry.Sub(sl).Abs()
 	monetaryRisk := priceDiff.Mul(size).Mul(m.instrument.ContractSize)
-	riskPercentage := monetaryRisk.Div(m.currentEquity).MulInt(100)
+	leverageMultiplier := fixed.FromInt(100, 1).Div(margin)
+	effectiveRisk := monetaryRisk.Mul(leverageMultiplier)
+	riskPercentage := effectiveRisk.Div(m.currentEquity).MulInt(100)
 	return riskPercentage
 }
 
-func (m *Manager) calculateMaxPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskMax)
+func (m *Manager) calculateMaxPositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
+	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskMax)
 }
 
-func (m *Manager) calculateMinPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskMin)
+func (m *Manager) calculateMinPositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
+	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskMin)
 }
 
-func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskBase)
+func (m *Manager) calculateBasePositionSize(symbol string, entry, sl fixed.Point) (fixed.Point, error) {
+	return m.calculatePositionSize(symbol, entry, sl, m.conf.RiskBase)
 }
 
-func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
+func (m *Manager) calculatePositionSize(symbol string, entry, sl, riskPercentage fixed.Point) (fixed.Point, error) {
+	if m.hasEnoughMargin(symbol, entry, riskPercentage) {
+		return fixed.Zero, fmt.Errorf("not enough margin")
+	}
 	priceDiff := entry.Sub(sl).Abs()
 	pipDiff := priceDiff.Div(m.instrument.PipSize)
 	riskAmount := m.currentEquity.Mul(riskPercentage.DivInt(100))
 	pipValue := m.instrument.ContractSize.Mul(m.instrument.PipSize)
 	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
-	return positionSize
+	return positionSize, nil
+}
+
+func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
+	margin, ok := m.margins[symbol]
+	if !ok {
+		margin = fixed.FromInt(100, 0)
+	}
+
+	positionValue := entry.Mul(size).Mul(m.instrument.ContractSize)
+	requiredMargin := positionValue.Mul(margin).DivInt(100)
+	return m.currentEquity.Gte(requiredMargin)
 }
 
 func (m *Manager) calculateStopLoss(entry, target, atr fixed.Point) fixed.Point {

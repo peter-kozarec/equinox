@@ -162,16 +162,14 @@ func (p *Performance) WithSignalAcceptance(handler bus.SignalAcceptanceEventHand
 }
 
 func (p *Performance) PrintStatistics() {
-
-	var fields []slog.Attr
+	var args []any
 
 	if p.tickEventCounter > 0 {
 		avgTick := p.totalTickHandlerDur / time.Duration(p.tickEventCounter)
 		if avgTick > 0 {
-			fields = append(fields,
-				slog.Int64("tick_event_count", p.tickEventCounter),
-				slog.String("tick_avg_duration", fmt.Sprintf("%dns", avgTick.Nanoseconds())),
-				slog.String("tick_total_duration", fmt.Sprintf("%dns", p.totalTickHandlerDur.Nanoseconds())),
+			args = append(args,
+				"tick_event_count", p.tickEventCounter,
+				"tick_avg_duration", fmt.Sprintf("%dns", avgTick.Nanoseconds()),
 			)
 		}
 	}
@@ -179,10 +177,9 @@ func (p *Performance) PrintStatistics() {
 	if p.barEventCounter > 0 {
 		avgBar := p.totalBarHandlerDur / time.Duration(p.barEventCounter)
 		if avgBar > 0 {
-			fields = append(fields,
-				slog.Int64("bar_event_count", p.barEventCounter),
-				slog.String("bar_avg_duration", fmt.Sprintf("%dns", avgBar.Nanoseconds())),
-				slog.String("bar_total_duration", fmt.Sprintf("%dns", p.totalBarHandlerDur.Nanoseconds())),
+			args = append(args,
+				"bar_event_count", p.barEventCounter,
+				"bar_avg_duration", fmt.Sprintf("%dns", avgBar.Nanoseconds()),
 			)
 		}
 	}
@@ -190,10 +187,9 @@ func (p *Performance) PrintStatistics() {
 	if p.balanceEventCounter > 0 {
 		avgBalance := p.totalBalanceHandlerDur / time.Duration(p.balanceEventCounter)
 		if avgBalance > 0 {
-			fields = append(fields,
-				slog.Int64("balance_event_count", p.balanceEventCounter),
-				slog.String("balance_avg_duration", fmt.Sprintf("%dns", avgBalance.Nanoseconds())),
-				slog.String("balance_total_duration", fmt.Sprintf("%dns", p.totalBalanceHandlerDur.Nanoseconds())),
+			args = append(args,
+				"balance_event_count", p.balanceEventCounter,
+				"balance_avg_duration", fmt.Sprintf("%dns", avgBalance.Nanoseconds()),
 			)
 		}
 	}
@@ -201,10 +197,9 @@ func (p *Performance) PrintStatistics() {
 	if p.equityEventCounter > 0 {
 		avgEquity := p.totalEquityHandlerDur / time.Duration(p.equityEventCounter)
 		if avgEquity > 0 {
-			fields = append(fields,
-				slog.Int64("equity_event_count", p.equityEventCounter),
-				slog.String("equity_avg_duration", fmt.Sprintf("%dns", avgEquity.Nanoseconds())),
-				slog.String("equity_total_duration", fmt.Sprintf("%dns", p.totalEquityHandlerDur.Nanoseconds())),
+			args = append(args,
+				"equity_event_count", p.equityEventCounter,
+				"equity_avg_duration", fmt.Sprintf("%dns", avgEquity.Nanoseconds()),
 			)
 		}
 	}
@@ -212,10 +207,9 @@ func (p *Performance) PrintStatistics() {
 	if p.positionOpenedEventCounter > 0 {
 		avgPosOpen := p.totalPosOpenHandlerDur / time.Duration(p.positionOpenedEventCounter)
 		if avgPosOpen > 0 {
-			fields = append(fields,
-				slog.Int64("position_open_event_count", p.positionOpenedEventCounter),
-				slog.String("position_open_avg_duration", fmt.Sprintf("%dns", avgPosOpen.Nanoseconds())),
-				slog.String("position_open_total_duration", fmt.Sprintf("%dns", p.totalPosOpenHandlerDur.Nanoseconds())),
+			args = append(args,
+				"position_open_event_count", p.positionOpenedEventCounter,
+				"position_open_avg_duration", fmt.Sprintf("%dns", avgPosOpen.Nanoseconds()),
 			)
 		}
 	}
@@ -223,10 +217,9 @@ func (p *Performance) PrintStatistics() {
 	if p.positionClosedEventCounter > 0 {
 		avgPosClosed := p.totalPosClosHandlerDur / time.Duration(p.positionClosedEventCounter)
 		if avgPosClosed > 0 {
-			fields = append(fields,
-				slog.Int64("position_closed_event_count", p.positionClosedEventCounter),
-				slog.String("position_closed_avg_duration", fmt.Sprintf("%dns", avgPosClosed.Nanoseconds())),
-				slog.String("position_closed_total_duration", fmt.Sprintf("%dns", p.totalPosClosHandlerDur.Nanoseconds())),
+			args = append(args,
+				"position_closed_event_count", p.positionClosedEventCounter,
+				"position_closed_avg_duration", fmt.Sprintf("%dns", avgPosClosed.Nanoseconds()),
 			)
 		}
 	}
@@ -234,10 +227,9 @@ func (p *Performance) PrintStatistics() {
 	if p.positionPnLUpdatedEventCounter > 0 {
 		avgPosPnlUpd := p.totalPosUpdtHandlerDur / time.Duration(p.positionPnLUpdatedEventCounter)
 		if avgPosPnlUpd > 0 {
-			fields = append(fields,
-				slog.Int64("position_update_event_count", p.positionPnLUpdatedEventCounter),
-				slog.String("position_update_avg_duration", fmt.Sprintf("%dns", avgPosPnlUpd.Nanoseconds())),
-				slog.String("position_update_total_duration", fmt.Sprintf("%dns", p.totalPosUpdtHandlerDur.Nanoseconds())),
+			args = append(args,
+				"position_update_event_count", p.positionPnLUpdatedEventCounter,
+				"position_update_avg_duration", fmt.Sprintf("%dns", avgPosPnlUpd.Nanoseconds()),
 			)
 		}
 	}
@@ -245,10 +237,9 @@ func (p *Performance) PrintStatistics() {
 	if p.orderEventCounter > 0 {
 		avgOrder := p.totalOrderHandlerDur / time.Duration(p.orderEventCounter)
 		if avgOrder > 0 {
-			fields = append(fields,
-				slog.Int64("order_event_count", p.orderEventCounter),
-				slog.String("order_avg_duration", fmt.Sprintf("%dns", avgOrder.Nanoseconds())),
-				slog.String("order_total_duration", fmt.Sprintf("%dns", p.totalOrderHandlerDur.Nanoseconds())),
+			args = append(args,
+				"order_event_count", p.orderEventCounter,
+				"order_avg_duration", fmt.Sprintf("%dns", avgOrder.Nanoseconds()),
 			)
 		}
 	}
@@ -256,10 +247,9 @@ func (p *Performance) PrintStatistics() {
 	if p.orderRejectedEventCounter > 0 {
 		avgOrderRejected := p.totalOrderRejectedDur / time.Duration(p.orderRejectedEventCounter)
 		if avgOrderRejected > 0 {
-			fields = append(fields,
-				slog.Int64("order_rejected_event_count", p.orderRejectedEventCounter),
-				slog.String("order_rejected_avg_duration", fmt.Sprintf("%dns", avgOrderRejected.Nanoseconds())),
-				slog.String("order_rejected_total_duration", fmt.Sprintf("%dns", p.totalOrderRejectedDur.Nanoseconds())),
+			args = append(args,
+				"order_rejected_event_count", p.orderRejectedEventCounter,
+				"order_rejected_avg_duration", fmt.Sprintf("%dns", avgOrderRejected.Nanoseconds()),
 			)
 		}
 	}
@@ -267,10 +257,9 @@ func (p *Performance) PrintStatistics() {
 	if p.orderAcceptedEventCounter > 0 {
 		avgOrderAccepted := p.totalOrderAcceptedDur / time.Duration(p.orderAcceptedEventCounter)
 		if avgOrderAccepted > 0 {
-			fields = append(fields,
-				slog.Int64("order_accepted_event_count", p.orderAcceptedEventCounter),
-				slog.String("order_accepted_avg_duration", fmt.Sprintf("%dns", avgOrderAccepted.Nanoseconds())),
-				slog.String("order_accepted_total_duration", fmt.Sprintf("%dns", p.totalOrderAcceptedDur.Nanoseconds())),
+			args = append(args,
+				"order_accepted_event_count", p.orderAcceptedEventCounter,
+				"order_accepted_avg_duration", fmt.Sprintf("%dns", avgOrderAccepted.Nanoseconds()),
 			)
 		}
 	}
@@ -278,34 +267,34 @@ func (p *Performance) PrintStatistics() {
 	if p.signalEventCounter > 0 {
 		avgSignal := p.totalSignalHandlerDur / time.Duration(p.signalEventCounter)
 		if avgSignal > 0 {
-			fields = append(fields,
-				slog.Int64("signal_event_count", p.signalEventCounter),
-				slog.String("signal_avg_duration", fmt.Sprintf("%dns", avgSignal.Nanoseconds())),
-				slog.String("signal_total_duration", fmt.Sprintf("%dns", p.totalSignalHandlerDur.Nanoseconds())))
+			args = append(args,
+				"signal_event_count", p.signalEventCounter,
+				"signal_avg_duration", fmt.Sprintf("%dns", avgSignal.Nanoseconds()),
+			)
 		}
 	}
 
 	if p.signalRejectedEventCounter > 0 {
 		avgSignalRejected := p.totalSignalRejectedDur / time.Duration(p.signalRejectedEventCounter)
 		if avgSignalRejected > 0 {
-			fields = append(fields,
-				slog.Int64("signal_rejected_event_count", p.signalRejectedEventCounter),
-				slog.String("signal_rejected_avg_duration", fmt.Sprintf("%dns", avgSignalRejected.Nanoseconds())),
-				slog.String("signal_rejected_total_duration", fmt.Sprintf("%dns", p.totalSignalRejectedDur.Nanoseconds())))
+			args = append(args,
+				"signal_rejected_event_count", p.signalRejectedEventCounter,
+				"signal_rejected_avg_duration", fmt.Sprintf("%dns", avgSignalRejected.Nanoseconds()),
+			)
 		}
 	}
 
 	if p.signalAcceptedEventCounter > 0 {
 		avgSignalAccepted := p.totalSignalAcceptedDur / time.Duration(p.signalAcceptedEventCounter)
 		if avgSignalAccepted > 0 {
-			fields = append(fields,
-				slog.Int64("signal_accepted_event_count", p.signalAcceptedEventCounter),
-				slog.String("signal_accepted_avg_duration", fmt.Sprintf("%dns", avgSignalAccepted.Nanoseconds())),
-				slog.String("signal_accepted_total_duration", fmt.Sprintf("%dns", p.totalSignalAcceptedDur.Nanoseconds())))
+			args = append(args,
+				"signal_accepted_event_count", p.signalAcceptedEventCounter,
+				"signal_accepted_avg_duration", fmt.Sprintf("%dns", avgSignalAccepted.Nanoseconds()),
+			)
 		}
 	}
 
-	if len(fields) > 0 {
-		slog.LogAttrs(context.Background(), slog.LevelInfo, "performance statistics", fields...)
+	if len(args) > 0 {
+		slog.Info("performance statistics", args...)
 	}
 }

@@ -428,29 +428,29 @@ func (m *Manager) checkForTrailingStopLoss(position common.Position) error {
 	return nil
 }
 
-func (m *Manager) calculateMovePercentage(position common.Position) fixed.Point {
-	var moved, takeProfitPriceDiff fixed.Point
-
-	if position.Side == common.PositionSideLong {
-		if position.TakeProfit.Lte(m.lastTick.Bid) {
-			return fixed.FromInt(100, 0)
-		}
-		moved = m.lastTick.Bid.Sub(position.OpenPrice)
-		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
-	} else {
-		if position.TakeProfit.Gte(m.lastTick.Ask) {
-			return fixed.FromInt(100, 0)
-		}
-		moved = position.OpenPrice.Sub(m.lastTick.Ask)
-		takeProfitPriceDiff = position.OpenPrice.Sub(position.TakeProfit)
-	}
-
-	if moved.Lt(fixed.Zero) {
-		return fixed.Zero
-	}
-
-	return moved.Div(takeProfitPriceDiff).MulInt(100)
-}
+//func (m *Manager) calculateMovePercentage(position common.Position) fixed.Point {
+//	var moved, takeProfitPriceDiff fixed.Point
+//
+//	if position.Side == common.PositionSideLong {
+//		if position.TakeProfit.Lte(m.lastTick.Bid) {
+//			return fixed.FromInt(100, 0)
+//		}
+//		moved = m.lastTick.Bid.Sub(position.OpenPrice)
+//		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
+//	} else {
+//		if position.TakeProfit.Gte(m.lastTick.Ask) {
+//			return fixed.FromInt(100, 0)
+//		}
+//		moved = position.OpenPrice.Sub(m.lastTick.Ask)
+//		takeProfitPriceDiff = position.OpenPrice.Sub(position.TakeProfit)
+//	}
+//
+//	if moved.Lt(fixed.Zero) {
+//		return fixed.Zero
+//	}
+//
+//	return moved.Div(takeProfitPriceDiff).MulInt(100)
+//}
 
 func (m *Manager) isTimeToTrade() bool {
 	if m.serverTime.IsZero() {

@@ -237,10 +237,6 @@ type signalRejection struct {
 }
 
 func (m *Manager) validateSignal(_ common.Signal) *signalRejection {
-	if !m.slAtr.Ready() {
-		return &signalRejection{reason: "slAtr is not ready"}
-	}
-
 	if !m.isTimeToTrade() {
 		return &signalRejection{
 			reason:  "it is not time to trade",

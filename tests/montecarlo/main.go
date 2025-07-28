@@ -50,13 +50,6 @@ var (
 		RiskMin:  fixed.FromFloat64(0.1),
 		RiskBase: fixed.FromFloat64(0.2),
 		RiskOpen: fixed.Ten,
-
-		AtrPeriod:                  44,
-		AtrStopLossMultiplier:      fixed.Five,
-		AtrTakeProfitMinMultiplier: fixed.Two,
-
-		BreakEvenMove:      fixed.FromFloat64(20),
-		BreakEvenThreshold: fixed.FromFloat64(60),
 	}
 )
 

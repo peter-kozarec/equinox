@@ -9,6 +9,8 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/takeprofit"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -23,6 +25,8 @@ type Manager struct {
 	r          *bus.Router
 	instrument common.Instrument
 	conf       Configuration
+	sl         stoploss.StopLoss
+	tp         takeprofit.TakeProfit
 
 	slAtr *indicators.Atr
 
@@ -48,10 +52,8 @@ type Manager struct {
 	trailingMove     fixed.Point
 	nextTriggerPrice map[common.PositionId]fixed.Point
 
-	tradeTimeHandler  TradeTimeHandler
-	cooldownHandler   CooldownHandler
-	stopLossHandler   StopLossHandler
-	takeProfitHandler TakeProfitHandler
+	tradeTimeHandler TradeTimeHandler
+	cooldownHandler  CooldownHandler
 
 	drawdownMulHandler       DrawdownMultiplierHandler
 	signalStrengthMulHandler SignalStrengthMultiplierHandler
@@ -62,11 +64,13 @@ type Manager struct {
 	margins map[string]fixed.Point
 }
 
-func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, options ...Option) *Manager {
+func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, sl stoploss.StopLoss, tp takeprofit.TakeProfit, options ...Option) *Manager {
 	m := &Manager{
 		r:                r,
 		instrument:       instrument,
 		conf:             conf,
+		sl:               sl,
+		tp:               tp,
 		nextTriggerPrice: make(map[common.PositionId]fixed.Point),
 		margins:          make(map[string]fixed.Point),
 		openPositions:    make([]common.Position, 0),
@@ -118,14 +122,16 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 
 	entry := signal.Entry.Rescale(m.instrument.Digits)
 
-	tp, tpOk := m.calculateTakeProfit(signal)
-	if tpOk {
-		tp = tp.Rescale(m.instrument.Digits)
+	tp, err := m.tp.GetInitialTakeProfit(signal)
+	if err != nil {
+		m.rejectSignal(signal, "take profit is not set", err.Error())
+		return
 	}
+	tp = tp.Rescale(m.instrument.Digits)
 
-	sl, slOk := m.calculateStopLoss(signal)
-	if !slOk {
-		m.rejectSignal(signal, "stop loss is not set", "")
+	sl, err := m.sl.GetInitialStopLoss(signal)
+	if err != nil {
+		m.rejectSignal(signal, "stop loss is not set", err.Error())
 		return
 	}
 	sl = sl.Rescale(m.instrument.Digits)
@@ -506,22 +512,6 @@ func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
 	positionValue := entry.Mul(size).Mul(m.instrument.ContractSize)
 	requiredMargin := positionValue.Mul(margin.DivInt(100))
 	return m.currentEquity.Gte(requiredMargin)
-}
-
-func (m *Manager) calculateTakeProfit(signal common.Signal) (fixed.Point, bool) {
-	if m.takeProfitHandler != nil {
-		return m.takeProfitHandler(signal), true
-	}
-	return fixed.Zero, false
-}
-
-func (m *Manager) calculateStopLoss(signal common.Signal) (fixed.Point, bool) {
-	if m.stopLossHandler != nil && m.slAtr != nil {
-		if m.slAtr.Ready() {
-			return m.stopLossHandler(signal, m.lastTick.Bid.Sub(m.lastTick.Ask), m.slAtr.Value()), true
-		}
-	}
-	return fixed.Zero, false
 }
 
 func (m *Manager) calculateDrawdown() fixed.Point {

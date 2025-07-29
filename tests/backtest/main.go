@@ -18,6 +18,8 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/takeprofit"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -32,7 +34,7 @@ const (
 
 var (
 	symbol       = "EURUSD"
-	barPeriod    = common.BarPeriodH1
+	barPeriod    = common.BarPeriodM10
 	startBalance = fixed.FromInt(10000, 0)
 
 	routerCapacity = 1000
@@ -52,6 +54,9 @@ var (
 		RiskBase: fixed.FromFloat64(0.2),
 		RiskOpen: fixed.Ten,
 	}
+
+	stopLossAtrWindow     = 1
+	stopLossAtrMultiplier = fixed.FromInt(2, 0)
 )
 
 func main() {
@@ -79,8 +84,11 @@ func main() {
 	audit := metrics.NewAudit()
 	reversionStrategy := strategy.NewMeanReversion(router, meanReversionWindow)
 
+	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
+	tp := takeprofit.NewFixedTakeProfit()
+
 	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown()}
-	riskManager := risk.NewManager(router, instrument, riskConf, riskOptions...)
+	riskManager := risk.NewManager(router, instrument, riskConf, sl, tp, riskOptions...)
 
 	riskManager.SetMaxEquity(startBalance)
 	riskManager.SetEquity(startBalance)
@@ -88,7 +96,7 @@ func main() {
 	riskManager.SetBalance(startBalance)
 
 	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, barBuilder.OnTick, reversionStrategy.OnTick))
-	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(riskManager.OnBar, reversionStrategy.OnBar))
+	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(sl.OnBar, riskManager.OnBar, reversionStrategy.OnBar))
 	router.OnOrder = middleware.Chain(monitor.WithOrder, perf.WithOrder)(simulator.OnOrder)
 	router.OnOrderAcceptance = middleware.Chain(monitor.WithOrderAcceptance, perf.WithOrderAcceptance)(riskManager.OnOrderAccepted)
 	router.OnOrderRejection = middleware.Chain(monitor.WithOrderRejection, perf.WithOrderRejection)(riskManager.OnOrderRejected)

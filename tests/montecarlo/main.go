@@ -19,6 +19,8 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/takeprofit"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -51,6 +53,9 @@ var (
 		RiskBase: fixed.FromFloat64(0.2),
 		RiskOpen: fixed.Ten,
 	}
+
+	stopLossAtrWindow     = 10
+	stopLossAtrMultuplier = fixed.FromInt(2, 0)
 )
 
 func main() {
@@ -69,11 +74,14 @@ func main() {
 	audit := metrics.NewAudit()
 	reversionStrategy := strategy.NewMeanReversion(router, meanReversionWindow)
 
-	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown()}
-	riskManager := risk.NewManager(router, instrument, riskConf, riskOptions...)
+	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultuplier)
+	tp := takeprofit.NewFixedTakeProfit()
+
+	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown(), risk.WithMargin(symbol, fixed.FromInt(30, 0))}
+	riskManager := risk.NewManager(router, instrument, riskConf, sl, tp, riskOptions...)
 
 	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, builder.OnTick, reversionStrategy.OnTick))
-	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(riskManager.OnBar, reversionStrategy.OnBar))
+	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(sl.OnBar, riskManager.OnBar, reversionStrategy.OnBar))
 	router.OnOrder = middleware.Chain(monitor.WithOrder, perf.WithOrder)(simulator.OnOrder)
 	router.OnOrderAcceptance = middleware.Chain(monitor.WithOrderAcceptance, perf.WithOrderAcceptance)(riskManager.OnOrderAccepted)
 	router.OnOrderRejection = middleware.Chain(monitor.WithOrderRejection, perf.WithOrderRejection)(riskManager.OnOrderRejected)

@@ -382,6 +382,10 @@ func (m *Manager) checkOpenPositions(tick common.Tick) {
 }
 
 func (m *Manager) checkDynamicPositionAdjustment(position common.Position, tick common.Tick) error {
+	if m.adj == nil {
+		return nil
+	}
+
 	newStopLoss, newTakeProfit, wasChanged := m.adj.AdjustPosition(position, tick)
 
 	if !wasChanged {
@@ -392,7 +396,7 @@ func (m *Manager) checkDynamicPositionAdjustment(position common.Position, tick 
 		return fmt.Errorf("new stop loss or take profit is zero")
 	}
 
-	if err := m.r.Post(bus.OrderEvent, common.Order{
+	order := common.Order{
 		Command:     common.OrderCommandPositionModify,
 		StopLoss:    newStopLoss,
 		TakeProfit:  newTakeProfit,
@@ -402,9 +406,13 @@ func (m *Manager) checkDynamicPositionAdjustment(position common.Position, tick 
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
 		TimeStamp:   m.serverTime,
-	}); err != nil {
+	}
+
+	if err := m.r.Post(bus.OrderEvent, order); err != nil {
 		return fmt.Errorf("unable to post order event: %w", err)
 	}
+
+	m.pendingOrders = append(m.pendingOrders, order)
 	return nil
 }
 

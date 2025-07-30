@@ -9,6 +9,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
+	"github.com/peter-kozarec/equinox/pkg/tools/risk/adjustment"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk/takeprofit"
 	"github.com/peter-kozarec/equinox/pkg/utility"
@@ -27,6 +28,7 @@ type Manager struct {
 	conf       Configuration
 	sl         stoploss.StopLoss
 	tp         takeprofit.TakeProfit
+	adj        adjustment.DynamicAdjustment
 
 	slAtr *indicators.Atr
 
@@ -104,7 +106,7 @@ func (m *Manager) SetEquity(equity fixed.Point) {
 func (m *Manager) OnTick(_ context.Context, tick common.Tick) {
 	m.serverTime = tick.TimeStamp
 	m.lastTick = tick
-	m.checkOpenPositions()
+	m.checkOpenPositions(tick)
 }
 
 func (m *Manager) OnBar(_ context.Context, bar common.Bar) {
@@ -365,98 +367,54 @@ func (m *Manager) acceptSignal(signal common.Signal, comment string) {
 	}
 }
 
-func (m *Manager) checkOpenPositions() {
+func (m *Manager) checkOpenPositions(tick common.Tick) {
 	for _, position := range m.openPositions {
 		if m.hasOpenOrdersForPosition(position.Id) {
 			continue
 		}
 
-		if err := m.checkForTrailingStopLoss(position); err != nil {
-			slog.Warn("unable to check for trailing stop loss",
+		if err := m.checkDynamicPositionAdjustment(position, tick); err != nil {
+			slog.Warn("unable to check for dynamic position adjustment",
 				slog.Int64("positionId", position.Id),
 				slog.Any("err", err))
 		}
 	}
 }
 
-func (m *Manager) checkForTrailingStopLoss(position common.Position) error {
-	if m.trailingDistance.IsZero() || m.trailingMove.IsZero() || position.GrossProfit.Lt(fixed.Zero) {
+func (m *Manager) checkDynamicPositionAdjustment(position common.Position, tick common.Tick) error {
+	if m.adj == nil {
 		return nil
 	}
 
-	trailingPrice, ok := m.nextTriggerPrice[position.Id]
-	if !ok {
-		if position.Side == common.PositionSideLong {
-			trailingPrice = position.OpenPrice.Add(position.OpenPrice.Mul(fixed.One.Add(m.trailingMove)))
-		} else {
-			trailingPrice = position.OpenPrice.Sub(position.OpenPrice.Mul(fixed.One.Add(m.trailingMove)))
-		}
-		m.nextTriggerPrice[position.Id] = trailingPrice
+	newStopLoss, newTakeProfit, wasChanged := m.adj.AdjustPosition(position, tick)
+
+	if !wasChanged {
 		return nil
 	}
 
-	if position.Side == common.PositionSideLong {
-		if m.lastTick.Bid.Gte(trailingPrice) {
-			if err := m.r.Post(bus.OrderEvent, common.Order{
-				Command:     common.OrderCommandPositionModify,
-				StopLoss:    trailingPrice.Sub(trailingPrice.Mul(fixed.One.Add(m.trailingDistance))),
-				PositionId:  position.Id,
-				Source:      riskManagerComponentName,
-				Symbol:      position.Symbol,
-				ExecutionId: utility.GetExecutionID(),
-				TraceID:     utility.CreateTraceID(),
-				TimeStamp:   m.serverTime,
-			}); err != nil {
-				return fmt.Errorf("unable to post order event: %w", err)
-			}
-
-			m.nextTriggerPrice[position.Id] = trailingPrice.Add(trailingPrice.Mul(fixed.One.Add(m.trailingMove)))
-		}
-	} else {
-		if m.lastTick.Ask.Lte(trailingPrice) {
-			if err := m.r.Post(bus.OrderEvent, common.Order{
-				Command:     common.OrderCommandPositionModify,
-				StopLoss:    trailingPrice.Add(trailingPrice.Mul(fixed.One.Add(m.trailingDistance))),
-				PositionId:  position.Id,
-				Source:      riskManagerComponentName,
-				Symbol:      position.Symbol,
-				ExecutionId: utility.GetExecutionID(),
-				TraceID:     utility.CreateTraceID(),
-				TimeStamp:   m.serverTime,
-			}); err != nil {
-				return fmt.Errorf("unable to post order event: %w", err)
-			}
-
-			m.nextTriggerPrice[position.Id] = trailingPrice.Sub(trailingPrice.Mul(fixed.One.Add(m.trailingMove)))
-		}
+	if newStopLoss.IsZero() || newTakeProfit.IsZero() {
+		return fmt.Errorf("new stop loss or take profit is zero")
 	}
 
+	order := common.Order{
+		Command:     common.OrderCommandPositionModify,
+		StopLoss:    newStopLoss,
+		TakeProfit:  newTakeProfit,
+		PositionId:  position.Id,
+		Source:      riskManagerComponentName,
+		Symbol:      position.Symbol,
+		ExecutionId: utility.GetExecutionID(),
+		TraceID:     utility.CreateTraceID(),
+		TimeStamp:   m.serverTime,
+	}
+
+	if err := m.r.Post(bus.OrderEvent, order); err != nil {
+		return fmt.Errorf("unable to post order event: %w", err)
+	}
+
+	m.pendingOrders = append(m.pendingOrders, order)
 	return nil
 }
-
-//func (m *Manager) calculateMovePercentage(position common.Position) fixed.Point {
-//	var moved, takeProfitPriceDiff fixed.Point
-//
-//	if position.Side == common.PositionSideLong {
-//		if position.TakeProfit.Lte(m.lastTick.Bid) {
-//			return fixed.FromInt(100, 0)
-//		}
-//		moved = m.lastTick.Bid.Sub(position.OpenPrice)
-//		takeProfitPriceDiff = position.TakeProfit.Sub(position.OpenPrice)
-//	} else {
-//		if position.TakeProfit.Gte(m.lastTick.Ask) {
-//			return fixed.FromInt(100, 0)
-//		}
-//		moved = position.OpenPrice.Sub(m.lastTick.Ask)
-//		takeProfitPriceDiff = position.OpenPrice.Sub(position.TakeProfit)
-//	}
-//
-//	if moved.Lt(fixed.Zero) {
-//		return fixed.Zero
-//	}
-//
-//	return moved.Div(takeProfitPriceDiff).MulInt(100)
-//}
 
 func (m *Manager) isTimeToTrade() bool {
 	if m.serverTime.IsZero() {

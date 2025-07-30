@@ -62,8 +62,7 @@ jobs:
         run: go install golang.org/x/perf/cmd/benchstat@latest
       - name: Run benchmarks
         run: |
-          go test -bench=. -benchmem -run=^$ ./... | tee bench.txt
-          go test -bench=. -benchmem -run=^$ -count=5 -json ./... > bench.json
+          go test -bench=. -benchmem -run=^$ ./...
 
   security:
     runs-on: ubuntu-latest

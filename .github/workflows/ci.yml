@@ -64,33 +64,6 @@ jobs:
         run: |
           go test -bench=. -benchmem -run=^$ ./... | tee bench.txt
           go test -bench=. -benchmem -run=^$ -count=5 -json ./... > bench.json
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results-${{ github.sha }}
-          path: |
-            bench.txt
-            bench.json
-          retention-days: 30
-      - name: Download previous benchmark data
-        uses: actions/cache@v4
-        with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-benchmark-
-      - name: Compare benchmarks
-        run: |
-          if [ -f ./cache/bench.txt ]; then
-            echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            benchstat ./cache/bench.txt bench.txt >> $GITHUB_STEP_SUMMARY || true
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No previous benchmark data found" >> $GITHUB_STEP_SUMMARY
-          fi
-          mkdir -p ./cache
-          cp bench.txt ./cache/bench.txt
 
   security:
     runs-on: ubuntu-latest

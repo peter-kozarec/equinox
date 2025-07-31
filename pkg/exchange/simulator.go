@@ -377,10 +377,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	symbolInfo, ok := s.symbolsMap[strings.ToUpper(position.Symbol)]
-	if !ok {
-		panic("position should not be present without an entry in symbolsMap")
-	}
+	symbolInfo, _ := s.symbolsMap[strings.ToUpper(position.Symbol)]
 
 	priceDiff := position.OpenPrice.Sub(closePrice)
 	if position.Side == common.PositionSideLong {

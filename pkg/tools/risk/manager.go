@@ -8,6 +8,7 @@ import (
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk/adjustment"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
@@ -24,7 +25,7 @@ type Option func(*Manager)
 
 type Manager struct {
 	r          *bus.Router
-	instrument common.Instrument
+	symbolInfo exchange.SymbolInfo
 	conf       Configuration
 	sl         stoploss.StopLoss
 	tp         takeprofit.TakeProfit
@@ -66,10 +67,10 @@ type Manager struct {
 	margins map[string]fixed.Point
 }
 
-func NewManager(r *bus.Router, instrument common.Instrument, conf Configuration, sl stoploss.StopLoss, tp takeprofit.TakeProfit, options ...Option) *Manager {
+func NewManager(r *bus.Router, symbolInfo exchange.SymbolInfo, conf Configuration, sl stoploss.StopLoss, tp takeprofit.TakeProfit, options ...Option) *Manager {
 	m := &Manager{
 		r:                r,
-		instrument:       instrument,
+		symbolInfo:       symbolInfo,
 		conf:             conf,
 		sl:               sl,
 		tp:               tp,
@@ -122,21 +123,21 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 		return
 	}
 
-	entry := signal.Entry.Rescale(m.instrument.Digits)
+	entry := signal.Entry.Rescale(m.symbolInfo.Digits)
 
 	tp, err := m.tp.GetInitialTakeProfit(signal)
 	if err != nil {
 		m.rejectSignal(signal, "take profit is not set", err.Error())
 		return
 	}
-	tp = tp.Rescale(m.instrument.Digits)
+	tp = tp.Rescale(m.symbolInfo.Digits)
 
 	sl, err := m.sl.GetInitialStopLoss(signal)
 	if err != nil {
 		m.rejectSignal(signal, "stop loss is not set", err.Error())
 		return
 	}
-	sl = sl.Rescale(m.instrument.Digits)
+	sl = sl.Rescale(m.symbolInfo.Digits)
 
 	size, comment := m.applySizeMultipliers(signal, entry, sl)
 	if size.IsZero() {
@@ -437,7 +438,7 @@ func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
 func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.Point) fixed.Point {
 	margin := m.getMargin(symbol)
 	priceDiff := entry.Sub(sl).Abs()
-	monetaryRisk := priceDiff.Mul(size).Mul(m.instrument.ContractSize)
+	monetaryRisk := priceDiff.Mul(size).Mul(m.symbolInfo.ContractSize)
 	leverageMultiplier := fixed.FromInt(100, 0).Div(margin)
 	effectiveRisk := monetaryRisk.Mul(leverageMultiplier)
 	riskPercentage := effectiveRisk.Div(m.currentEquity).MulInt(100)
@@ -458,16 +459,16 @@ func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
 
 func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
 	priceDiff := entry.Sub(sl).Abs()
-	pipDiff := priceDiff.Div(m.instrument.PipSize)
+	pipDiff := priceDiff.Div(m.symbolInfo.PipSize)
 	riskAmount := m.currentEquity.Mul(riskPercentage.DivInt(100))
-	pipValue := m.instrument.ContractSize.Mul(m.instrument.PipSize)
+	pipValue := m.symbolInfo.ContractSize.Mul(m.symbolInfo.PipSize)
 	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
 	return positionSize
 }
 
 func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
 	margin := m.getMargin(symbol)
-	positionValue := entry.Mul(size).Mul(m.instrument.ContractSize)
+	positionValue := entry.Mul(size).Mul(m.symbolInfo.ContractSize)
 	requiredMargin := positionValue.Mul(margin.DivInt(100))
 	return m.currentEquity.Gte(requiredMargin)
 }
@@ -554,7 +555,7 @@ func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order
 
 	return common.Order{
 		Source:      riskManagerComponentName,
-		Symbol:      m.instrument.Symbol,
+		Symbol:      m.symbolInfo.SymbolName,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
 		TimeStamp:   m.serverTime,
@@ -576,7 +577,7 @@ func (m *Manager) createBuyOrder(entry, tp, sl, size fixed.Point) (common.Order,
 
 	return common.Order{
 		Source:      riskManagerComponentName,
-		Symbol:      m.instrument.Symbol,
+		Symbol:      m.symbolInfo.SymbolName,
 		ExecutionId: utility.GetExecutionID(),
 		TraceID:     utility.CreateTraceID(),
 		TimeStamp:   m.serverTime,

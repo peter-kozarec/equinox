@@ -1,8 +1,9 @@
 package common
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/utility"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility"
 
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -29,12 +30,13 @@ type Position struct {
 	GrossProfit fixed.Point    `json:"gross_profit"`
 	NetProfit   fixed.Point    `json:"net_profit"`
 	OpenPrice   fixed.Point    `json:"open_price"`
-	ClosePrice  fixed.Point    `json:"close_price,omitempty"`
+	ClosePrice  fixed.Point    `json:"close_price"`
 	OpenTime    time.Time      `json:"open_time"`
-	CloseTime   time.Time      `json:"close_time,omitempty"`
-	StopLoss    fixed.Point    `json:"stop_loss,omitempty"`
-	TakeProfit  fixed.Point    `json:"take_profit,omitempty"`
-	Commission  fixed.Point    `json:"commission"`
+	CloseTime   time.Time      `json:"close_time"`
+	StopLoss    fixed.Point    `json:"stop_loss"`
+	TakeProfit  fixed.Point    `json:"take_profit"`
+	Commissions fixed.Point    `json:"commission"`
+	Swaps       fixed.Point    `json:"swaps"`
 
 	Source        string              `json:"src,omitempty"`
 	Symbol        string              `json:"symbol,omitempty"`

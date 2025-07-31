@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -75,46 +76,41 @@ func (client *Client) GetAccountList(ctx context.Context, accessToken string) ([
 	return resp.GetCtidTraderAccount(), nil
 }
 
-func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (common.Instrument, error) {
+func (client *Client) GetSymbolInfo(ctx context.Context, accountId int64, symbol string) (exchange.SymbolInfo, error) {
 
 	req := &openapi.ProtoOASymbolsListReq{CtidTraderAccountId: &accountId}
 	resp := &openapi.ProtoOASymbolsListRes{}
 
 	if err := sendReceive(ctx, client.conn, req, resp); err != nil {
-		return common.Instrument{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
+		return exchange.SymbolInfo{}, fmt.Errorf("unable to retrieve symbol list: %w", err)
 	}
 
-	var instrument common.Instrument
+	symbolInfo := exchange.SymbolInfo{}
 
 	for _, s := range resp.GetSymbol() {
 		if strings.EqualFold(s.GetSymbolName(), symbol) {
-			instrument.Symbol = s.GetSymbolName()
-			instrument.Id = s.GetSymbolId()
+			symbolInfo.SymbolName = s.GetSymbolName()
+			symbolInfo.SymbolId = s.GetSymbolId()
 			break
 		}
 	}
 
-	if instrument.Id == 0 {
-		return common.Instrument{}, fmt.Errorf("unable to retrieve symbol")
-	}
-
-	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}}
+	symbolReq := &openapi.ProtoOASymbolByIdReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbolInfo.SymbolId}}
 	symbolResp := &openapi.ProtoOASymbolByIdRes{}
 
 	if err := sendReceive(ctx, client.conn, symbolReq, symbolResp); err != nil {
-		return common.Instrument{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
+		return exchange.SymbolInfo{}, fmt.Errorf("unable to perform symbol by id request: %w", err)
 	}
 
 	for _, s := range symbolResp.GetSymbol() {
-		if s.GetSymbolId() == instrument.Id {
-			instrument.Digits = int(s.GetDigits())
-			instrument.ContractSize = fixed.FromInt64(s.GetLotSize(), 2) // Lot Size is in cents
-			instrument.DenominationUnit = s.GetMeasurementUnits()
-			return instrument, nil
+		if s.GetSymbolId() == symbolInfo.SymbolId {
+			symbolInfo.Digits = int(s.GetDigits())
+			symbolInfo.ContractSize = fixed.FromInt64(s.GetLotSize(), 2) // Lot Size is in cents
+			return symbolInfo, nil
 		}
 	}
 
-	return common.Instrument{}, errors.New("symbol not found")
+	return exchange.SymbolInfo{}, errors.New("symbol not found")
 }
 
 func (client *Client) AuthorizeAccount(ctx context.Context, accountId int64, accessToken string) error {
@@ -141,10 +137,10 @@ func (client *Client) GetBalance(ctx context.Context, accountId int64) (fixed.Po
 	return fixed.FromInt64(*traderResp.Trader.Balance, int(*traderResp.Trader.MoneyDigits)), nil
 }
 
-func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, instrument common.Instrument, cb func(*openapi.ProtoMessage)) error {
+func (client *Client) SubscribeSpots(ctx context.Context, accountId int64, symbolInfo exchange.SymbolInfo, cb func(*openapi.ProtoMessage)) error {
 
 	subTimeStamp := true
-	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{instrument.Id}, SubscribeToSpotTimestamp: &subTimeStamp}
+	spotsReq := &openapi.ProtoOASubscribeSpotsReq{CtidTraderAccountId: &accountId, SymbolId: []int64{symbolInfo.SymbolId}, SubscribeToSpotTimestamp: &subTimeStamp}
 	spotsResp := &openapi.ProtoOASubscribeSpotsRes{}
 
 	if err := sendReceive(ctx, client.conn, spotsReq, spotsResp); err != nil {
@@ -188,7 +184,7 @@ func (client *Client) ClosePosition(ctx context.Context, accountId, positionId i
 func (client *Client) OpenPosition(
 	ctx context.Context,
 	accountId int64,
-	instrument common.Instrument,
+	symbolInfo exchange.SymbolInfo,
 	openPrice, size, stopLoss, takeProfit fixed.Point,
 	orderType common.OrderType) error {
 
@@ -225,7 +221,7 @@ func (client *Client) OpenPosition(
 
 	req := &openapi.ProtoOANewOrderReq{
 		CtidTraderAccountId: &accountId,
-		SymbolId:            &instrument.Id,
+		SymbolId:            &symbolInfo.SymbolId,
 		StopLoss:            sl,
 		TakeProfit:          tp,
 		TradeSide:           &ts,
@@ -260,7 +256,6 @@ func (client *Client) keepAlive(interval time.Duration) {
 }
 
 func (client *Client) addErrRespHandler() {
-
 	_, _ = subscribe(client.conn, openapi.ProtoOAPayloadType_PROTO_OA_ERROR_RES, func(message *openapi.ProtoMessage) {
 		var v openapi.ProtoOAErrorRes
 		err := proto.Unmarshal(message.GetPayload(), &v)

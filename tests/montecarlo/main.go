@@ -25,9 +25,20 @@ import (
 )
 
 var (
-	symbol       = "EURUSD"
-	barPeriod    = common.BarPeriodM1
-	startBalance = fixed.FromInt(10000, 0)
+	barPeriod       = common.BarPeriodM1
+	accountCurrency = "USD"
+	startBalance    = fixed.FromInt(10000, 0)
+	slippage        = fixed.FromFloat64(0.00002)
+
+	symbolInfo = exchange.SymbolInfo{
+		SymbolName:           "EURUSD",
+		QuoteCurrency:        "USD",
+		Digits:               5,
+		PipSize:              fixed.FromFloat64(0.0001),
+		ContractSize:         fixed.FromFloat64(100_000),
+		CalcTotalCommissions: func(p common.Position) fixed.Point { return fixed.Three.Mul(p.Size.Abs()).MulInt(2) },
+		CalcTotalSwaps:       func(_ common.Position) fixed.Point { return fixed.Zero },
+	}
 
 	meanReversionWindow = 60
 
@@ -37,15 +48,6 @@ var (
 	genSigma    = 0.0698081590
 
 	routerCapacity = 1000
-
-	instrument = common.Instrument{
-		Symbol:           symbol,
-		Digits:           5,
-		PipSize:          fixed.FromInt(1, 4),
-		ContractSize:     fixed.FromInt(100000, 0),
-		CommissionPerLot: fixed.FromInt(3, 0),
-		PipSlippage:      fixed.FromInt(2, 5),
-	}
 
 	riskConf = risk.Configuration{
 		RiskMax:  fixed.FromFloat64(0.3),
@@ -62,10 +64,10 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	router := bus.NewRouter(routerCapacity)
-	simulator := exchange.NewSimulator(router, instrument, startBalance)
+	simulator := exchange.NewSimulator(router, accountCurrency, startBalance, slippage, symbolInfo)
 
-	builder := bar.NewBuilder(router, bar.With(symbol, barPeriod, bar.PriceModeBid))
-	generator := synthetic.NewEURUSDTickGenerator(symbol, genRng, genDuration, genMu, genSigma)
+	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
+	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)
 
 	flags := middleware.MonitorSignal | middleware.MonitorOrder | middleware.MonitorSignalAcceptance | middleware.MonitorSignalRejection | middleware.MonitorPositionClose
 	monitor := middleware.NewMonitor(flags)
@@ -77,8 +79,8 @@ func main() {
 	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultuplier)
 	tp := takeprofit.NewFixedTakeProfit()
 
-	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown(), risk.WithMargin(symbol, fixed.FromInt(30, 0))}
-	riskManager := risk.NewManager(router, instrument, riskConf, sl, tp, riskOptions...)
+	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown(), risk.WithMargin(symbolInfo.SymbolName, fixed.FromInt(30, 0))}
+	riskManager := risk.NewManager(router, symbolInfo, riskConf, sl, tp, riskOptions...)
 
 	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, builder.OnTick, reversionStrategy.OnTick))
 	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(sl.OnBar, riskManager.OnBar, reversionStrategy.OnBar))

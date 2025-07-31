@@ -51,10 +51,9 @@ func InitTradeSession(
 	symbolInfo.Digits = 5
 	slog.Debug("info",
 		"symbol", symbol,
-		"id", symbolInfo.Id,
+		"id", symbolInfo.SymbolId,
 		"digits", symbolInfo.Digits,
-		"lot_size", symbolInfo.ContractSize.String(),
-		"denomination_unit", symbolInfo.DenominationUnit)
+		"lot_size", symbolInfo.ContractSize.String())
 
 	state := NewState(router, symbolInfo)
 

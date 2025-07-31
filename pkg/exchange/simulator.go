@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
@@ -19,9 +20,25 @@ const (
 	simulatorComponentName = "exchange.simulator"
 )
 
+type SymbolInfo struct {
+	SymbolName    string
+	SymbolId      int64
+	QuoteCurrency string
+	Digits        int
+	PipSize       fixed.Point
+	ContractSize  fixed.Point
+
+	// Commissions and swaps must be quoted in account currency and not quote
+	// currency
+	CalcTotalCommissions func(common.Position) fixed.Point
+	CalcTotalSwaps       func(common.Position) fixed.Point
+}
+
 type Simulator struct {
-	instrument common.Instrument
-	router     *bus.Router
+	router          *bus.Router
+	accountCurrency string
+	slippage        fixed.Point
+	symbolsMap      map[string]SymbolInfo
 
 	firstPostDone bool
 	equity        fixed.Point
@@ -35,12 +52,19 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, instrument common.Instrument, startBalance fixed.Point) *Simulator {
+func NewSimulator(router *bus.Router, accountCurrency string, startBalance, slippage fixed.Point, symbols ...SymbolInfo) *Simulator {
+	symbolsMap := make(map[string]SymbolInfo)
+	for _, symbol := range symbols {
+		symbolsMap[strings.ToUpper(symbol.SymbolName)] = symbol
+	}
+
 	return &Simulator{
-		instrument: instrument,
-		router:     router,
-		equity:     startBalance,
-		balance:    startBalance,
+		router:          router,
+		accountCurrency: accountCurrency,
+		slippage:        slippage,
+		symbolsMap:      symbolsMap,
+		equity:          startBalance,
+		balance:         startBalance,
 	}
 }
 
@@ -231,19 +255,17 @@ func (s *Simulator) executeOpenOrder(order common.Order) error {
 			return fmt.Errorf("long position: stop loss must be less than take profit")
 		}
 		positionSide = common.PositionSideLong
-	} else if order.Side == common.OrderSideSell {
+	} else {
 		if !order.StopLoss.IsZero() && !order.TakeProfit.IsZero() && order.StopLoss.Lte(order.TakeProfit) {
 			return fmt.Errorf("short position: stop loss must be greater than take profit")
 		}
 		positionSide = common.PositionSideShort
-	} else {
-		panic("invalid order, unable to determine buy/sell side")
 	}
 
 	s.positionIdCounter++
 	s.openPositions = append(s.openPositions, &common.Position{
 		Source:        simulatorComponentName,
-		Symbol:        s.instrument.Symbol,
+		Symbol:        order.Symbol,
 		ExecutionID:   utility.GetExecutionID(),
 		TraceID:       utility.CreateTraceID(),
 		OrderTraceIDs: []utility.TraceID{order.TraceID},
@@ -258,7 +280,6 @@ func (s *Simulator) executeOpenOrder(order common.Order) error {
 }
 
 func (s *Simulator) modifyPosition(id common.PositionId, stopLoss, takeProfit fixed.Point) error {
-
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
@@ -282,22 +303,18 @@ func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick
 }
 
 func (s *Simulator) shouldClosePosition(position common.Position, tick common.Tick) bool {
-
 	if position.Side == common.PositionSideLong {
 		if (!position.TakeProfit.IsZero() && tick.Bid.Gte(position.TakeProfit)) ||
 			(!position.StopLoss.IsZero() && tick.Bid.Lte(position.StopLoss)) {
 			return true
 		}
-		return false
-	} else if position.Side == common.PositionSideShort {
+	} else {
 		if (!position.TakeProfit.IsZero() && tick.Ask.Lte(position.TakeProfit)) ||
 			(!position.StopLoss.IsZero() && tick.Ask.Gte(position.StopLoss)) {
 			return true
 		}
-		return false
 	}
-
-	panic("invalid position, unable to determine long/short side")
+	return false
 }
 
 func (s *Simulator) processPendingChanges(tick common.Tick) {
@@ -308,15 +325,11 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 		position := s.openPositions[idx]
 		position.TimeStamp = s.simulationTime
 
-		var openPrice, closePrice fixed.Point
+		openPrice := tick.Bid
+		closePrice := tick.Ask
 		if position.Side == common.PositionSideLong {
 			openPrice = tick.Ask
 			closePrice = tick.Bid
-		} else if position.Side == common.PositionSideShort {
-			openPrice = tick.Bid
-			closePrice = tick.Ask
-		} else {
-			panic("invalid position, unable to determine long/short side")
 		}
 
 		switch position.Status {
@@ -351,20 +364,34 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	var priceDiff fixed.Point
+	symbolInfo, ok := s.symbolsMap[strings.ToUpper(position.Symbol)]
+	if !ok {
+		panic("position should not be present without an entry in symbolsMap")
+	}
 
+	priceDiff := position.OpenPrice.Sub(closePrice)
 	if position.Side == common.PositionSideLong {
 		priceDiff = closePrice.Sub(position.OpenPrice)
-	} else {
-		priceDiff = position.OpenPrice.Sub(closePrice)
 	}
 
-	priceDiff = priceDiff.Sub(s.instrument.PipSlippage.MulInt64(2))
-
-	if position.Commission.IsZero() {
-		position.Commission = s.instrument.CommissionPerLot.Mul(position.Size.Abs()).MulInt(2)
+	priceDiff = priceDiff.Sub(s.slippage.MulInt64(2))
+	exchangeRate, err := s.getExchangeRate(symbolInfo.QuoteCurrency)
+	if err != nil {
+		slog.Warn("conversion error", "error", err, "exchangeRateUsed", exchangeRate)
 	}
 
-	position.GrossProfit = priceDiff.Mul(position.Size.Abs()).Mul(s.instrument.ContractSize)
-	position.NetProfit = position.GrossProfit.Sub(position.Commission)
+	position.GrossProfit = priceDiff.Mul(position.Size.Abs()).Mul(symbolInfo.ContractSize).Mul(exchangeRate)
+
+	if position.Status == common.PositionStatusClosed {
+		position.Commissions = symbolInfo.CalcTotalCommissions(*position)
+		position.Swaps = symbolInfo.CalcTotalSwaps(*position)
+		position.NetProfit = position.GrossProfit.Sub(position.Commissions).Sub(position.Swaps)
+	}
+}
+
+func (s *Simulator) getExchangeRate(quoteCurrency string) (fixed.Point, error) {
+	if strings.EqualFold(quoteCurrency, s.accountCurrency) {
+		return fixed.One, nil
+	}
+	return fixed.One, fmt.Errorf("conversion between %s and %s is not implemented", quoteCurrency, s.accountCurrency)
 }

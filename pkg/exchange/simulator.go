@@ -45,7 +45,7 @@ type Simulator struct {
 	balance       fixed.Point
 
 	simulationTime time.Time
-	lastTick       common.Tick
+	lastTickMap    map[string]common.Tick
 
 	positionIdCounter common.PositionId
 	openPositions     []*common.Position
@@ -65,6 +65,7 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance, slip
 		symbolsMap:      symbolsMap,
 		equity:          startBalance,
 		balance:         startBalance,
+		lastTickMap:     make(map[string]common.Tick),
 	}
 }
 
@@ -74,7 +75,7 @@ func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
 
 func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
 	s.simulationTime = tick.TimeStamp
-	s.lastTick = tick
+	s.lastTickMap[strings.ToUpper(tick.Symbol)] = tick
 
 	if !s.firstPostDone {
 		s.firstPostDone = true
@@ -135,9 +136,9 @@ func (s *Simulator) CloseAllOpenPositions() {
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
 
-		closePrice := s.lastTick.Bid
+		closePrice := s.lastTickMap[strings.ToUpper(position.Symbol)].Bid
 		if position.Side == common.PositionSideShort {
-			closePrice = s.lastTick.Ask
+			closePrice = s.lastTickMap[strings.ToUpper(position.Symbol)].Ask
 		}
 
 		s.calcPositionProfits(position, closePrice)
@@ -145,7 +146,7 @@ func (s *Simulator) CloseAllOpenPositions() {
 
 		position.Status = common.PositionStatusClosed
 		position.ClosePrice = closePrice
-		position.CloseTime = s.lastTick.TimeStamp
+		position.CloseTime = s.simulationTime
 
 		if err := s.router.Post(bus.PositionCloseEvent, *position); err != nil {
 			slog.Warn("unable to post position closed event", "error", err)
@@ -171,6 +172,10 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 
 	for idx := range s.openOrders {
 		order := s.openOrders[idx]
+		if strings.EqualFold(order.Symbol, tick.Symbol) {
+			tmpOpenOrders = append(tmpOpenOrders, order)
+			continue
+		}
 
 		switch order.Command {
 		case common.OrderCommandPositionOpen:
@@ -303,6 +308,10 @@ func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick
 }
 
 func (s *Simulator) shouldClosePosition(position common.Position, tick common.Tick) bool {
+	if strings.EqualFold(position.Symbol, tick.Symbol) {
+		return false
+	}
+
 	if position.Side == common.PositionSideLong {
 		if (!position.TakeProfit.IsZero() && tick.Bid.Gte(position.TakeProfit)) ||
 			(!position.StopLoss.IsZero() && tick.Bid.Lte(position.StopLoss)) {
@@ -323,6 +332,10 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
+		if strings.EqualFold(position.Symbol, tick.Symbol) {
+			tmpOpenPositions = append(tmpOpenPositions, position)
+			continue
+		}
 		position.TimeStamp = s.simulationTime
 
 		openPrice := tick.Bid

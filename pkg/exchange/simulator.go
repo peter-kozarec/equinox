@@ -70,10 +70,21 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance, slip
 }
 
 func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
+	_, ok := s.symbolsMap[strings.ToUpper(order.Symbol)]
+	if !ok {
+		slog.Warn("symbol info is not present, dropping order", "order", order)
+		return
+	}
 	s.openOrders = append(s.openOrders, &order)
 }
 
 func (s *Simulator) OnTick(_ context.Context, tick common.Tick) {
+	_, ok := s.symbolsMap[strings.ToUpper(tick.Symbol)]
+	if !ok {
+		slog.Warn("symbol info is not present, dropping tick", "tick", tick)
+		return
+	}
+
 	s.simulationTime = tick.TimeStamp
 	s.lastTickMap[strings.ToUpper(tick.Symbol)] = tick
 
@@ -377,7 +388,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	symbolInfo, _ := s.symbolsMap[strings.ToUpper(position.Symbol)]
+	symbolInfo := s.symbolsMap[strings.ToUpper(position.Symbol)]
 
 	priceDiff := position.OpenPrice.Sub(closePrice)
 	if position.Side == common.PositionSideLong {

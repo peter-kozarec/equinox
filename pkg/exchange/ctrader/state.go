@@ -12,6 +12,7 @@ import (
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/exchange/ctrader/openapi"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
@@ -27,9 +28,8 @@ const (
 )
 
 type State struct {
-	router *bus.Router
-
-	instrument common.Instrument
+	router     *bus.Router
+	symbolInfo exchange.SymbolInfo
 
 	lastTick common.Tick
 
@@ -41,10 +41,10 @@ type State struct {
 	equity      fixed.Point
 }
 
-func NewState(router *bus.Router, instrument common.Instrument) *State {
+func NewState(router *bus.Router, symbolInfo exchange.SymbolInfo) *State {
 	return &State{
 		router:      router,
-		instrument:  instrument,
+		symbolInfo:  symbolInfo,
 		postBalance: true, // Post balance on first poll, then only when position is closed
 	}
 }
@@ -59,12 +59,12 @@ func (state *State) OnSpotsEvent(msg *openapi.ProtoMessage) {
 	}
 
 	internalTick := common.Tick{}
-	internalTick.Symbol = state.instrument.Symbol
+	internalTick.Symbol = state.symbolInfo.SymbolName
 	internalTick.Source = openapiComponentName
 	internalTick.ExecutionId = utility.GetExecutionID()
 	internalTick.TraceID = utility.CreateTraceID()
-	internalTick.Ask = fixed.FromUint64(v.GetAsk(), state.instrument.Digits)
-	internalTick.Bid = fixed.FromUint64(v.GetBid(), state.instrument.Digits)
+	internalTick.Ask = fixed.FromUint64(v.GetAsk(), state.symbolInfo.Digits)
+	internalTick.Bid = fixed.FromUint64(v.GetBid(), state.symbolInfo.Digits)
 	internalTick.TimeStamp = time.UnixMilli(v.GetTimestamp())
 
 	if internalTick.Ask.Eq(fixed.Zero) {
@@ -150,7 +150,7 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		// This can be only open
 		var internalPosition common.Position
 
-		internalPosition.Symbol = state.instrument.Symbol
+		internalPosition.Symbol = state.symbolInfo.SymbolName
 		internalPosition.Source = openapiComponentName
 		internalPosition.ExecutionID = utility.GetExecutionID()
 		internalPosition.TraceID = utility.CreateTraceID()
@@ -162,8 +162,8 @@ func (state *State) OnExecutionEvent(msg *openapi.ProtoMessage) {
 		internalPosition.Status = positionStatusPendingOpen
 		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
-		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.instrument.ContractSize)
-		internalPosition.Commission = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.symbolInfo.ContractSize)
+		internalPosition.Commissions = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
@@ -190,7 +190,7 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 
 		var internalPosition common.Position
 
-		internalPosition.Symbol = state.instrument.Symbol
+		internalPosition.Symbol = state.symbolInfo.SymbolName
 		internalPosition.Source = openapiComponentName
 		internalPosition.ExecutionID = utility.GetExecutionID()
 		internalPosition.TraceID = utility.CreateTraceID()
@@ -202,8 +202,8 @@ func (state *State) LoadOpenPositions(ctx context.Context, client *Client, accou
 		internalPosition.Status = positionStatusPendingOpen
 		internalPosition.StopLoss = fixed.FromFloat64(position.GetStopLoss())
 		internalPosition.TakeProfit = fixed.FromFloat64(position.GetTakeProfit())
-		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.instrument.ContractSize)
-		internalPosition.Commission = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
+		internalPosition.Size = fixed.FromInt64(position.TradeData.GetVolume(), 2).Div(state.symbolInfo.ContractSize)
+		internalPosition.Commissions = fixed.FromInt64(position.GetCommission(), int(position.GetMoneyDigits())).Abs().MulInt(2)
 
 		if position.TradeData.GetTradeSide() == openapi.ProtoOATradeSide_SELL {
 			internalPosition.Size = internalPosition.Size.MulInt(-1)
@@ -279,11 +279,11 @@ func (state *State) calcPnL() {
 
 		// This is without commissions
 		if position.Side == common.PositionSideLong {
-			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.instrument.ContractSize).Mul(position.Size.Abs())
-			position.GrossProfit = position.NetProfit.Add(position.Commission)
+			position.NetProfit = state.lastTick.Bid.Sub(position.OpenPrice).Mul(state.symbolInfo.ContractSize).Mul(position.Size.Abs())
+			position.GrossProfit = position.NetProfit.Add(position.Commissions)
 		} else if position.Side == common.PositionSideShort {
-			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.instrument.ContractSize).Mul(position.Size.Abs())
-			position.GrossProfit = position.NetProfit.Sub(position.Commission)
+			position.NetProfit = position.OpenPrice.Sub(state.lastTick.Ask).Mul(state.symbolInfo.ContractSize).Mul(position.Size.Abs())
+			position.GrossProfit = position.NetProfit.Sub(position.Commissions)
 		} else {
 			panic("invalid position side")
 		}

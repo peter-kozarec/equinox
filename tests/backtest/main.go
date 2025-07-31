@@ -33,19 +33,21 @@ const (
 )
 
 var (
-	symbol       = "EURUSD"
-	barPeriod    = common.BarPeriodM10
-	startBalance = fixed.FromInt(10000, 0)
+	barPeriod       = common.BarPeriodM10
+	accountCurrency = "USD"
+	startBalance    = fixed.FromInt(10000, 0)
+	slippage        = fixed.FromFloat64(0.00002)
 
 	routerCapacity = 1000
 
-	instrument = common.Instrument{
-		Symbol:           symbol,
-		Digits:           5,
-		PipSize:          fixed.FromInt(1, 4),
-		ContractSize:     fixed.FromInt(100000, 0),
-		CommissionPerLot: fixed.FromInt(3, 0),
-		PipSlippage:      fixed.FromInt(4, 5),
+	symbolInfo = exchange.SymbolInfo{
+		SymbolName:           "EURUSD",
+		QuoteCurrency:        "USD",
+		Digits:               5,
+		PipSize:              fixed.FromFloat64(0.0001),
+		ContractSize:         fixed.FromFloat64(100_000),
+		CalcTotalCommissions: func(p common.Position) fixed.Point { return fixed.Three.Mul(p.Size.Abs()).MulInt(2) },
+		CalcTotalSwaps:       func(_ common.Position) fixed.Point { return fixed.Zero },
 	}
 
 	riskConf = risk.Configuration{
@@ -73,9 +75,9 @@ func main() {
 
 	router := bus.NewRouter(routerCapacity)
 
-	simulator := exchange.NewSimulator(router, instrument, startBalance)
-	tickReader := historical.NewTickReader(src, symbol, startTime, endTime)
-	barBuilder := bar.NewBuilder(router, bar.With(symbol, barPeriod, bar.PriceModeBid))
+	simulator := exchange.NewSimulator(router, accountCurrency, startBalance, slippage, symbolInfo)
+	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
+	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 
 	flags := middleware.MonitorOrder | middleware.MonitorSignal | middleware.MonitorSignalAcceptance | middleware.MonitorSignalRejection | middleware.MonitorPositionClose
 	monitor := middleware.NewMonitor(flags)
@@ -88,7 +90,7 @@ func main() {
 	tp := takeprofit.NewFixedTakeProfit()
 
 	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown()}
-	riskManager := risk.NewManager(router, instrument, riskConf, sl, tp, riskOptions...)
+	riskManager := risk.NewManager(router, symbolInfo, riskConf, sl, tp, riskOptions...)
 
 	riskManager.SetMaxEquity(startBalance)
 	riskManager.SetEquity(startBalance)

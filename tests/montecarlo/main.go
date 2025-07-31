@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -31,13 +32,11 @@ var (
 	slippage        = fixed.FromFloat64(0.00002)
 
 	symbolInfo = exchange.SymbolInfo{
-		SymbolName:           "EURUSD",
-		QuoteCurrency:        "USD",
-		Digits:               5,
-		PipSize:              fixed.FromFloat64(0.0001),
-		ContractSize:         fixed.FromFloat64(100_000),
-		CalcTotalCommissions: func(p common.Position) fixed.Point { return fixed.Three.Mul(p.Size.Abs()).MulInt(2) },
-		CalcTotalSwaps:       func(_ common.Position) fixed.Point { return fixed.Zero },
+		SymbolName:    "EURUSD",
+		QuoteCurrency: "USD",
+		Digits:        5,
+		PipSize:       fixed.FromFloat64(0.0001),
+		ContractSize:  fixed.FromFloat64(100_000),
 	}
 
 	meanReversionWindow = 60
@@ -57,14 +56,14 @@ var (
 	}
 
 	stopLossAtrWindow     = 10
-	stopLossAtrMultuplier = fixed.FromInt(2, 0)
+	stopLossAtrMultiplier = fixed.FromInt(2, 0)
 )
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	router := bus.NewRouter(routerCapacity)
-	simulator := exchange.NewSimulator(router, accountCurrency, startBalance, slippage, symbolInfo)
+	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance, sandbox.WithSlippage(slippage), sandbox.WithSymbolInfo(symbolInfo))
 
 	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)
@@ -76,7 +75,7 @@ func main() {
 	audit := metrics.NewAudit()
 	reversionStrategy := strategy.NewMeanReversion(router, meanReversionWindow)
 
-	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultuplier)
+	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
 	tp := takeprofit.NewFixedTakeProfit()
 
 	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown(), risk.WithMargin(symbolInfo.SymbolName, fixed.FromInt(30, 0))}

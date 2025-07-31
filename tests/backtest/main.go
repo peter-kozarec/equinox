@@ -14,6 +14,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/datasource"
 	"github.com/peter-kozarec/equinox/pkg/datasource/historical"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
@@ -41,13 +42,12 @@ var (
 	routerCapacity = 1000
 
 	symbolInfo = exchange.SymbolInfo{
-		SymbolName:           "EURUSD",
-		QuoteCurrency:        "USD",
-		Digits:               5,
-		PipSize:              fixed.FromFloat64(0.0001),
-		ContractSize:         fixed.FromFloat64(100_000),
-		CalcTotalCommissions: func(p common.Position) fixed.Point { return fixed.Three.Mul(p.Size.Abs()).MulInt(2) },
-		CalcTotalSwaps:       func(_ common.Position) fixed.Point { return fixed.Zero },
+		SymbolName:    "EURUSD",
+		QuoteCurrency: "USD",
+		Digits:        5,
+		PipSize:       fixed.FromFloat64(0.0001),
+		ContractSize:  fixed.FromFloat64(100_000),
+		Leverage:      fixed.One.DivInt(30),
 	}
 
 	riskConf = risk.Configuration{
@@ -75,7 +75,7 @@ func main() {
 
 	router := bus.NewRouter(routerCapacity)
 
-	simulator := exchange.NewSimulator(router, accountCurrency, startBalance, slippage, symbolInfo)
+	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance, sandbox.WithSlippage(slippage), sandbox.WithSymbolInfo(symbolInfo))
 	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
 	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 

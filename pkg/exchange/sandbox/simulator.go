@@ -1,4 +1,4 @@
-package exchange
+package sandbox
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
+	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -17,28 +18,18 @@ const (
 	positionStatusPendingOpen  common.PositionStatus = "pending-open"
 	positionStatusPendingClose common.PositionStatus = "pending-close"
 
-	simulatorComponentName = "exchange.simulator"
+	simulatorComponentName = "exchange.sandbox.simulator"
 )
-
-type SymbolInfo struct {
-	SymbolName    string
-	SymbolId      int64
-	QuoteCurrency string
-	Digits        int
-	PipSize       fixed.Point
-	ContractSize  fixed.Point
-
-	// Commissions and swaps must be quoted in account currency and not quote
-	// currency
-	CalcTotalCommissions func(common.Position) fixed.Point
-	CalcTotalSwaps       func(common.Position) fixed.Point
-}
 
 type Simulator struct {
 	router          *bus.Router
 	accountCurrency string
-	slippage        fixed.Point
-	symbolsMap      map[string]SymbolInfo
+
+	slippage               fixed.Point
+	rateProvider           RateProvider
+	symbolsMap             map[string]exchange.SymbolInfo
+	totalCommissionHandler TotalCommissionHandler
+	totalSwapHandler       TotalSwapHandler
 
 	firstPostDone bool
 	equity        fixed.Point
@@ -52,21 +43,22 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, accountCurrency string, startBalance, slippage fixed.Point, symbols ...SymbolInfo) *Simulator {
-	symbolsMap := make(map[string]SymbolInfo)
-	for _, symbol := range symbols {
-		symbolsMap[strings.ToUpper(symbol.SymbolName)] = symbol
-	}
-
-	return &Simulator{
+func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, options ...Option) *Simulator {
+	s := &Simulator{
 		router:          router,
 		accountCurrency: accountCurrency,
-		slippage:        slippage,
-		symbolsMap:      symbolsMap,
+		slippage:        fixed.Zero,
+		symbolsMap:      make(map[string]exchange.SymbolInfo),
 		equity:          startBalance,
 		balance:         startBalance,
 		lastTickMap:     make(map[string]common.Tick),
 	}
+
+	for _, option := range options {
+		option(s)
+	}
+
+	return s
 }
 
 func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
@@ -183,7 +175,7 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 
 	for idx := range s.openOrders {
 		order := s.openOrders[idx]
-		if strings.EqualFold(order.Symbol, tick.Symbol) {
+		if !strings.EqualFold(order.Symbol, tick.Symbol) {
 			tmpOpenOrders = append(tmpOpenOrders, order)
 			continue
 		}
@@ -319,7 +311,7 @@ func (s *Simulator) shouldOpenPosition(price, size fixed.Point, tick common.Tick
 }
 
 func (s *Simulator) shouldClosePosition(position common.Position, tick common.Tick) bool {
-	if strings.EqualFold(position.Symbol, tick.Symbol) {
+	if !strings.EqualFold(position.Symbol, tick.Symbol) {
 		return false
 	}
 
@@ -343,7 +335,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 
 	for idx := range s.openPositions {
 		position := s.openPositions[idx]
-		if strings.EqualFold(position.Symbol, tick.Symbol) {
+		if !strings.EqualFold(position.Symbol, tick.Symbol) {
 			tmpOpenPositions = append(tmpOpenPositions, position)
 			continue
 		}
@@ -396,23 +388,24 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 	}
 
 	priceDiff = priceDiff.Sub(s.slippage.MulInt64(2))
-	exchangeRate, err := s.getExchangeRate(symbolInfo.QuoteCurrency)
-	if err != nil {
-		slog.Warn("conversion error", "error", err, "exchangeRateUsed", exchangeRate)
+
+	exchangeRate := fixed.One
+	if s.rateProvider != nil {
+		exchangeRate, err := s.rateProvider.ExchangeRate(symbolInfo.QuoteCurrency, s.accountCurrency, s.simulationTime)
+		if err != nil {
+			slog.Warn("conversion error", "error", err, "exchangeRateUsed", exchangeRate)
+		}
 	}
 
 	position.GrossProfit = priceDiff.Mul(position.Size.Abs()).Mul(symbolInfo.ContractSize).Mul(exchangeRate)
 
 	if position.Status == common.PositionStatusClosed {
-		position.Commissions = symbolInfo.CalcTotalCommissions(*position)
-		position.Swaps = symbolInfo.CalcTotalSwaps(*position)
+		if s.totalCommissionHandler != nil {
+			position.Commissions = s.totalCommissionHandler(symbolInfo, *position)
+		}
+		if s.totalSwapHandler != nil {
+			position.Swaps = s.totalSwapHandler(symbolInfo, *position)
+		}
 		position.NetProfit = position.GrossProfit.Sub(position.Commissions).Sub(position.Swaps)
 	}
-}
-
-func (s *Simulator) getExchangeRate(quoteCurrency string) (fixed.Point, error) {
-	if strings.EqualFold(quoteCurrency, s.accountCurrency) {
-		return fixed.One, nil
-	}
-	return fixed.One, fmt.Errorf("conversion between %s and %s is not implemented", quoteCurrency, s.accountCurrency)
 }

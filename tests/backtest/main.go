@@ -75,7 +75,10 @@ func main() {
 
 	router := bus.NewRouter(routerCapacity)
 
-	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance, sandbox.WithSlippage(slippage), sandbox.WithSymbolInfo(symbolInfo))
+	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
+		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
+		sandbox.WithSymbols(symbolInfo))
+
 	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
 	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 

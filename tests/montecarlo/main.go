@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/datasource"
 	"github.com/peter-kozarec/equinox/pkg/datasource/synthetic"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
@@ -34,9 +34,11 @@ var (
 	symbolInfo = exchange.SymbolInfo{
 		SymbolName:    "EURUSD",
 		QuoteCurrency: "USD",
+		Class:         exchange.Forex,
 		Digits:        5,
 		PipSize:       fixed.FromFloat64(0.0001),
 		ContractSize:  fixed.FromFloat64(100_000),
+		Leverage:      fixed.FromFloat64(30),
 	}
 
 	meanReversionWindow = 60
@@ -63,7 +65,9 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	router := bus.NewRouter(routerCapacity)
-	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance, sandbox.WithSlippage(slippage), sandbox.WithSymbolInfo(symbolInfo))
+	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
+		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
+		sandbox.WithSymbols(symbolInfo))
 
 	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)
@@ -78,7 +82,12 @@ func main() {
 	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
 	tp := takeprofit.NewFixedTakeProfit()
 
-	riskOptions := []risk.Option{risk.WithDefaultKellyMultiplier(), risk.WithDefaultDrawdownMultiplier(), risk.WithDefaultRRRMultiplier(), risk.WithOnHourCooldown(), risk.WithMargin(symbolInfo.SymbolName, fixed.FromInt(30, 0))}
+	riskOptions := []risk.Option{
+		risk.WithDefaultKellyMultiplier(),
+		risk.WithDefaultDrawdownMultiplier(),
+		risk.WithDefaultRRRMultiplier(),
+		risk.WithOnHourCooldown(),
+		risk.WithMargin(symbolInfo.SymbolName, fixed.FromInt(30, 0))}
 	riskManager := risk.NewManager(router, symbolInfo, riskConf, sl, tp, riskOptions...)
 
 	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, builder.OnTick, reversionStrategy.OnTick))

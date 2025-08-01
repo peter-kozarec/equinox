@@ -11,8 +11,9 @@ import (
 type Option func(*Simulator)
 type CommissionHandler func(exchange.SymbolInfo, common.Position) fixed.Point
 type SwapHandler func(exchange.SymbolInfo, common.Position) fixed.Point
+type SlippageHandler func(common.Position) fixed.Point
 
-func WithSymbolInfo(symbols ...exchange.SymbolInfo) Option {
+func WithSymbols(symbols ...exchange.SymbolInfo) Option {
 	return func(s *Simulator) {
 		for _, symbol := range symbols {
 			s.symbolsMap[strings.ToUpper(symbol.SymbolName)] = symbol
@@ -26,12 +27,6 @@ func WithRateProvider(rateProvider RateProvider) Option {
 	}
 }
 
-func WithSlippage(slippage fixed.Point) Option {
-	return func(s *Simulator) {
-		s.slippage = slippage
-	}
-}
-
 func WithCommissionHandler(commissionHandler CommissionHandler) Option {
 	return func(s *Simulator) {
 		s.commissionHandler = commissionHandler
@@ -41,5 +36,11 @@ func WithCommissionHandler(commissionHandler CommissionHandler) Option {
 func WithSwapHandler(swapHandler SwapHandler) Option {
 	return func(s *Simulator) {
 		s.swapHandler = swapHandler
+	}
+}
+
+func WithSlippageHandler(slippageHandler SlippageHandler) Option {
+	return func(s *Simulator) {
+		s.slippageHandler = slippageHandler
 	}
 }

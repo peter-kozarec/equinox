@@ -25,11 +25,11 @@ type Simulator struct {
 	router          *bus.Router
 	accountCurrency string
 
-	slippage          fixed.Point
 	rateProvider      RateProvider
 	symbolsMap        map[string]exchange.SymbolInfo
 	commissionHandler CommissionHandler
 	swapHandler       SwapHandler
+	slippageHandler   SlippageHandler
 
 	firstPostDone bool
 	equity        fixed.Point
@@ -47,7 +47,6 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed
 	s := &Simulator{
 		router:          router,
 		accountCurrency: accountCurrency,
-		slippage:        fixed.Zero,
 		symbolsMap:      make(map[string]exchange.SymbolInfo),
 		equity:          startBalance,
 		balance:         startBalance,
@@ -62,11 +61,20 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed
 }
 
 func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
-	_, ok := s.symbolsMap[strings.ToUpper(order.Symbol)]
-	if !ok {
-		slog.Warn("symbol info is not present, dropping order", "order", order)
+	if err := s.validateOrder(order); err != nil {
+		if err := s.router.Post(bus.OrderRejectionEvent, common.OrderRejected{
+			Source:        simulatorComponentName,
+			ExecutionId:   utility.GetExecutionID(),
+			TraceID:       utility.CreateTraceID(),
+			TimeStamp:     s.simulationTime,
+			OriginalOrder: order,
+			Reason:        fmt.Sprintf("order with trace id %d validation failed: %s", order.TraceID, err.Error()),
+		}); err != nil {
+			slog.Error("unable to post order rejected event", "error", err)
+		}
 		return
 	}
+
 	s.openOrders = append(s.openOrders, &order)
 }
 
@@ -157,6 +165,35 @@ func (s *Simulator) CloseAllOpenPositions() {
 	}
 
 	s.balance = s.equity
+	s.openPositions = nil
+}
+
+func (s *Simulator) validateOrder(order common.Order) error {
+	_, ok := s.symbolsMap[strings.ToUpper(order.Symbol)]
+	if !ok {
+		return fmt.Errorf("symbol %s is not supported", order.Symbol)
+	}
+
+	switch order.Command {
+	case common.OrderCommandPositionOpen:
+		if order.Size.IsZero() {
+			return fmt.Errorf("order size cannot be zero")
+		}
+		if order.Type == common.OrderTypeLimit && order.Price.IsZero() {
+			return fmt.Errorf("limit order must have a price")
+		}
+	case common.OrderCommandPositionClose:
+		if order.PositionId == 0 {
+			return fmt.Errorf("position ID required for close order")
+		}
+	case common.OrderCommandPositionModify:
+		if order.PositionId == 0 {
+			return fmt.Errorf("position ID required for modify order")
+		}
+	default:
+		return fmt.Errorf("unknown order command: %d", order.Command)
+	}
+	return nil
 }
 
 func (s *Simulator) checkPositions(tick common.Tick) {
@@ -171,9 +208,9 @@ func (s *Simulator) checkPositions(tick common.Tick) {
 
 func (s *Simulator) checkOrders(tick common.Tick) {
 	tmpOpenOrders := make([]*common.Order, 0, len(s.openOrders))
-	orderAccepted := true
 
 	for idx := range s.openOrders {
+		orderAccepted := true
 		order := s.openOrders[idx]
 		if !strings.EqualFold(order.Symbol, tick.Symbol) {
 			tmpOpenOrders = append(tmpOpenOrders, order)
@@ -233,7 +270,6 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 			}); err != nil {
 				slog.Warn("unable to post order rejected event", "error", err)
 			}
-			orderAccepted = true
 		}
 	}
 
@@ -307,6 +343,16 @@ func (s *Simulator) modifyPosition(id common.PositionId, stopLoss, takeProfit fi
 		position := s.openPositions[idx]
 
 		if position.Id == id {
+			if position.Side == common.PositionSideLong {
+				if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Gte(takeProfit) {
+					return fmt.Errorf("long position: stop loss must be less than take profit")
+				}
+			} else {
+				if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Lte(takeProfit) {
+					return fmt.Errorf("short position: stop loss must be greater than take profit")
+				}
+			}
+
 			position.StopLoss = stopLoss
 			position.TakeProfit = takeProfit
 			return nil
@@ -367,6 +413,9 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.Status = common.PositionStatusOpen
 			position.OpenPrice = openPrice
 			position.OpenTime = tick.TimeStamp
+			if s.slippageHandler != nil {
+				position.Slippage = s.slippageHandler(*position)
+			}
 			if err := s.router.Post(bus.PositionOpenEvent, *position); err != nil {
 				slog.Warn("unable to post position opened event", "error", err)
 			}
@@ -375,6 +424,9 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.Status = common.PositionStatusClosed
 			position.ClosePrice = closePrice
 			position.CloseTime = tick.TimeStamp
+			if s.slippageHandler != nil {
+				position.Slippage = position.Slippage.Add(s.slippageHandler(*position))
+			}
 			s.calcPositionProfits(position, closePrice)
 			position.TimeStamp = s.simulationTime
 			s.balance = s.balance.Add(position.NetProfit)
@@ -410,7 +462,6 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 		if !position.ConversionFeeRate.IsZero() {
 			position.ConversionFee = position.Size.Mul(position.ExchangeRate).Mul(position.ConversionFeeRate)
 		}
-		position.Slippage = s.slippage
 	}
 
 	if position.Status == common.PositionStatusClosed {
@@ -420,7 +471,6 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 		if !position.ConversionFeeRate.IsZero() {
 			position.ConversionFee = position.ConversionFee.Add(position.Size.Mul(position.ExchangeRate).Mul(position.ConversionFeeRate))
 		}
-		position.Slippage = position.Slippage.Add(s.slippage)
 	}
 
 	daysPassed := int(s.simulationTime.Sub(position.TimeStamp).Hours()) / 24
@@ -431,7 +481,7 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 		}
 	}
 
-	priceDiff = priceDiff.Sub(s.slippage)
+	priceDiff = priceDiff.Sub(position.Slippage)
 	position.GrossProfit = priceDiff.Mul(position.Size).Mul(symbolInfo.ContractSize).Mul(position.ExchangeRate)
 	position.NetProfit = position.GrossProfit.Sub(position.Commissions).Sub(position.Swaps).Sub(position.ConversionFee)
 }

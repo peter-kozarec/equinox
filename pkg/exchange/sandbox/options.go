@@ -32,13 +32,13 @@ func WithSlippage(slippage fixed.Point) Option {
 	}
 }
 
-func WithTotalCommissionHandler(commissionHandler CommissionHandler) Option {
+func WithCommissionHandler(commissionHandler CommissionHandler) Option {
 	return func(s *Simulator) {
 		s.commissionHandler = commissionHandler
 	}
 }
 
-func WithTotalSwapHandler(swapHandler SwapHandler) Option {
+func WithSwapHandler(swapHandler SwapHandler) Option {
 	return func(s *Simulator) {
 		s.swapHandler = swapHandler
 	}

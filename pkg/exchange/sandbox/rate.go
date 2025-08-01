@@ -1,10 +1,11 @@
 package sandbox
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"time"
+
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type RateProvider interface {
-	ExchangeRate(string, string, time.Time) (fixed.Point, error)
+	ExchangeRate(string, string, time.Time) (fixed.Point, fixed.Point, error)
 }

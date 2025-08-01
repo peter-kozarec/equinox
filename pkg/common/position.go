@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/utility"
-
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -23,20 +22,25 @@ const (
 )
 
 type Position struct {
-	Id          PositionId     `json:"id"`
-	Status      PositionStatus `json:"status"`
-	Side        PositionSide   `json:"side"`
-	Size        fixed.Point    `json:"size"`
-	GrossProfit fixed.Point    `json:"gross_profit"`
-	NetProfit   fixed.Point    `json:"net_profit"`
-	OpenPrice   fixed.Point    `json:"open_price"`
-	ClosePrice  fixed.Point    `json:"close_price"`
-	OpenTime    time.Time      `json:"open_time"`
-	CloseTime   time.Time      `json:"close_time"`
-	StopLoss    fixed.Point    `json:"stop_loss"`
-	TakeProfit  fixed.Point    `json:"take_profit"`
-	Commissions fixed.Point    `json:"commission"`
-	Swaps       fixed.Point    `json:"swaps"`
+	Id                PositionId     `json:"id"`
+	Status            PositionStatus `json:"status"`
+	Side              PositionSide   `json:"side"`
+	Size              fixed.Point    `json:"size"`
+	GrossProfit       fixed.Point    `json:"gross_profit"`
+	NetProfit         fixed.Point    `json:"net_profit"`
+	OpenPrice         fixed.Point    `json:"open_price"`
+	ClosePrice        fixed.Point    `json:"close_price"`
+	OpenTime          time.Time      `json:"open_time"`
+	CloseTime         time.Time      `json:"close_time"`
+	StopLoss          fixed.Point    `json:"stop_loss"`
+	TakeProfit        fixed.Point    `json:"take_profit"`
+	Commissions       fixed.Point    `json:"commission"`
+	Swaps             fixed.Point    `json:"swaps"`
+	Currency          string         `json:"currency"`
+	ExchangeRate      fixed.Point    `json:"exchange_rate"`
+	ConversionFeeRate fixed.Point    `json:"conversion_fee_rate"`
+	ConversionFee     fixed.Point    `json:"conversion_fee"`
+	Slippage          fixed.Point    `json:"slippage"`
 
 	Source        string              `json:"src,omitempty"`
 	Symbol        string              `json:"symbol,omitempty"`

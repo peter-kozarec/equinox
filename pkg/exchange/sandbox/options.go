@@ -1,15 +1,16 @@
 package sandbox
 
 import (
+	"strings"
+
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"strings"
 )
 
 type Option func(*Simulator)
-type TotalCommissionHandler func(exchange.SymbolInfo, common.Position) fixed.Point
-type TotalSwapHandler func(exchange.SymbolInfo, common.Position) fixed.Point
+type CommissionHandler func(exchange.SymbolInfo, common.Position) fixed.Point
+type SwapHandler func(exchange.SymbolInfo, common.Position) fixed.Point
 
 func WithSymbolInfo(symbols ...exchange.SymbolInfo) Option {
 	return func(s *Simulator) {
@@ -31,14 +32,14 @@ func WithSlippage(slippage fixed.Point) Option {
 	}
 }
 
-func WithTotalCommissionHandler(h TotalCommissionHandler) Option {
+func WithTotalCommissionHandler(commissionHandler CommissionHandler) Option {
 	return func(s *Simulator) {
-		s.totalCommissionHandler = h
+		s.commissionHandler = commissionHandler
 	}
 }
 
-func WithTotalSwapHandler(h TotalSwapHandler) Option {
+func WithTotalSwapHandler(swapHandler SwapHandler) Option {
 	return func(s *Simulator) {
-		s.totalSwapHandler = h
+		s.swapHandler = swapHandler
 	}
 }

@@ -25,11 +25,11 @@ type Simulator struct {
 	router          *bus.Router
 	accountCurrency string
 
-	slippage               fixed.Point
-	rateProvider           RateProvider
-	symbolsMap             map[string]exchange.SymbolInfo
-	totalCommissionHandler TotalCommissionHandler
-	totalSwapHandler       TotalSwapHandler
+	slippage          fixed.Point
+	rateProvider      RateProvider
+	symbolsMap        map[string]exchange.SymbolInfo
+	commissionHandler CommissionHandler
+	swapHandler       SwapHandler
 
 	firstPostDone bool
 	equity        fixed.Point
@@ -270,19 +270,34 @@ func (s *Simulator) executeOpenOrder(order common.Order) error {
 		positionSide = common.PositionSideShort
 	}
 
+	exchangeRate := fixed.One
+	conversionFeeRate := fixed.Zero
+	if s.rateProvider != nil {
+		var err error
+		symbolInfo := s.symbolsMap[strings.ToUpper(order.Symbol)]
+		exchangeRate, conversionFeeRate, err = s.rateProvider.ExchangeRate(s.accountCurrency, symbolInfo.QuoteCurrency, s.simulationTime)
+		if err != nil {
+			return fmt.Errorf("unable to determine exchange rate and conversion fee rate for order %v :%w", order, err)
+		}
+	}
+
 	s.positionIdCounter++
 	s.openPositions = append(s.openPositions, &common.Position{
-		Source:        simulatorComponentName,
-		Symbol:        order.Symbol,
-		ExecutionID:   utility.GetExecutionID(),
-		TraceID:       utility.CreateTraceID(),
-		OrderTraceIDs: []utility.TraceID{order.TraceID},
-		Id:            s.positionIdCounter,
-		Status:        positionStatusPendingOpen,
-		Side:          positionSide,
-		Size:          order.Size,
-		StopLoss:      order.StopLoss,
-		TakeProfit:    order.TakeProfit,
+		Source:            simulatorComponentName,
+		Symbol:            order.Symbol,
+		ExecutionID:       utility.GetExecutionID(),
+		TraceID:           utility.CreateTraceID(),
+		OrderTraceIDs:     []utility.TraceID{order.TraceID},
+		Id:                s.positionIdCounter,
+		Status:            positionStatusPendingOpen,
+		Side:              positionSide,
+		Size:              order.Size,
+		StopLoss:          order.StopLoss,
+		TakeProfit:        order.TakeProfit,
+		Currency:          s.accountCurrency,
+		ExchangeRate:      exchangeRate,
+		ConversionFeeRate: conversionFeeRate,
+		TimeStamp:         s.simulationTime,
 	})
 	return nil
 }
@@ -339,7 +354,6 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			tmpOpenPositions = append(tmpOpenPositions, position)
 			continue
 		}
-		position.TimeStamp = s.simulationTime
 
 		openPrice := tick.Bid
 		closePrice := tick.Ask
@@ -362,12 +376,14 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 			position.ClosePrice = closePrice
 			position.CloseTime = tick.TimeStamp
 			s.calcPositionProfits(position, closePrice)
+			position.TimeStamp = s.simulationTime
 			s.balance = s.balance.Add(position.NetProfit)
 			if err := s.router.Post(bus.PositionCloseEvent, *position); err != nil {
 				slog.Warn("unable to post position closed event", "error", err)
 			}
 		default:
 			s.calcPositionProfits(position, closePrice)
+			position.TimeStamp = s.simulationTime
 			s.equity = s.equity.Add(position.NetProfit)
 			if err := s.router.Post(bus.PositionUpdateEvent, *position); err != nil {
 				slog.Warn("unable to post position pnl updated event", "error", err)
@@ -387,25 +403,35 @@ func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fi
 		priceDiff = closePrice.Sub(position.OpenPrice)
 	}
 
-	priceDiff = priceDiff.Sub(s.slippage.MulInt64(2))
-
-	exchangeRate := fixed.One
-	if s.rateProvider != nil {
-		exchangeRate, err := s.rateProvider.ExchangeRate(symbolInfo.QuoteCurrency, s.accountCurrency, s.simulationTime)
-		if err != nil {
-			slog.Warn("conversion error", "error", err, "exchangeRateUsed", exchangeRate)
+	if position.Status == common.PositionStatusOpen {
+		if s.commissionHandler != nil {
+			position.Commissions = s.commissionHandler(symbolInfo, *position)
 		}
+		if !position.ConversionFeeRate.IsZero() {
+			position.ConversionFee = position.Size.Mul(position.ExchangeRate).Mul(position.ConversionFeeRate)
+		}
+		position.Slippage = s.slippage
 	}
-
-	position.GrossProfit = priceDiff.Mul(position.Size.Abs()).Mul(symbolInfo.ContractSize).Mul(exchangeRate)
 
 	if position.Status == common.PositionStatusClosed {
-		if s.totalCommissionHandler != nil {
-			position.Commissions = s.totalCommissionHandler(symbolInfo, *position)
+		if s.commissionHandler != nil {
+			position.Commissions = position.Commissions.Add(s.commissionHandler(symbolInfo, *position))
 		}
-		if s.totalSwapHandler != nil {
-			position.Swaps = s.totalSwapHandler(symbolInfo, *position)
+		if !position.ConversionFeeRate.IsZero() {
+			position.ConversionFee = position.ConversionFee.Add(position.Size.Mul(position.ExchangeRate).Mul(position.ConversionFeeRate))
 		}
-		position.NetProfit = position.GrossProfit.Sub(position.Commissions).Sub(position.Swaps)
+		position.Slippage = position.Slippage.Add(s.slippage)
 	}
+
+	daysPassed := int(s.simulationTime.Sub(position.TimeStamp).Hours()) / 24
+	if daysPassed > 0 && s.swapHandler != nil {
+		for range daysPassed {
+			dailySwap := s.swapHandler(symbolInfo, *position)
+			position.Swaps = position.Swaps.Add(dailySwap)
+		}
+	}
+
+	priceDiff = priceDiff.Sub(s.slippage)
+	position.GrossProfit = priceDiff.Mul(position.Size).Mul(symbolInfo.ContractSize).Mul(position.ExchangeRate)
+	position.NetProfit = position.GrossProfit.Sub(position.Commissions).Sub(position.Swaps).Sub(position.ConversionFee)
 }

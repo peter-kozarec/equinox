@@ -532,7 +532,7 @@ func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*co
 }
 
 func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*common.Position, error) {
-	availableLiquidity := fixed.Zero
+	var availableLiquidity fixed.Point
 	var positionSide common.PositionSide
 
 	if order.Side == common.OrderSideBuy {

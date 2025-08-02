@@ -21,6 +21,8 @@ type Performance struct {
 	orderEventCounter              int64
 	orderRejectedEventCounter      int64
 	orderAcceptedEventCounter      int64
+	orderFilledEventCounter        int64
+	orderCancelledEventCounter     int64
 	signalEventCounter             int64
 	signalRejectedEventCounter     int64
 	signalAcceptedEventCounter     int64
@@ -35,6 +37,8 @@ type Performance struct {
 	totalOrderHandlerDur   time.Duration
 	totalOrderRejectedDur  time.Duration
 	totalOrderAcceptedDur  time.Duration
+	totalOrderFilledDur    time.Duration
+	totalOrderCancelDur    time.Duration
 	totalSignalHandlerDur  time.Duration
 	totalSignalRejectedDur time.Duration
 	totalSignalAcceptedDur time.Duration
@@ -131,6 +135,24 @@ func (p *Performance) WithOrderAcceptance(handler bus.OrderAcceptanceHandler) bu
 		handler(ctx, accepted)
 		p.totalOrderAcceptedDur += time.Since(startTime)
 		p.orderAcceptedEventCounter++
+	}
+}
+
+func (p *Performance) WithOrderFilled(handler bus.OrderFilledHandler) bus.OrderFilledHandler {
+	return func(ctx context.Context, order common.OrderFilled) {
+		startTime := time.Now()
+		handler(ctx, order)
+		p.totalOrderFilledDur += time.Since(startTime)
+		p.orderFilledEventCounter++
+	}
+}
+
+func (p *Performance) WithOrderCancelled(handler bus.OrderCancelledHandler) bus.OrderCancelledHandler {
+	return func(ctx context.Context, cancelled common.OrderCancelled) {
+		startTime := time.Now()
+		handler(ctx, cancelled)
+		p.totalOrderCancelDur += time.Since(startTime)
+		p.orderCancelledEventCounter++
 	}
 }
 
@@ -261,6 +283,24 @@ func (p *Performance) PrintStatistics() {
 				"order_accepted_event_count", p.orderAcceptedEventCounter,
 				"order_accepted_avg_duration", fmt.Sprintf("%dns", avgOrderAccepted.Nanoseconds()),
 			)
+		}
+	}
+
+	if p.orderFilledEventCounter > 0 {
+		avgOrderFilled := p.totalOrderFilledDur / time.Duration(p.orderFilledEventCounter)
+		if avgOrderFilled > 0 {
+			args = append(args,
+				"order_filled_event_count", p.orderFilledEventCounter,
+				"order_filled_avg_duration", fmt.Sprintf("%dns", avgOrderFilled.Nanoseconds()))
+		}
+	}
+
+	if p.orderCancelledEventCounter > 0 {
+		avgOrderCancelled := p.totalOrderCancelDur / time.Duration(p.orderCancelledEventCounter)
+		if avgOrderCancelled > 0 {
+			args = append(args,
+				"order_cancelled_event_count", p.orderCancelledEventCounter,
+				"order_cancelled_avg_duration", fmt.Sprintf("%dns", avgOrderCancelled.Nanoseconds()))
 		}
 	}
 

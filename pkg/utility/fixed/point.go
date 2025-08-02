@@ -51,6 +51,7 @@ func (p Point) Lte(o Point) bool { return p.v.Cmp(o.v) <= 0 }
 
 func (p Point) IsZero() bool            { return p.v.IsZero() }
 func (p Point) Rescale(scale int) Point { return Point{p.v.Rescale(scale)} }
+func (p Point) Scale() int              { return p.v.Scale() }
 
 func (p Point) Pow(o Point) Point { return Point{must(p.v.Pow(o.v))} }
 func (p Point) Sqrt() Point       { return Point{must(p.v.Sqrt())} }

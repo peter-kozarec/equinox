@@ -29,6 +29,8 @@ type Router struct {
 	OnOrder            OrderEventHandler
 	OnOrderAcceptance  OrderAcceptanceHandler
 	OnOrderRejection   OrderRejectionEventHandler
+	OnOrderFilled      OrderFilledHandler
+	OnOrderCancel      OrderCancelledHandler
 	OnSignal           SignalEventHandler
 	OnSignalAcceptance SignalAcceptanceEventHandler
 	OnSignalRejection  SignalRejectionEventHandler
@@ -262,6 +264,26 @@ func (r *Router) dispatch(ctx context.Context, ev event) error {
 			r.OnOrderRejection(ctx, orderRejected)
 		} else {
 			slog.Debug("order rejected handler is nil")
+		}
+	case OrderFilledEvent:
+		orderFilled, ok := ev.data.(common.OrderFilled)
+		if !ok {
+			return errors.New("invalid type assertion for order filled event")
+		}
+		if r.OnOrderFilled != nil {
+			r.OnOrderFilled(ctx, orderFilled)
+		} else {
+			slog.Debug("order filled handler is nil")
+		}
+	case OrderCancelledEvent:
+		orderCancelled, ok := ev.data.(common.OrderCancelled)
+		if !ok {
+			return errors.New("invalid type assertion for order cancelled event")
+		}
+		if r.OnOrderCancel != nil {
+			r.OnOrderCancel(ctx, orderCancelled)
+		} else {
+			slog.Debug("order cancelled handler is nil")
 		}
 	case SignalEvent:
 		sig, ok := ev.data.(common.Signal)

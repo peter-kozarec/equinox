@@ -44,3 +44,9 @@ func WithSlippageHandler(slippageHandler SlippageHandler) Option {
 		s.slippageHandler = slippageHandler
 	}
 }
+
+func WithMaintenanceMargin(maintenanceMarginRate fixed.Point) Option {
+	return func(s *Simulator) {
+		s.maintenanceMarginRate = maintenanceMarginRate
+	}
+}

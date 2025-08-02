@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	TickBinDir = "C:\\Users\\peter\\market_data\\"
+	TickBinDir = "/home/pko/Workspace/market_data/"
 
 	StartTime = "2018-01-01 00:00:00"
 	EndTime   = "2025-01-01 00:00:00"
@@ -47,7 +47,7 @@ var (
 		Digits:        5,
 		PipSize:       fixed.FromFloat64(0.0001),
 		ContractSize:  fixed.FromFloat64(100_000),
-		Leverage:      fixed.One.DivInt(30),
+		Leverage:      fixed.FromFloat64(30),
 	}
 
 	riskConf = risk.Configuration{
@@ -82,7 +82,7 @@ func main() {
 	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
 	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 
-	flags := middleware.MonitorOrder | middleware.MonitorSignal | middleware.MonitorSignalAcceptance | middleware.MonitorSignalRejection | middleware.MonitorPositionClose
+	flags := middleware.MonitorPositionClose
 	monitor := middleware.NewMonitor(flags)
 	perf := middleware.NewPerformance()
 
@@ -105,6 +105,8 @@ func main() {
 	router.OnOrder = middleware.Chain(monitor.WithOrder, perf.WithOrder)(simulator.OnOrder)
 	router.OnOrderAcceptance = middleware.Chain(monitor.WithOrderAcceptance, perf.WithOrderAcceptance)(riskManager.OnOrderAccepted)
 	router.OnOrderRejection = middleware.Chain(monitor.WithOrderRejection, perf.WithOrderRejection)(riskManager.OnOrderRejected)
+	router.OnOrderFilled = middleware.Chain(monitor.WithOrderFilled, perf.WithOrderFilled)(middleware.NoopOrderFilledHandler)
+	router.OnOrderCancel = middleware.Chain(monitor.WithOrderCancelled, perf.WithOrderCancelled)(middleware.NoopOrderCancelledHandler)
 	router.OnPositionOpen = middleware.Chain(monitor.WithPositionOpen, perf.WithPositionOpen)(riskManager.OnPositionOpened)
 	router.OnPositionClose = middleware.Chain(monitor.WithPositionClose, perf.WithPositionClose)(bus.MergeHandlers(riskManager.OnPositionClosed, audit.OnPositionClosed))
 	router.OnPositionUpdate = middleware.Chain(monitor.WithPositionUpdate, perf.WithPositionUpdate)(riskManager.OnPositionUpdated)

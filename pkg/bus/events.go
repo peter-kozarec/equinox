@@ -13,6 +13,8 @@ const (
 	OrderEvent
 	OrderRejectionEvent
 	OrderAcceptanceEvent
+	OrderFilledEvent
+	OrderCancelledEvent
 	SignalEvent
 	SignalRejectionEvent
 	SignalAcceptanceEvent

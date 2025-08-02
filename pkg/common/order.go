@@ -27,16 +27,25 @@ const (
 	OrderSideSell
 )
 
+const (
+	TimeInForceGoodTillCancel TimeInForce = iota
+	TimeInForceImmediateOrCancel
+	TimeInForceFillOrKill
+	TimeInForceGoodTillDate
+)
+
 type Order struct {
-	Command    OrderCommand `json:"command"`
-	Type       OrderType    `json:"type"`
-	Side       OrderSide    `json:"side"`
-	Price      fixed.Point  `json:"price"`
-	Size       fixed.Point  `json:"size"`
-	StopLoss   fixed.Point  `json:"stop_loss,omitempty"`
-	TakeProfit fixed.Point  `json:"take_profit,omitempty"`
-	PositionId PositionId   `json:"position_id,omitempty"`
-	Comment    string       `json:"comment,omitempty"`
+	Command     OrderCommand `json:"command"`
+	Type        OrderType    `json:"type"`
+	Side        OrderSide    `json:"side"`
+	Price       fixed.Point  `json:"price"`
+	Size        fixed.Point  `json:"size"`
+	TimeInForce TimeInForce  `json:"time_in_force"`
+	ExpireTime  time.Time    `json:"expire_time"`
+	StopLoss    fixed.Point  `json:"stop_loss,omitempty"`
+	TakeProfit  fixed.Point  `json:"take_profit,omitempty"`
+	PositionId  PositionId   `json:"position_id,omitempty"`
+	Comment     string       `json:"comment,omitempty"`
 
 	Source      string              `json:"src,omitempty"`
 	Symbol      string              `json:"symbol,omitempty"`
@@ -57,6 +66,28 @@ type OrderRejected struct {
 
 type OrderAccepted struct {
 	OriginalOrder Order `json:"original_order"`
+
+	Source      string              `json:"src,omitempty"`
+	ExecutionId utility.ExecutionID `json:"eid,omitempty"`
+	TraceID     utility.TraceID     `json:"tid,omitempty"`
+	TimeStamp   time.Time           `json:"ts"`
+}
+
+type OrderFilled struct {
+	OriginalOrder Order       `json:"original_order"`
+	FilledSize    fixed.Point `json:"filled_size"`
+	RemainingSize fixed.Point `json:"remaining_size"`
+	PositionId    PositionId  `json:"position_id"`
+
+	Source      string              `json:"src,omitempty"`
+	ExecutionId utility.ExecutionID `json:"eid,omitempty"`
+	TraceID     utility.TraceID     `json:"tid,omitempty"`
+	TimeStamp   time.Time           `json:"ts"`
+}
+
+type OrderCancelled struct {
+	OriginalOrder Order       `json:"original_order"`
+	CancelledSize fixed.Point `json:"cancelled_size"`
 
 	Source      string              `json:"src,omitempty"`
 	ExecutionId utility.ExecutionID `json:"eid,omitempty"`

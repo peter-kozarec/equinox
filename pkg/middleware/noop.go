@@ -17,6 +17,8 @@ var (
 	NoopOrderHandler            = func(context.Context, common.Order) {}
 	NoopOrderRejectionHandler   = func(context.Context, common.OrderRejected) {}
 	NoopOrderAcceptanceHandler  = func(context.Context, common.OrderAccepted) {}
+	NoopOrderFilledHandler      = func(context.Context, common.OrderFilled) {}
+	NoopOrderCancelledHandler   = func(context.Context, common.OrderCancelled) {}
 	NoopSignalHandler           = func(context.Context, common.Signal) {}
 	NoopSignalRejectionHandler  = func(context.Context, common.SignalRejected) {}
 	NoopSignalAcceptanceHandler = func(context.Context, common.SignalAccepted) {}

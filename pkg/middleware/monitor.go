@@ -8,7 +8,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 )
 
-type MonitorFlags uint16
+type MonitorFlags uint32
 
 const (
 	MonitorNone MonitorFlags = 1 << iota
@@ -23,6 +23,8 @@ const (
 	MonitorOrder
 	MonitorOrderRejection
 	MonitorOrderAcceptance
+	MonitorOrderFilled
+	MonitorOrderCancelled
 	MonitorSignal
 	MonitorSignalRejection
 	MonitorSignalAcceptance
@@ -125,6 +127,24 @@ func (m *Monitor) WithOrderAcceptance(handler bus.OrderAcceptanceHandler) bus.Or
 			slog.Info("event", "order_accepted", accepted)
 		}
 		handler(ctx, accepted)
+	}
+}
+
+func (m *Monitor) WithOrderFilled(handler bus.OrderFilledHandler) bus.OrderFilledHandler {
+	return func(ctx context.Context, filled common.OrderFilled) {
+		if m.flags&MonitorOrderFilled != 0 || m.flags&MonitorAll != 0 {
+			slog.Info("event", "order_filled", filled)
+		}
+		handler(ctx, filled)
+	}
+}
+
+func (m *Monitor) WithOrderCancelled(handler bus.OrderCancelledHandler) bus.OrderCancelledHandler {
+	return func(ctx context.Context, cancelled common.OrderCancelled) {
+		if m.flags&MonitorOrderCancelled != 0 || m.flags&MonitorAll != 0 {
+			slog.Info("event", "order_cancelled", cancelled)
+		}
+		handler(ctx, cancelled)
 	}
 }
 

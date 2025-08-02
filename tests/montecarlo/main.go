@@ -67,7 +67,8 @@ func main() {
 	router := bus.NewRouter(routerCapacity)
 	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
 		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
-		sandbox.WithSymbols(symbolInfo))
+		sandbox.WithSymbols(symbolInfo),
+		sandbox.WithMaintenanceMargin(fixed.FromFloat64(90)))
 
 	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)
@@ -82,19 +83,15 @@ func main() {
 	sl := stoploss.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
 	tp := takeprofit.NewFixedTakeProfit()
 
-	riskOptions := []risk.Option{
-		risk.WithDefaultKellyMultiplier(),
-		risk.WithDefaultDrawdownMultiplier(),
-		risk.WithDefaultRRRMultiplier(),
-		risk.WithOnHourCooldown(),
-		risk.WithMargin(symbolInfo.SymbolName, fixed.FromInt(30, 0))}
-	riskManager := risk.NewManager(router, symbolInfo, riskConf, sl, tp, riskOptions...)
+	riskManager := risk.NewManager(router, symbolInfo, riskConf, sl, tp)
 
 	router.OnTick = middleware.Chain(monitor.WithTick, perf.WithTick)(bus.MergeHandlers(simulator.OnTick, riskManager.OnTick, builder.OnTick, reversionStrategy.OnTick))
 	router.OnBar = middleware.Chain(monitor.WithBar, perf.WithBar)(bus.MergeHandlers(sl.OnBar, riskManager.OnBar, reversionStrategy.OnBar))
 	router.OnOrder = middleware.Chain(monitor.WithOrder, perf.WithOrder)(simulator.OnOrder)
 	router.OnOrderAcceptance = middleware.Chain(monitor.WithOrderAcceptance, perf.WithOrderAcceptance)(riskManager.OnOrderAccepted)
 	router.OnOrderRejection = middleware.Chain(monitor.WithOrderRejection, perf.WithOrderRejection)(riskManager.OnOrderRejected)
+	router.OnOrderFilled = middleware.Chain(monitor.WithOrderFilled, perf.WithOrderFilled)(middleware.NoopOrderFilledHandler)
+	router.OnOrderCancel = middleware.Chain(monitor.WithOrderCancelled, perf.WithOrderCancelled)(middleware.NoopOrderCancelledHandler)
 	router.OnPositionOpen = middleware.Chain(monitor.WithPositionOpen, perf.WithPositionOpen)(riskManager.OnPositionOpened)
 	router.OnPositionClose = middleware.Chain(monitor.WithPositionClose, perf.WithPositionClose)(bus.MergeHandlers(riskManager.OnPositionClosed, audit.OnPositionClosed))
 	router.OnPositionUpdate = middleware.Chain(monitor.WithPositionUpdate, perf.WithPositionUpdate)(riskManager.OnPositionUpdated)

@@ -22,25 +22,29 @@ const (
 )
 
 type Position struct {
-	Id                PositionId     `json:"id"`
-	Status            PositionStatus `json:"status"`
-	Side              PositionSide   `json:"side"`
-	Size              fixed.Point    `json:"size"`
-	GrossProfit       fixed.Point    `json:"gross_profit"`
-	NetProfit         fixed.Point    `json:"net_profit"`
-	OpenPrice         fixed.Point    `json:"open_price"`
-	ClosePrice        fixed.Point    `json:"close_price"`
-	OpenTime          time.Time      `json:"open_time"`
-	CloseTime         time.Time      `json:"close_time"`
-	StopLoss          fixed.Point    `json:"stop_loss"`
-	TakeProfit        fixed.Point    `json:"take_profit"`
-	Commissions       fixed.Point    `json:"commission"`
-	Swaps             fixed.Point    `json:"swaps"`
-	Currency          string         `json:"currency"`
-	ExchangeRate      fixed.Point    `json:"exchange_rate"`
-	ConversionFeeRate fixed.Point    `json:"conversion_fee_rate"`
-	ConversionFee     fixed.Point    `json:"conversion_fee"`
-	Slippage          fixed.Point    `json:"slippage"`
+	Id                     PositionId     `json:"id"`
+	Status                 PositionStatus `json:"status"`
+	Side                   PositionSide   `json:"side"`
+	Size                   fixed.Point    `json:"size"`
+	Margin                 fixed.Point    `json:"margin"`
+	GrossProfit            fixed.Point    `json:"gross_profit"`
+	NetProfit              fixed.Point    `json:"net_profit"`
+	OpenPrice              fixed.Point    `json:"open_price"`
+	ClosePrice             fixed.Point    `json:"close_price"`
+	OpenTime               time.Time      `json:"open_time"`
+	CloseTime              time.Time      `json:"close_time"`
+	StopLoss               fixed.Point    `json:"stop_loss"`
+	TakeProfit             fixed.Point    `json:"take_profit"`
+	Commissions            fixed.Point    `json:"commission"`
+	Swaps                  fixed.Point    `json:"swaps"`
+	Currency               string         `json:"currency"`
+	OpenExchangeRate       fixed.Point    `json:"open_exchange_rate"`
+	OpenConversionFeeRate  fixed.Point    `json:"open_conversion_fee_rate"`
+	OpenConversionFee      fixed.Point    `json:"open_conversion_fee"`
+	CloseExchangeRate      fixed.Point    `json:"close_exchange_rate"`
+	CloseConversionFeeRate fixed.Point    `json:"close_conversion_fee_rate"`
+	CloseConversionFee     fixed.Point    `json:"close_conversion_fee"`
+	Slippage               fixed.Point    `json:"slippage"`
 
 	Source        string              `json:"src,omitempty"`
 	Symbol        string              `json:"symbol,omitempty"`

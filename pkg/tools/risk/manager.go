@@ -63,8 +63,6 @@ type Manager struct {
 	rrrMulHandler            RRRMultiplierHandler
 	kellyMulHandler          KellyMultiplierHandler
 	martingaleMulHandler     MartingaleMultiplierHandler
-
-	margins map[string]fixed.Point
 }
 
 func NewManager(r *bus.Router, symbolInfo exchange.SymbolInfo, conf Configuration, sl stoploss.StopLoss, tp takeprofit.TakeProfit, options ...Option) *Manager {
@@ -75,7 +73,6 @@ func NewManager(r *bus.Router, symbolInfo exchange.SymbolInfo, conf Configuratio
 		sl:               sl,
 		tp:               tp,
 		nextTriggerPrice: make(map[common.PositionId]fixed.Point),
-		margins:          make(map[string]fixed.Point),
 		openPositions:    make([]common.Position, 0),
 		closedPositions:  make([]common.Position, 0),
 		pendingOrders:    make([]common.Order, 0),
@@ -149,14 +146,6 @@ func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
 	}
 
 	size = m.clampPositionSize(size, entry, sl)
-
-	if !m.hasEnoughMargin(signal.Symbol, entry, size) {
-		margin := m.getMargin(signal.Symbol)
-		m.rejectSignal(signal,
-			"not enough margin",
-			fmt.Sprintf("margin_requirement: %s%%; equity: %s; expected_size: %s", margin.String(), m.currentEquity.String(), size.String()))
-		return
-	}
 
 	if !m.validateRiskLimits(signal, entry, sl, size) {
 		m.rejectSignal(signal,
@@ -234,10 +223,6 @@ func (m *Manager) SetPerformanceMetrics(totalTrades, winningTrades int, totalWin
 	m.winningTrades = winningTrades
 	m.totalWinAmount = totalWinAmount
 	m.totalLossAmount = totalLossAmount
-}
-
-func (m *Manager) SetMargin(symbol string, margin fixed.Point) {
-	m.margins[symbol] = margin
 }
 
 type signalRejection struct {
@@ -436,12 +421,9 @@ func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
 }
 
 func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.Point) fixed.Point {
-	margin := m.getMargin(symbol)
 	priceDiff := entry.Sub(sl).Abs()
 	monetaryRisk := priceDiff.Mul(size).Mul(m.symbolInfo.ContractSize)
-	leverageMultiplier := fixed.FromInt(100, 0).Div(margin)
-	effectiveRisk := monetaryRisk.Mul(leverageMultiplier)
-	riskPercentage := effectiveRisk.Div(m.currentEquity).MulInt(100)
+	riskPercentage := monetaryRisk.Div(m.currentEquity).MulInt(100)
 	return riskPercentage
 }
 
@@ -464,13 +446,6 @@ func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) f
 	pipValue := m.symbolInfo.ContractSize.Mul(m.symbolInfo.PipSize)
 	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
 	return positionSize
-}
-
-func (m *Manager) hasEnoughMargin(symbol string, entry, size fixed.Point) bool {
-	margin := m.getMargin(symbol)
-	positionValue := entry.Mul(size).Mul(m.symbolInfo.ContractSize)
-	requiredMargin := positionValue.Mul(margin.DivInt(100))
-	return m.currentEquity.Gte(requiredMargin)
 }
 
 func (m *Manager) calculateDrawdown() fixed.Point {
@@ -542,6 +517,7 @@ func (m *Manager) createMarketOrder(signal common.Signal, tp, sl, size fixed.Poi
 
 	order.Command = common.OrderCommandPositionOpen
 	order.Type = common.OrderTypeMarket
+	order.TimeInForce = common.TimeInForceFillOrKill
 	return order, nil
 }
 
@@ -615,12 +591,4 @@ func (m *Manager) removePendingOrder(traceID utility.TraceID) {
 		}
 	}
 	slog.Warn("pending order not found", slog.Uint64("traceId", traceID))
-}
-
-func (m *Manager) getMargin(symbol string) fixed.Point {
-	margin, ok := m.margins[symbol]
-	if !ok {
-		return fixed.FromInt(100, 0)
-	}
-	return margin
 }

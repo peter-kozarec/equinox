@@ -509,11 +509,9 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*common.Position, fixed.Point, error) {
 	for _, position := range s.openPositions {
 		if position.Id == order.PositionId {
-			availableLiquidity := fixed.Zero
+			availableLiquidity := tick.BidVolume
 			if order.Side == common.OrderSideBuy {
 				availableLiquidity = tick.AskVolume
-			} else {
-				availableLiquidity = tick.BidVolume
 			}
 
 			scale := order.Size.Scale()

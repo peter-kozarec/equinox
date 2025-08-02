@@ -194,35 +194,36 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 					continue
 				}
 
-				filledSize := position.Size
-				remaining := order.Size.Sub(filledSize)
+				order.FilledSize = order.FilledSize.Add(position.Size)
+				remaining := order.Size.Sub(order.FilledSize)
 				s.openPositions = append(s.openPositions, position)
 
 				switch order.TimeInForce {
 				case common.TimeInForceImmediateOrCancel:
-					if filledSize.Gt(fixed.Zero) {
-						s.postOrderFilled(*order, *position)
+					if order.FilledSize.Gt(fixed.Zero) {
+						s.postOrderFilled(*order, position.Id)
 					}
 					if remaining.Gt(fixed.Zero) {
 						s.postOrderCancel(*order, remaining)
 					}
 				case common.TimeInForceFillOrKill:
-					if !filledSize.Eq(order.Size) {
+					if !order.FilledSize.Eq(order.Size) {
 						s.openPositions = s.openPositions[:len(s.openPositions)-1]
 						s.postOrderCancel(*order, order.Size)
 					} else {
-						s.postOrderFilled(*order, *position)
+						s.postOrderFilled(*order, position.Id)
 					}
 				default:
-					order.Size = remaining
-					tmpOpenOrders = append(tmpOpenOrders, order)
-					s.postOrderFilled(*order, *position)
+					s.postOrderFilled(*order, position.Id)
+					if remaining.Gt(fixed.Zero) {
+						tmpOpenOrders = append(tmpOpenOrders, order)
+					}
 				}
 			case common.OrderTypeLimit:
 				if !s.shouldExecuteLimitOrder(*order, tick) {
 					if order.TimeInForce == common.TimeInForceImmediateOrCancel ||
 						order.TimeInForce == common.TimeInForceFillOrKill {
-						s.postOrderCancel(*order, order.Size)
+						s.postOrderCancel(*order, order.Size.Sub(order.FilledSize))
 					} else {
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					}
@@ -235,131 +236,165 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 					continue
 				}
 
-				filledSize := position.Size
-				remaining := order.Size.Sub(filledSize)
+				order.FilledSize = order.FilledSize.Add(position.Size)
+				remaining := order.Size.Sub(order.FilledSize)
 				s.openPositions = append(s.openPositions, position)
 
 				switch order.TimeInForce {
 				case common.TimeInForceImmediateOrCancel:
-					if filledSize.Gt(fixed.Zero) {
-						s.postOrderFilled(*order, *position)
+					if order.FilledSize.Gt(fixed.Zero) {
+						s.postOrderFilled(*order, position.Id)
 					}
 					if remaining.Gt(fixed.Zero) {
 						s.postOrderCancel(*order, remaining)
 					}
 				case common.TimeInForceFillOrKill:
-					if !filledSize.Eq(order.Size) {
+					if !order.FilledSize.Eq(order.Size) {
 						s.openPositions = s.openPositions[:len(s.openPositions)-1]
 						s.postOrderCancel(*order, order.Size)
 					} else {
-						s.postOrderFilled(*order, *position)
+						s.postOrderFilled(*order, position.Id)
 					}
 				case common.TimeInForceGoodTillDate:
 					if s.simulationTime.After(order.ExpireTime) {
-						s.postOrderCancel(*order, order.Size)
+						s.openPositions = s.openPositions[:len(s.openPositions)-1]
+						s.postOrderCancel(*order, remaining)
 					} else if remaining.Gt(fixed.Zero) {
-						order.Size = remaining
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					} else {
-						s.postOrderFilled(*order, *position)
+						s.postOrderFilled(*order, position.Id)
 					}
 				case common.TimeInForceGoodTillCancel:
 					if remaining.Gt(fixed.Zero) {
-						order.Size = remaining
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					} else {
-						s.postOrderFilled(*order, *position)
+						s.postOrderFilled(*order, position.Id)
 					}
 				}
 			}
 		case common.OrderCommandPositionClose:
 			switch order.Type {
 			case common.OrderTypeMarket:
-				position, err := s.executeCloseOrder(*order, tick)
+				position, filledSize, err := s.executeCloseOrder(*order, tick)
 				if err != nil {
 					s.postOrderRejected(*order, fmt.Sprintf("market close failed: %v", err))
 					continue
 				}
 
-				filledSize := position.Size
-				remaining := order.Size.Sub(filledSize)
+				order.FilledSize = order.FilledSize.Add(filledSize)
+				remaining := order.Size.Sub(order.FilledSize)
+
+				if order.FilledSize.Gt(fixed.Zero) {
+					if remaining.Gt(fixed.Zero) {
+						newPosition := *position
+						newPosition.Size = remaining
+						newPosition.Status = common.PositionStatusOpen
+						s.openPositions = append(s.openPositions, &newPosition)
+
+						position.Size = filledSize
+					}
+
+					s.postOrderFilled(*order, position.Id)
+				}
 
 				switch order.TimeInForce {
 				case common.TimeInForceImmediateOrCancel:
-					if filledSize.Gt(fixed.Zero) {
-						s.postOrderFilled(*order, *position)
-					}
 					if remaining.Gt(fixed.Zero) {
 						s.postOrderCancel(*order, remaining)
 					}
 				case common.TimeInForceFillOrKill:
-					if !filledSize.Eq(order.Size) {
+					if !order.FilledSize.Eq(order.Size) {
 						position.Status = common.PositionStatusOpen
 						s.postOrderCancel(*order, order.Size)
-					} else {
-						s.postOrderFilled(*order, *position)
 					}
 				default:
-					order.Size = remaining
-					tmpOpenOrders = append(tmpOpenOrders, order)
-					s.postOrderFilled(*order, *position)
+					if remaining.Gt(fixed.Zero) {
+						tmpOpenOrders = append(tmpOpenOrders, order)
+					}
 				}
 			case common.OrderTypeLimit:
 				if !s.shouldExecuteLimitOrder(*order, tick) {
 					if order.TimeInForce == common.TimeInForceImmediateOrCancel ||
 						order.TimeInForce == common.TimeInForceFillOrKill {
-						s.postOrderCancel(*order, order.Size)
+						s.postOrderCancel(*order, order.Size.Sub(order.FilledSize))
 					} else {
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					}
 					continue
 				}
 
-				position, err := s.executeCloseOrder(*order, tick)
+				position, filledSize, err := s.executeCloseOrder(*order, tick)
 				if err != nil {
 					s.postOrderRejected(*order, fmt.Sprintf("limit close failed: %v", err))
 					continue
 				}
 
-				filledSize := position.Size
-				remaining := order.Size.Sub(filledSize)
+				order.FilledSize = order.FilledSize.Add(filledSize)
+				remaining := order.Size.Sub(order.FilledSize)
 
 				switch order.TimeInForce {
 				case common.TimeInForceImmediateOrCancel:
-					if filledSize.Gt(fixed.Zero) {
-						s.postOrderFilled(*order, *position)
+					if order.FilledSize.Gt(fixed.Zero) {
+						if remaining.Gt(fixed.Zero) {
+							newPosition := *position
+							newPosition.Size = remaining
+							newPosition.Status = common.PositionStatusOpen
+							s.openPositions = append(s.openPositions, &newPosition)
+
+							position.Size = filledSize
+						}
+						s.postOrderFilled(*order, position.Id)
 					}
 					if remaining.Gt(fixed.Zero) {
 						s.postOrderCancel(*order, remaining)
 					}
 				case common.TimeInForceFillOrKill:
-					if !filledSize.Eq(order.Size) {
+					if !order.FilledSize.Eq(order.Size) {
 						position.Status = common.PositionStatusOpen
 						s.postOrderCancel(*order, order.Size)
 					} else {
-						s.postOrderFilled(*order, *position)
+						position.Status = positionStatusPendingClose
+						s.postOrderFilled(*order, position.Id)
 					}
 				case common.TimeInForceGoodTillDate:
 					if s.simulationTime.After(order.ExpireTime) {
-						s.postOrderCancel(*order, order.Size)
+						s.postOrderCancel(*order, remaining)
 					} else if remaining.Gt(fixed.Zero) {
-						order.Size = remaining
+						if order.FilledSize.Gt(fixed.Zero) {
+							newPosition := *position
+							newPosition.Size = remaining
+							newPosition.Status = common.PositionStatusOpen
+							s.openPositions = append(s.openPositions, &newPosition)
+
+							position.Size = filledSize
+							s.postOrderFilled(*order, position.Id)
+						}
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					} else {
-						s.postOrderFilled(*order, *position)
+						position.Status = positionStatusPendingClose
+						s.postOrderFilled(*order, position.Id)
 					}
 				case common.TimeInForceGoodTillCancel:
 					if remaining.Gt(fixed.Zero) {
-						order.Size = remaining
+						if order.FilledSize.Gt(fixed.Zero) {
+							newPosition := *position
+							newPosition.Size = remaining
+							newPosition.Status = common.PositionStatusOpen
+							s.openPositions = append(s.openPositions, &newPosition)
+
+							position.Size = filledSize
+							s.postOrderFilled(*order, position.Id)
+						}
 						tmpOpenOrders = append(tmpOpenOrders, order)
 					} else {
-						s.postOrderFilled(*order, *position)
+						position.Status = positionStatusPendingClose
+						s.postOrderFilled(*order, position.Id)
 					}
 				}
 			}
 		case common.OrderCommandPositionModify:
-			if err := s.modifyPosition(order.PositionId, order.StopLoss, order.TakeProfit, tick); err != nil {
-				slog.Error("unable to modify open position", "error", err)
+			if err := s.modifyPosition(*order, tick); err != nil {
+				s.postOrderRejected(*order, fmt.Sprintf("position modification failed: %v", err))
 			}
 		default:
 			slog.Error("unknown command", "cmd", order.Command)
@@ -471,7 +506,7 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 	s.openPositions = tmpOpenPositions
 }
 
-func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*common.Position, error) {
+func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*common.Position, fixed.Point, error) {
 	for _, position := range s.openPositions {
 		if position.Id == order.PositionId {
 			availableLiquidity := fixed.Zero
@@ -481,20 +516,21 @@ func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*co
 				availableLiquidity = tick.BidVolume
 			}
 
-			size := order.Size
-			availableLiquidity = availableLiquidity.Rescale(size.Scale())
+			scale := order.Size.Scale()
+			size := order.Size.Sub(order.FilledSize)
+			availableLiquidity = availableLiquidity.Rescale(scale)
 			if availableLiquidity.IsZero() {
-				return nil, fmt.Errorf("available liquidity is zero")
+				return nil, fixed.Zero, fmt.Errorf("available liquidity is zero")
 			}
 
 			if size.Gt(availableLiquidity) {
 				size = availableLiquidity
 			}
 			position.Status = positionStatusPendingClose
-			return position, nil
+			return position, size, nil
 		}
 	}
-	return nil, fmt.Errorf("position with id %d not found", order.PositionId)
+	return nil, fixed.Zero, fmt.Errorf("position with id %d not found", order.PositionId)
 }
 
 func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*common.Position, error) {
@@ -527,8 +563,9 @@ func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*com
 		availableLiquidity = tick.BidVolume
 	}
 
-	size := order.Size
-	availableLiquidity = availableLiquidity.Rescale(size.Scale())
+	scale := order.Size.Scale()
+	size := order.Size.Sub(order.FilledSize)
+	availableLiquidity = availableLiquidity.Rescale(scale)
 	if availableLiquidity.IsZero() {
 		return nil, fmt.Errorf("available liquidity is zero")
 	}
@@ -555,40 +592,41 @@ func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*com
 	}, nil
 }
 
-func (s *Simulator) modifyPosition(id common.PositionId, stopLoss, takeProfit fixed.Point, tick common.Tick) error {
+func (s *Simulator) modifyPosition(order common.Order, tick common.Tick) error {
 	for _, position := range s.openPositions {
-		if position.Id == id {
+		if position.Id == order.PositionId {
 			if position.Side == common.PositionSideLong {
-				if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Gte(takeProfit) {
+				if !order.StopLoss.IsZero() && !order.TakeProfit.IsZero() && order.StopLoss.Gte(order.TakeProfit) {
 					return fmt.Errorf("stop loss must be less than take profit")
 				}
-				if !stopLoss.IsZero() && stopLoss.Gt(tick.Bid) {
+				if !order.StopLoss.IsZero() && order.StopLoss.Gt(tick.Bid) {
 					return fmt.Errorf("stop loss must be less than bid")
 				}
-				if !takeProfit.IsZero() && takeProfit.Lt(tick.Bid) {
+				if !order.TakeProfit.IsZero() && order.TakeProfit.Lt(tick.Bid) {
 					return fmt.Errorf("take profit must be greater than bid")
 				}
 			} else {
-				if !stopLoss.IsZero() && !takeProfit.IsZero() && stopLoss.Lte(takeProfit) {
+				if !order.StopLoss.IsZero() && !order.TakeProfit.IsZero() && order.StopLoss.Lte(order.TakeProfit) {
 					return fmt.Errorf("stop loss must be greater than take profit")
 				}
-				if !stopLoss.IsZero() && stopLoss.Lt(tick.Ask) {
+				if !order.StopLoss.IsZero() && order.StopLoss.Lt(tick.Ask) {
 					return fmt.Errorf("stop loss must be greater than ask")
 				}
-				if !takeProfit.IsZero() && takeProfit.Gt(tick.Ask) {
+				if !order.TakeProfit.IsZero() && order.TakeProfit.Gt(tick.Ask) {
 					return fmt.Errorf("take profit must be less than ask")
 				}
 			}
-			if !stopLoss.IsZero() {
-				position.StopLoss = stopLoss
+			if !order.StopLoss.IsZero() {
+				position.StopLoss = order.StopLoss
 			}
-			if !takeProfit.IsZero() {
-				position.TakeProfit = takeProfit
+			if !order.TakeProfit.IsZero() {
+				position.TakeProfit = order.TakeProfit
 			}
+			position.OrderTraceIDs = append(position.OrderTraceIDs, order.TraceID)
 			return nil
 		}
 	}
-	return fmt.Errorf("position with id %d not found", id)
+	return fmt.Errorf("position with id %d not found", order.PositionId)
 }
 
 func (s *Simulator) shouldExecuteLimitOrder(order common.Order, tick common.Tick) bool {
@@ -777,7 +815,9 @@ func (s *Simulator) validatePositionOpenOrder(order common.Order) error {
 	}
 
 	requiredMargin := order.Size.Mul(symbolInfo.ContractSize).Mul(price).Mul(exchangeRate).Div(symbolInfo.Leverage)
-	if s.freeMargin.Lt(requiredMargin) {
+	availableMarginAfter := s.freeMargin.Sub(requiredMargin)
+	availableMarginAfterRate := availableMarginAfter.Div(s.equity).MulInt(100)
+	if availableMarginAfterRate.Lte(s.maintenanceMarginRate) {
 		return fmt.Errorf("required margin %s exceeds free margin %s", requiredMargin.String(), s.freeMargin.String())
 	}
 	return nil
@@ -887,16 +927,14 @@ func (s *Simulator) postOrderRejected(order common.Order, reason string) {
 	}
 }
 
-func (s *Simulator) postOrderFilled(order common.Order, position common.Position) {
+func (s *Simulator) postOrderFilled(order common.Order, positionId common.PositionId) {
 	filledOrder := common.OrderFilled{
 		Source:        simulatorComponentName,
 		ExecutionId:   utility.GetExecutionID(),
 		TraceID:       utility.CreateTraceID(),
 		TimeStamp:     s.simulationTime,
 		OriginalOrder: order,
-		PositionId:    position.Id,
-		FilledSize:    position.Size,
-		RemainingSize: order.Size.Sub(position.Size),
+		PositionId:    positionId,
 	}
 	if err := s.router.Post(bus.OrderFilledEvent, filledOrder); err != nil {
 		slog.Error("unable to post order filled event",

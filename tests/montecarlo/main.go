@@ -58,7 +58,7 @@ var (
 	}
 
 	stopLossAtrWindow     = 10
-	stopLossAtrMultiplier = fixed.FromInt(2, 0)
+	stopLossAtrMultiplier = fixed.FromInt(4, 0)
 )
 
 func main() {
@@ -68,7 +68,7 @@ func main() {
 	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
 		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
 		sandbox.WithSymbols(symbolInfo),
-		sandbox.WithMaintenanceMargin(fixed.FromFloat64(90)))
+		sandbox.WithMaintenanceMargin(fixed.FromFloat64(20)))
 
 	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)

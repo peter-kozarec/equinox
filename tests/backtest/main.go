@@ -75,9 +75,13 @@ func main() {
 
 	router := bus.NewRouter(routerCapacity)
 
-	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
+	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance,
 		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
 		sandbox.WithSymbols(symbolInfo))
+	if err != nil {
+		slog.Error("unable to create simulator", "error", err)
+		os.Exit(1)
+	}
 
 	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
 	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))

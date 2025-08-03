@@ -24,6 +24,12 @@ const (
 
 var (
 	minMaintenanceMarginRate = fixed.Five
+
+	ErrRouterIsNil         = errors.New("router is nil")
+	ErrAccCurrencyNotSet   = errors.New("account currency not set")
+	ErrStartBalanceInvalid = errors.New("start balance is invalid")
+	ErrSymbolMapIsEmpty    = errors.New("symbol map is empty")
+	ErrInvalidLeverage     = errors.New("invalid leverage")
 )
 
 type Simulator struct {
@@ -50,15 +56,15 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, options ...Option) *Simulator {
+func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, options ...Option) (*Simulator, error) {
 	if router == nil {
-		panic("simulator construction failed, router is nil")
+		return nil, ErrRouterIsNil
 	}
 	if accountCurrency == "" {
-		panic("simulator construction failed, accountCurrency is empty")
+		return nil, ErrAccCurrencyNotSet
 	}
-	if startBalance.IsZero() {
-		panic("simulator construction failed, startBalance is zero")
+	if startBalance.Lte(fixed.Zero) {
+		return nil, ErrStartBalanceInvalid
 	}
 
 	s := &Simulator{
@@ -76,7 +82,17 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed
 		option(s)
 	}
 
-	return s
+	if len(s.symbolsMap) == 0 {
+		return nil, ErrSymbolMapIsEmpty
+	}
+
+	for k, v := range s.symbolsMap {
+		if v.Leverage.IsZero() {
+			return nil, fmt.Errorf("invalid symbol info for %s: %w", k, ErrInvalidLeverage)
+		}
+	}
+
+	return s, nil
 }
 
 func (s *Simulator) OnOrder(_ context.Context, order common.Order) {
@@ -221,8 +237,8 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 				}
 			case common.OrderTypeLimit:
 				if !s.shouldExecuteLimitOrder(*order, tick) {
-					if order.TimeInForce == common.TimeInForceImmediateOrCancel ||
-						order.TimeInForce == common.TimeInForceFillOrKill {
+					if order.TimeInForce == common.TimeInForceImmediateOrCancel || order.TimeInForce == common.TimeInForceFillOrKill ||
+						(order.TimeInForce == common.TimeInForceGoodTillDate && s.simulationTime.After(order.ExpireTime)) {
 						s.postOrderCancel(*order, order.Size.Sub(order.FilledSize))
 					} else {
 						tmpOpenOrders = append(tmpOpenOrders, order)
@@ -285,9 +301,9 @@ func (s *Simulator) checkOrders(tick common.Tick) {
 				remaining := order.Size.Sub(order.FilledSize)
 
 				if order.FilledSize.Gt(fixed.Zero) {
-					if remaining.Gt(fixed.Zero) {
+					if !order.FilledSize.Eq(position.Size) {
 						newPosition := *position
-						newPosition.Size = remaining
+						newPosition.Size = position.Size.Sub(order.FilledSize)
 						newPosition.Status = common.PositionStatusOpen
 						s.openPositions = append(s.openPositions, &newPosition)
 
@@ -441,7 +457,6 @@ func (s *Simulator) checkMargin(tick common.Tick) {
 
 			s.equity = s.equity.Add(tmpPosition.NetProfit)
 			s.openPositions = append(s.openPositions, &tmpPosition)
-			s.checkMargin(tick)
 			return
 		}
 		s.equity = s.equity.Add(positionToClose.NetProfit)
@@ -507,6 +522,8 @@ func (s *Simulator) processPendingChanges(tick common.Tick) {
 }
 
 func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*common.Position, fixed.Point, error) {
+	// ToDo: Liquidity is not taken from the volume when position is opened, so if there are multiple orders that
+	//       exceeds the available volume together, they will all get filled even so they should not
 	for _, position := range s.openPositions {
 		if position.Id == order.PositionId {
 			availableLiquidity := tick.BidVolume
@@ -514,15 +531,14 @@ func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*co
 				availableLiquidity = tick.AskVolume
 			}
 
-			scale := order.Size.Scale()
 			size := order.Size.Sub(order.FilledSize)
-			availableLiquidity = availableLiquidity.Rescale(scale)
 			if availableLiquidity.IsZero() {
 				return nil, fixed.Zero, fmt.Errorf("available liquidity is zero")
 			}
 
 			if size.Gt(availableLiquidity) {
 				size = availableLiquidity
+				size = size.Rescale(2)
 			}
 			position.Status = positionStatusPendingClose
 			return position, size, nil
@@ -532,6 +548,8 @@ func (s *Simulator) executeCloseOrder(order common.Order, tick common.Tick) (*co
 }
 
 func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*common.Position, error) {
+	// ToDo: Liquidity is not taken from the volume when position is opened, so if there are multiple orders that
+	//       exceeds the available volume together, they will all get filled even so they should not
 	var availableLiquidity fixed.Point
 	var positionSide common.PositionSide
 
@@ -561,15 +579,14 @@ func (s *Simulator) executeOpenOrder(order common.Order, tick common.Tick) (*com
 		availableLiquidity = tick.BidVolume
 	}
 
-	scale := order.Size.Scale()
 	size := order.Size.Sub(order.FilledSize)
-	availableLiquidity = availableLiquidity.Rescale(scale)
 	if availableLiquidity.IsZero() {
 		return nil, fmt.Errorf("available liquidity is zero")
 	}
 
 	if size.Gt(availableLiquidity) {
 		size = availableLiquidity
+		size = size.Rescale(2)
 	}
 
 	s.positionIdCounter++
@@ -664,7 +681,10 @@ func (s *Simulator) shouldClosePosition(position common.Position, tick common.Ti
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	symbolInfo := s.symbolsMap[strings.ToUpper(position.Symbol)]
+	symbolInfo, ok := s.symbolsMap[strings.ToUpper(position.Symbol)]
+	if !ok {
+		panic(fmt.Sprintf("symbol %s not found", position.Symbol))
+	}
 
 	exchangeRate := fixed.One
 	conversionFeeRate := fixed.Zero

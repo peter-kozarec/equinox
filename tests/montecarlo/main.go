@@ -65,10 +65,14 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	router := bus.NewRouter(routerCapacity)
-	simulator := sandbox.NewSimulator(router, accountCurrency, startBalance,
+	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance,
 		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
 		sandbox.WithSymbols(symbolInfo),
 		sandbox.WithMaintenanceMargin(fixed.FromFloat64(20)))
+	if err != nil {
+		slog.Error("unable to create simulator", "error", err)
+		os.Exit(1)
+	}
 
 	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)

@@ -1024,6 +1024,212 @@ func TestSandboxSimulator_validateOrder(t *testing.T) {
 	}
 }
 
+func TestSandboxSimulator_ValidateDifferentOrders(t *testing.T) {
+	sim, _ := createTestSimulator(t)
+	symbol := "EURUSD"
+
+	sim.lastTickMap[symbol] = common.Tick{
+		Symbol: symbol,
+		Bid:    fixed.FromFloat64(1.1),
+		Ask:    fixed.FromFloat64(1.101),
+	}
+
+	t.Run("validateLimitOrder", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			order       common.Order
+			expectError bool
+		}{
+			{
+				name: "valid limit",
+				order: common.Order{
+					Size:  fixed.FromFloat64(1),
+					Price: fixed.FromFloat64(1.0),
+				},
+			},
+			{
+				name:        "zero size",
+				order:       common.Order{Size: fixed.Zero, Price: fixed.FromFloat64(1.0)},
+				expectError: true,
+			},
+			{
+				name:        "zero price",
+				order:       common.Order{Size: fixed.FromFloat64(1), Price: fixed.Zero},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sim.validateLimitOrder(tt.order)
+				if tt.expectError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("validateMarketOrder", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			order       common.Order
+			expectError bool
+		}{
+			{
+				name: "valid IOC",
+				order: common.Order{
+					Size:        fixed.FromFloat64(1),
+					TimeInForce: common.TimeInForceImmediateOrCancel,
+				},
+			},
+			{
+				name:        "zero size",
+				order:       common.Order{Size: fixed.Zero, TimeInForce: common.TimeInForceImmediateOrCancel},
+				expectError: true,
+			},
+			{
+				name:        "invalid GTC",
+				order:       common.Order{Size: fixed.One, TimeInForce: common.TimeInForceGoodTillCancel},
+				expectError: true,
+			},
+			{
+				name:        "invalid GTD",
+				order:       common.Order{Size: fixed.One, TimeInForce: common.TimeInForceGoodTillDate},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sim.validateMarketOrder(tt.order)
+				if tt.expectError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("validatePositionOpenOrder", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			order       common.Order
+			expectError bool
+		}{
+			{
+				name: "valid order",
+				order: common.Order{
+					Symbol: symbol,
+					Side:   common.OrderSideBuy,
+					Size:   fixed.FromFloat64(0.1),
+				},
+			},
+			{
+				name:        "invalid symbol",
+				order:       common.Order{Symbol: "INVALID", Size: fixed.FromFloat64(1)},
+				expectError: true,
+			},
+			{
+				name:        "zero margin",
+				order:       common.Order{Symbol: symbol, Size: fixed.FromFloat64(1000000)},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sim.validatePositionOpenOrder(tt.order)
+				if tt.expectError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("validatePositionCloseOrder", func(t *testing.T) {
+		sim.positionIdCounter++
+		pos := &common.Position{Id: sim.positionIdCounter, Symbol: symbol}
+		sim.openPositions = []*common.Position{pos}
+
+		tests := []struct {
+			name        string
+			order       common.Order
+			expectError bool
+		}{
+			{
+				name: "valid close",
+				order: common.Order{
+					PositionId: pos.Id,
+				},
+			},
+			{
+				name:        "missing ID",
+				order:       common.Order{PositionId: 0},
+				expectError: true,
+			},
+			{
+				name:        "not found",
+				order:       common.Order{PositionId: 999},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sim.validatePositionCloseOrder(tt.order)
+				if tt.expectError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+
+	t.Run("validatePositionModifyOrder", func(t *testing.T) {
+		pos := sim.openPositions[0]
+
+		tests := []struct {
+			name        string
+			order       common.Order
+			expectError bool
+		}{
+			{
+				name: "valid modify",
+				order: common.Order{
+					PositionId: pos.Id,
+				},
+			},
+			{
+				name:        "missing ID",
+				order:       common.Order{PositionId: 0},
+				expectError: true,
+			},
+			{
+				name:        "not found",
+				order:       common.Order{PositionId: 999},
+				expectError: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := sim.validatePositionModifyOrder(tt.order)
+				if tt.expectError {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+}
+
 func TestSandboxSimulator_OnOrder(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -2820,3 +2820,42 @@ func TestSandboxSimulator_checkOrders_TimeInForce_Comprehensive(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkSandboxSimulator_OnTick(b *testing.B) {
+	sim, router := createTestSimulator(&testing.T{})
+
+	ticks := make([]common.Tick, 0, 10000)
+	for i := 0; i < 10000; i++ {
+		ticks = append(ticks, common.Tick{
+			Symbol:    "EURUSD",
+			Bid:       fixed.FromFloat64(1.1000 + 0.00001*float64(i%10)),
+			Ask:       fixed.FromFloat64(1.1002 + 0.00001*float64(i%10)),
+			TimeStamp: time.Now(),
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i := 0; i < 1000; i++ {
+		order := common.Order{
+			Symbol:      "EURUSD",
+			Side:        common.OrderSideBuy,
+			Type:        common.OrderTypeMarket,
+			Size:        fixed.FromFloat64(0.01),
+			Command:     common.OrderCommandPositionOpen,
+			TimeInForce: common.TimeInForceImmediateOrCancel,
+			TraceID:     utility.TraceID(i),
+		}
+		sim.OnOrder(ctx, order)
+	}
+
+	_ = router.DrainEvents(ctx)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, tick := range ticks {
+			sim.OnTick(ctx, tick)
+		}
+	}
+}

@@ -2,593 +2,432 @@ package risk
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
-	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
-	"github.com/peter-kozarec/equinox/pkg/tools/risk/adjustment"
-	"github.com/peter-kozarec/equinox/pkg/tools/risk/stoploss"
-	"github.com/peter-kozarec/equinox/pkg/tools/risk/takeprofit"
 	"github.com/peter-kozarec/equinox/pkg/utility"
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 const (
-	riskManagerComponentName = "tools.risk.manager"
+	componentNameRiskManager = "tools.risk.manager"
 )
 
-type Option func(*Manager)
+var (
+	ErrRouterIsNil  = errors.New("router is nil")
+	ErrNoSymbols    = errors.New("symbol map is empty")
+	ErrSlHandlerNil = errors.New("sl handler is nil")
+	ErrTpHandlerNil = errors.New("tp handler is nil")
+	ErrCfgInvalid   = errors.New("invalid configuration")
+
+	errSignalValidation = errors.New("signal validation error")
+)
 
 type Manager struct {
-	r          *bus.Router
-	symbolInfo exchange.SymbolInfo
-	conf       Configuration
-	sl         stoploss.StopLoss
-	tp         takeprofit.TakeProfit
-	adj        adjustment.DynamicAdjustment
+	router            *bus.Router
+	cfg               Configuration
+	stopLossHandler   StopLossHandler
+	takeProfitHandler TakeProfitHandler
 
-	slAtr *indicators.Atr
+	symbols      map[string]exchange.SymbolInfo
+	rateProvider exchange.RateProvider
 
-	currentEquity  fixed.Point
-	maxEquity      fixed.Point
-	currentBalance fixed.Point
-	maxBalance     fixed.Point
+	adjustmentHandler             AdjustmentHandler
+	sizeMultiplierStrategyHandler SizeMultiplierStrategyHandler
+	sizeMultiplierHandlers        []SizeMultiplierHandler
+	signalValidationHandlers      []SignalValidationHandler
+	customOpenOrderHandler        CustomOpenOrderHandler
 
-	openPositions   []common.Position
-	closedPositions []common.Position
-	pendingOrders   []common.Order
+	ts      time.Time
+	equity  fixed.Point
+	balance fixed.Point
 
-	serverTime           time.Time
-	lastPositionOpenTime time.Time
-	lastTick             common.Tick
-
-	totalTrades     int
-	winningTrades   int
-	totalWinAmount  fixed.Point
-	totalLossAmount fixed.Point
-
-	trailingDistance fixed.Point
-	trailingMove     fixed.Point
-	nextTriggerPrice map[common.PositionId]fixed.Point
-
-	tradeTimeHandler TradeTimeHandler
-	cooldownHandler  CooldownHandler
-
-	drawdownMulHandler       DrawdownMultiplierHandler
-	signalStrengthMulHandler SignalStrengthMultiplierHandler
-	rrrMulHandler            RRRMultiplierHandler
-	kellyMulHandler          KellyMultiplierHandler
-	martingaleMulHandler     MartingaleMultiplierHandler
+	tickCache     map[string]common.Tick
+	openOrders    []common.Order
+	openPositions []common.Position
 }
 
-func NewManager(r *bus.Router, symbolInfo exchange.SymbolInfo, conf Configuration, sl stoploss.StopLoss, tp takeprofit.TakeProfit, options ...Option) *Manager {
+func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler, tpHandler TakeProfitHandler, options ...Option) (*Manager, error) {
+	if router == nil {
+		return nil, ErrRouterIsNil
+	}
+	if slHandler == nil {
+		return nil, ErrSlHandlerNil
+	}
+	if tpHandler == nil {
+		return nil, ErrTpHandlerNil
+	}
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrCfgInvalid, err)
+	}
+
 	m := &Manager{
-		r:                r,
-		symbolInfo:       symbolInfo,
-		conf:             conf,
-		sl:               sl,
-		tp:               tp,
-		nextTriggerPrice: make(map[common.PositionId]fixed.Point),
-		openPositions:    make([]common.Position, 0),
-		closedPositions:  make([]common.Position, 0),
-		pendingOrders:    make([]common.Order, 0),
+		router:            router,
+		cfg:               cfg,
+		symbols:           make(map[string]exchange.SymbolInfo),
+		stopLossHandler:   slHandler,
+		takeProfitHandler: tpHandler,
+		tickCache:         make(map[string]common.Tick),
 	}
 
 	for _, option := range options {
 		option(m)
 	}
 
-	return m
+	if len(m.symbols) == 0 {
+		return nil, ErrNoSymbols
+	}
+
+	return m, nil
 }
 
-func (m *Manager) SetMaxBalance(balance fixed.Point) {
-	m.maxBalance = balance
+func (m *Manager) OnBalance(_ context.Context, balance common.Balance) {
+	m.balance = balance.Value
 }
 
-func (m *Manager) SetBalance(balance fixed.Point) {
-	m.currentBalance = balance
-}
-
-func (m *Manager) SetMaxEquity(equity fixed.Point) {
-	m.maxEquity = equity
-}
-
-func (m *Manager) SetEquity(equity fixed.Point) {
-	m.currentEquity = equity
+func (m *Manager) OnEquity(_ context.Context, equity common.Equity) {
+	m.equity = equity.Value
 }
 
 func (m *Manager) OnTick(_ context.Context, tick common.Tick) {
-	m.serverTime = tick.TimeStamp
-	m.lastTick = tick
-	m.checkOpenPositions(tick)
+	m.ts = tick.TimeStamp
+	m.tickCache[tick.Symbol] = tick
+	m.checkForPositionAdjustment(tick)
 }
 
-func (m *Manager) OnBar(_ context.Context, bar common.Bar) {
-	if m.slAtr != nil {
-		m.slAtr.OnBar(bar)
+func (m *Manager) OnPositionOpen(_ context.Context, position common.Position) {
+	m.openPositions = append(m.openPositions, position)
+}
+
+func (m *Manager) OnPositionUpdate(_ context.Context, position common.Position) {
+	for idx := range m.openPositions {
+		openPosition := m.openPositions[idx]
+		if openPosition.Id == position.Id {
+			openPosition.GrossProfit = position.GrossProfit
+			openPosition.NetProfit = position.NetProfit
+			openPosition.Margin = position.Margin
+			openPosition.TimeStamp = position.TimeStamp
+			break
+		}
+	}
+}
+
+func (m *Manager) OnPositionClose(_ context.Context, position common.Position) {
+	for idx := range m.openPositions {
+		openPosition := &m.openPositions[idx]
+		if openPosition.Id == position.Id {
+			if openPosition.Size.Eq(position.Size) {
+				m.openPositions = append(m.openPositions[:idx], m.openPositions[idx+1:]...)
+			} else {
+				remainingSize := openPosition.Size.Sub(position.Size)
+				openPosition.Size = remainingSize
+			}
+			break
+		}
+	}
+}
+
+func (m *Manager) OnOrderFilled(_ context.Context, filledOrder common.OrderFilled) {
+	for idx := range m.openOrders {
+		openOrder := &m.openOrders[idx]
+		if openOrder.TraceID == filledOrder.OriginalOrder.TraceID {
+			if openOrder.Size.Eq(filledOrder.OriginalOrder.FilledSize) {
+				m.openOrders = append(m.openOrders[:idx], m.openOrders[idx+1:]...)
+			} else {
+				remainingSize := openOrder.Size.Sub(filledOrder.OriginalOrder.FilledSize)
+				openOrder.Size = remainingSize
+			}
+			break
+		}
+	}
+}
+
+func (m *Manager) OnOrderCancelled(_ context.Context, filledOrder common.OrderCancelled) {
+	for idx := range m.openOrders {
+		openOrder := &m.openOrders[idx]
+		if openOrder.TraceID == filledOrder.OriginalOrder.TraceID {
+			if openOrder.Size.Eq(filledOrder.CancelledSize) {
+				m.openOrders = append(m.openOrders[:idx], m.openOrders[idx+1:]...)
+			} else {
+				remainingSize := openOrder.Size.Sub(filledOrder.CancelledSize)
+				openOrder.Size = remainingSize
+			}
+			break
+		}
+	}
+}
+
+func (m *Manager) OnOrderRejected(_ context.Context, rejectedOrder common.OrderRejected) {
+	for idx := range m.openOrders {
+		openOrder := &m.openOrders[idx]
+		if openOrder.TraceID == rejectedOrder.OriginalOrder.TraceID {
+			m.openOrders = append(m.openOrders[:idx], m.openOrders[idx+1:]...)
+			break
+		}
 	}
 }
 
 func (m *Manager) OnSignal(_ context.Context, signal common.Signal) {
-	rejection := m.validateSignal(signal)
-	if rejection != nil {
-		m.rejectSignal(signal, rejection.reason, rejection.comment)
+	if err := m.validateSignal(signal); err != nil {
+		m.postSignalRejected(signal, err.Error(), "original signal dropped")
 		return
 	}
 
-	entry := signal.Entry.Rescale(m.symbolInfo.Digits)
-
-	tp, err := m.tp.GetInitialTakeProfit(signal)
+	sl, err := m.stopLossHandler.CalcStopLoss(signal)
 	if err != nil {
-		m.rejectSignal(signal, "take profit is not set", err.Error())
+		m.postSignalRejected(signal, err.Error(), "original signal dropped")
 		return
 	}
-	tp = tp.Rescale(m.symbolInfo.Digits)
 
-	sl, err := m.sl.GetInitialStopLoss(signal)
+	tp, err := m.takeProfitHandler.CalcTakeProfit(signal)
 	if err != nil {
-		m.rejectSignal(signal, "stop loss is not set", err.Error())
-		return
-	}
-	sl = sl.Rescale(m.symbolInfo.Digits)
-
-	size, comment := m.applySizeMultipliers(signal, entry, sl)
-	if size.IsZero() {
-		drawdown := m.calculateDrawdown()
-		m.rejectSignal(signal,
-			"position size is zero",
-			fmt.Sprintf("drawdown: %s; %s", drawdown.String(), comment))
+		m.postSignalRejected(signal, err.Error(), "original signal dropped")
 		return
 	}
 
-	size = m.clampPositionSize(size, entry, sl)
+	pipDiff, pipVal := m.calcPipDiffAndVal(signal.Entry, sl, signal.Symbol)
+	baseSize := m.calcSizeForBaseRiskRate(pipDiff, pipVal)
+	minSize := m.calcSizeForMinRiskRate(pipDiff, pipVal)
+	maxSize := m.calcSizeForMaxRiskRate(pipDiff, pipVal)
 
-	if !m.validateRiskLimits(signal, entry, sl, size) {
-		m.rejectSignal(signal,
-			"risk limit is exceeded",
-			fmt.Sprintf("risk_limit: %s%%; equity: %s; expected_size: %s", m.conf.RiskOpen.String(), m.currentEquity.String(), size.String()))
+	sizeAfterMultipliers, multiplierComment := m.applyMultipliers(baseSize, signal)
+	if sizeAfterMultipliers.Lte(fixed.Zero) {
+		m.postSignalRejected(signal, multiplierComment, "original signal dropped")
 		return
 	}
 
-	order, err := m.createMarketOrder(signal, tp, sl, size)
-	if err != nil {
-		m.rejectSignal(signal, "unable to create market order", err.Error())
+	finalSize := clamp(sizeAfterMultipliers, minSize, maxSize)
+
+	sl = m.rescalePrice(sl, signal.Symbol)
+	tp = m.rescalePrice(tp, signal.Symbol)
+	finalSize = m.rescaleSize(finalSize)
+
+	if err := m.checkMarginRequirementsForSize(pipDiff, pipVal, finalSize); err != nil {
+		m.postSignalRejected(signal, err.Error(), "original signal dropped")
 		return
 	}
 
-	if err := m.r.Post(bus.OrderEvent, order); err != nil {
-		m.rejectSignal(signal, "unable to post order event", err.Error())
-		return
-	}
-
-	m.acceptSignal(signal, comment)
-	m.pendingOrders = append(m.pendingOrders, order)
+	m.postSignalAccepted(signal, multiplierComment)
+	order := m.createOpenOrder(signal.Entry, sl, tp, finalSize, signal.Symbol)
+	m.postOrder(order)
 }
 
-func (m *Manager) OnPositionOpened(_ context.Context, position common.Position) {
-	m.lastPositionOpenTime = m.serverTime
-	m.openPositions = append(m.openPositions, position)
-}
+func (m *Manager) checkForPositionAdjustment(tick common.Tick) {
+	if m.adjustmentHandler != nil {
+		for _, openPosition := range m.openPositions {
+			if !strings.EqualFold(openPosition.Symbol, tick.Symbol) {
+				continue
+			}
 
-func (m *Manager) OnPositionClosed(_ context.Context, position common.Position) {
-	idx := m.findOpenPosition(position.TraceID)
-	if idx == -1 {
-		slog.Warn("position not found in open positions", slog.Uint64("traceId", position.TraceID))
-		return
-	}
-
-	delete(m.nextTriggerPrice, position.Id)
-	m.openPositions = append(m.openPositions[:idx], m.openPositions[idx+1:]...)
-	m.closedPositions = append(m.closedPositions, position)
-	m.updatePerformanceStats(position)
-}
-
-func (m *Manager) OnPositionUpdated(_ context.Context, position common.Position) {
-	idx := m.findOpenPosition(position.TraceID)
-	if idx == -1 {
-		slog.Warn("position not found in open positions", slog.Uint64("traceId", position.TraceID))
-		return
-	}
-	m.openPositions[idx] = position
-}
-
-func (m *Manager) OnOrderAccepted(_ context.Context, acceptedOrder common.OrderAccepted) {
-	m.removePendingOrder(acceptedOrder.OriginalOrder.TraceID)
-}
-
-func (m *Manager) OnOrderRejected(_ context.Context, rejectedOrder common.OrderRejected) {
-	m.removePendingOrder(rejectedOrder.OriginalOrder.TraceID)
-}
-
-func (m *Manager) OnEquity(_ context.Context, equity common.Equity) {
-	m.currentEquity = equity.Value
-	if m.maxEquity.IsZero() || m.currentEquity.Gt(m.maxEquity) {
-		m.maxEquity = m.currentEquity
-	}
-}
-
-func (m *Manager) OnBalance(_ context.Context, balance common.Balance) {
-	m.currentBalance = balance.Value
-	if m.maxBalance.IsZero() || m.currentBalance.Gt(m.maxBalance) {
-		m.maxBalance = m.currentBalance
-	}
-}
-
-func (m *Manager) SetPerformanceMetrics(totalTrades, winningTrades int, totalWinAmount, totalLossAmount fixed.Point) {
-	m.totalTrades = totalTrades
-	m.winningTrades = winningTrades
-	m.totalWinAmount = totalWinAmount
-	m.totalLossAmount = totalLossAmount
-}
-
-type signalRejection struct {
-	reason  string
-	comment string
-}
-
-func (m *Manager) validateSignal(_ common.Signal) *signalRejection {
-	if !m.isTimeToTrade() {
-		return &signalRejection{
-			reason:  "it is not time to trade",
-			comment: fmt.Sprintf("server time: %s", m.serverTime.String()),
+			order, shouldAdjust := m.adjustmentHandler.AdjustPosition(openPosition)
+			if !shouldAdjust {
+				continue
+			}
+			m.postOrder(order)
 		}
 	}
+}
 
-	if m.cooldownHandler != nil && !m.lastPositionOpenTime.IsZero() {
-		if !m.cooldownHandler(m.lastPositionOpenTime, m.serverTime) {
-			return &signalRejection{reason: "cooldown period is not over"}
+func (m *Manager) validateSignal(signal common.Signal) error {
+	_, ok := m.symbols[strings.ToUpper(signal.Symbol)]
+	if !ok {
+		return fmt.Errorf("%s symbol is not supported: %w", signal.Symbol, errSignalValidation)
+	}
+	for _, handler := range m.signalValidationHandlers {
+		if err := handler.ValidateSignal(signal); err != nil {
+			return fmt.Errorf("%w: %v", errSignalValidation, err)
 		}
 	}
-
-	if m.maxBalance.IsZero() || m.currentBalance.IsZero() {
-		return &signalRejection{reason: "balance is not set"}
-	}
-
-	if m.maxEquity.IsZero() || m.currentEquity.IsZero() {
-		return &signalRejection{reason: "equity is not set"}
-	}
-
 	return nil
 }
 
-func (m *Manager) applySizeMultipliers(signal common.Signal, entry, sl fixed.Point) (fixed.Point, string) {
-	size := m.calculateBasePositionSize(entry, sl)
-	drawdown := m.calculateDrawdown()
-	comment := ""
-
-	if m.kellyMulHandler != nil {
-		multiplier := m.kellyMulHandler(m.totalTrades, m.getWinRate(), m.getAvgWinLossRatio())
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("kelly: %s; ", multiplier.String())
+func (m *Manager) applyMultipliers(baseSize fixed.Point, signal common.Signal) (fixed.Point, string) {
+	if m.sizeMultiplierStrategyHandler != nil {
+		newSize, finalMultiplier, strategyName, factors := m.sizeMultiplierStrategyHandler(baseSize, signal)
+		var commentBuilder strings.Builder
+		commentBuilder.WriteString("Strategy: " + strategyName)
+		commentBuilder.WriteString("; Final Multiplier: " + finalMultiplier.String())
+		for _, factor := range factors {
+			commentBuilder.WriteString("; " + factor.HandlerId + ": " + factor.Multiplier.String())
+		}
+		return newSize, commentBuilder.String()
 	}
-
-	if m.signalStrengthMulHandler != nil {
-		multiplier := m.signalStrengthMulHandler(signal.Strength)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("strength: %s; ", multiplier.String())
-	}
-
-	if m.drawdownMulHandler != nil {
-		multiplier := m.drawdownMulHandler(drawdown)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("drawdown: %s; ", multiplier.String())
-	}
-
-	if m.rrrMulHandler != nil {
-		ratio := m.calculateRRR(entry, sl, signal.Target)
-		multiplier := m.rrrMulHandler(ratio)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("rrr: %s; ", multiplier.String())
-	}
-
-	if m.martingaleMulHandler != nil {
-		multiplier := m.martingaleMulHandler(m.closedPositions)
-		size = size.Mul(multiplier)
-		comment += fmt.Sprintf("martingale: %s; ", multiplier.String())
-	}
-
-	return size, comment
+	return baseSize, "No size multiplier strategy applied."
 }
 
-func (m *Manager) clampPositionSize(size, entry, sl fixed.Point) fixed.Point {
-	maxSize := m.calculateMaxPositionSize(entry, sl).Rescale(2)
-	minSize := m.calculateMinPositionSize(entry, sl).Rescale(2)
-	size = size.Rescale(2)
+func (m *Manager) calcPipDiffAndVal(entry, closePrice fixed.Point, symbol string) (fixed.Point, fixed.Point) {
+	symbolInfo := m.symbols[strings.ToUpper(symbol)]
+	return closePrice.Sub(entry).Abs().Div(symbolInfo.PipSize), symbolInfo.ContractSize.Mul(symbolInfo.PipSize)
+}
 
-	originalSize := size
-	size = clamp(size, minSize, maxSize)
+func (m *Manager) calcSizeForBaseRiskRate(pipDiff, pipValue fixed.Point) fixed.Point {
+	return m.calcSizeForRiskRate(pipDiff, pipValue, m.cfg.BaseRiskRate)
+}
 
-	if !size.Eq(originalSize) {
-		slog.Debug("position size adjusted",
-			slog.String("original", originalSize.String()),
-			slog.String("adjusted", size.String()),
-			slog.String("min", minSize.String()),
-			slog.String("max", maxSize.String()))
+func (m *Manager) calcSizeForMinRiskRate(pipDiff, pipValue fixed.Point) fixed.Point {
+	return m.calcSizeForRiskRate(pipDiff, pipValue, m.cfg.MinRiskRate)
+}
+
+func (m *Manager) calcSizeForMaxRiskRate(pipDiff, pipValue fixed.Point) fixed.Point {
+	return m.calcSizeForRiskRate(pipDiff, pipValue, m.cfg.MaxRiskRate)
+}
+
+func (m *Manager) calcSizeForRiskRate(pipDiff, pipValue, riskRate fixed.Point) fixed.Point {
+	return m.equity.Mul(riskRate.DivInt(100)).Div(pipDiff.Mul(pipValue))
+}
+
+func (m *Manager) calcOpenRiskRate() (fixed.Point, error) {
+	openRiskRate := fixed.Zero
+	for _, position := range m.openPositions {
+		closePrice, err := m.getClosePrice(m.isLongPosition(position), position.Symbol)
+		if err != nil {
+			return fixed.Point{}, fmt.Errorf("unable to get close price: %w", err)
+		}
+		openPrice := position.OpenPrice
+		pipDiff, pipVal := m.calcPipDiffAndVal(openPrice, closePrice, position.Symbol)
+		riskRate := m.calcRiskRateForSize(pipDiff, pipVal, position.Size)
+		openRiskRate = openRiskRate.Add(riskRate)
 	}
-
-	return size
+	return openRiskRate, nil
 }
 
-func (m *Manager) validateRiskLimits(signal common.Signal, entry, sl, size fixed.Point) bool {
-	currentOpenRisk := m.calculateCurrentOpenRisk()
-	additionalRisk := m.calculateRiskPercentage(signal.Symbol, entry, sl, size)
-	totalRisk := currentOpenRisk.Add(additionalRisk)
-	return !totalRisk.Gt(m.conf.RiskOpen)
+func (m *Manager) calcRiskRateForSize(pipDiff, pipValue, size fixed.Point) fixed.Point {
+	if m.equity.IsZero() {
+		return fixed.Zero
+	}
+	return size.Mul(pipDiff.Mul(pipValue)).Div(m.equity).MulInt(100)
 }
 
-func (m *Manager) rejectSignal(signal common.Signal, reason, comment string) {
-	rejection := common.SignalRejected{
+func (m *Manager) getLastTick(symbol string) (common.Tick, error) {
+	tick, ok := m.tickCache[symbol]
+	if !ok {
+		return common.Tick{}, fmt.Errorf("tick %s not found", symbol)
+	}
+	return tick, nil
+}
+
+func (m *Manager) getOpenPrice(isLong bool, symbol string) (fixed.Point, error) {
+	tick, err := m.getLastTick(symbol)
+	if err != nil {
+		return fixed.Point{}, err
+	}
+	if isLong {
+		return tick.Ask, nil
+	}
+	return tick.Bid, nil
+}
+
+func (m *Manager) getClosePrice(isLong bool, symbol string) (fixed.Point, error) {
+	tick, err := m.getLastTick(symbol)
+	if err != nil {
+		return fixed.Point{}, err
+	}
+	if isLong {
+		return tick.Bid, nil
+	}
+	return tick.Ask, nil
+}
+
+func (m *Manager) isLongPosition(position common.Position) bool {
+	return position.Side == common.PositionSideLong
+}
+
+func (m *Manager) determineOrderSide(entry, tp fixed.Point) common.OrderSide {
+	if entry.Lt(tp) {
+		return common.OrderSideBuy
+	}
+	return common.OrderSideSell
+}
+
+func (m *Manager) rescalePrice(price fixed.Point, symbolName string) fixed.Point {
+	return price.Rescale(m.symbols[strings.ToUpper(symbolName)].Digits)
+}
+
+func (m *Manager) rescaleSize(size fixed.Point) fixed.Point {
+	return size.Rescale(m.cfg.SizeDigits)
+}
+
+func (m *Manager) checkMarginRequirementsForSize(pipDiff, pipValue, size fixed.Point) error {
+	riskRate := m.calcRiskRateForSize(pipDiff, pipValue, size)
+	openRiskRate, err := m.calcOpenRiskRate()
+	if err != nil {
+		return fmt.Errorf("unable to calculate open risk rate: %w", err)
+	}
+	totalRiskRate := openRiskRate.Add(riskRate)
+	if totalRiskRate.Gt(m.cfg.OpenRiskRate) {
+		return fmt.Errorf("max open risk rate %s would be exceeded by %s%%",
+			m.cfg.OpenRiskRate.String(), totalRiskRate.Sub(m.cfg.OpenRiskRate).String())
+	}
+	return nil
+}
+
+func (m *Manager) createOpenOrder(entry, sl, tp, size fixed.Point, symbol string) common.Order {
+	if m.customOpenOrderHandler != nil {
+		return m.customOpenOrderHandler(entry, sl, tp, size, symbol)
+	}
+	return m.defaultOpenOrderHandler(entry, sl, tp, size, symbol)
+}
+
+func (m *Manager) defaultOpenOrderHandler(entry, sl, tp, size fixed.Point, symbol string) common.Order {
+	return common.Order{
+		Command:     common.OrderCommandPositionOpen,
+		Type:        common.OrderTypeMarket,
+		TimeInForce: common.TimeInForceImmediateOrCancel,
+		Side:        m.determineOrderSide(entry, tp),
+		Price:       entry,
+		Size:        size,
+		StopLoss:    sl,
+		TakeProfit:  tp,
+		Source:      componentNameRiskManager,
+		Symbol:      symbol,
+		ExecutionId: utility.GetExecutionID(),
+		TraceID:     utility.CreateTraceID(),
+		TimeStamp:   m.ts,
+	}
+}
+
+func (m *Manager) postOrder(order common.Order) {
+	if err := m.router.Post(bus.OrderEvent, order); err != nil {
+		slog.Error("unable to post order",
+			"error", err, "order", order)
+	} else {
+		m.openOrders = append(m.openOrders, order)
+	}
+}
+
+func (m *Manager) postSignalAccepted(signal common.Signal, comment string) {
+	signalAccepted := common.SignalAccepted{
+		Comment:        comment,
+		OriginalSignal: signal,
+		Source:         componentNameRiskManager,
+		ExecutionID:    utility.GetExecutionID(),
+		TraceID:        utility.CreateTraceID(),
+		TimeStamp:      m.ts,
+	}
+	if err := m.router.Post(bus.SignalAcceptanceEvent, signalAccepted); err != nil {
+		slog.Error("unable to post signal acceptance event",
+			"error", err, "signal", signal, "accepted_signal", signalAccepted)
+	}
+}
+
+func (m *Manager) postSignalRejected(signal common.Signal, reason, comment string) {
+	signalRejected := common.SignalRejected{
 		Reason:         reason,
 		Comment:        comment,
 		OriginalSignal: signal,
-		Source:         riskManagerComponentName,
+		Source:         componentNameRiskManager,
 		ExecutionID:    utility.GetExecutionID(),
 		TraceID:        utility.CreateTraceID(),
-		TimeStamp:      m.serverTime,
+		TimeStamp:      m.ts,
 	}
-
-	if err := m.r.Post(bus.SignalRejectionEvent, rejection); err != nil {
+	if err := m.router.Post(bus.SignalRejectionEvent, signalRejected); err != nil {
 		slog.Error("unable to post signal rejection event",
-			slog.String("reason", reason),
-			slog.Any("err", err))
+			"error", err, "signal", signal, "rejected_signal", signalRejected)
 	}
-}
-
-func (m *Manager) acceptSignal(signal common.Signal, comment string) {
-	acceptance := common.SignalAccepted{
-		Comment:        comment,
-		OriginalSignal: signal,
-		Source:         riskManagerComponentName,
-		ExecutionID:    utility.GetExecutionID(),
-		TraceID:        utility.CreateTraceID(),
-		TimeStamp:      m.serverTime,
-	}
-
-	if err := m.r.Post(bus.SignalAcceptanceEvent, acceptance); err != nil {
-		slog.Error("unable to post signal acceptance event", slog.Any("err", err))
-	}
-}
-
-func (m *Manager) checkOpenPositions(tick common.Tick) {
-	for _, position := range m.openPositions {
-		if m.hasOpenOrdersForPosition(position.Id) {
-			continue
-		}
-
-		if err := m.checkDynamicPositionAdjustment(position, tick); err != nil {
-			slog.Warn("unable to check for dynamic position adjustment",
-				slog.Int64("positionId", position.Id),
-				slog.Any("err", err))
-		}
-	}
-}
-
-func (m *Manager) checkDynamicPositionAdjustment(position common.Position, tick common.Tick) error {
-	if m.adj == nil {
-		return nil
-	}
-
-	newStopLoss, newTakeProfit, wasChanged := m.adj.AdjustPosition(position, tick)
-
-	if !wasChanged {
-		return nil
-	}
-
-	if newStopLoss.IsZero() || newTakeProfit.IsZero() {
-		return fmt.Errorf("new stop loss or take profit is zero")
-	}
-
-	order := common.Order{
-		Command:     common.OrderCommandPositionModify,
-		StopLoss:    newStopLoss,
-		TakeProfit:  newTakeProfit,
-		PositionId:  position.Id,
-		Source:      riskManagerComponentName,
-		Symbol:      position.Symbol,
-		ExecutionId: utility.GetExecutionID(),
-		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   m.serverTime,
-	}
-
-	if err := m.r.Post(bus.OrderEvent, order); err != nil {
-		return fmt.Errorf("unable to post order event: %w", err)
-	}
-
-	m.pendingOrders = append(m.pendingOrders, order)
-	return nil
-}
-
-func (m *Manager) isTimeToTrade() bool {
-	if m.serverTime.IsZero() {
-		return false
-	}
-	if m.tradeTimeHandler != nil {
-		return m.tradeTimeHandler(m.serverTime)
-	}
-	return true
-}
-
-func (m *Manager) calculateCurrentOpenRisk() fixed.Point {
-	risk := fixed.Zero
-	for _, position := range m.openPositions {
-		risk = risk.Add(m.calculateRiskPercentage(position.Symbol, position.OpenPrice, position.StopLoss, position.Size))
-	}
-	return risk
-}
-
-func (m *Manager) calculateRiskPercentage(symbol string, entry, sl, size fixed.Point) fixed.Point {
-	priceDiff := entry.Sub(sl).Abs()
-	monetaryRisk := priceDiff.Mul(size).Mul(m.symbolInfo.ContractSize)
-	riskPercentage := monetaryRisk.Div(m.currentEquity).MulInt(100)
-	return riskPercentage
-}
-
-func (m *Manager) calculateMaxPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskMax)
-}
-
-func (m *Manager) calculateMinPositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskMin)
-}
-
-func (m *Manager) calculateBasePositionSize(entry, sl fixed.Point) fixed.Point {
-	return m.calculatePositionSize(entry, sl, m.conf.RiskBase)
-}
-
-func (m *Manager) calculatePositionSize(entry, sl, riskPercentage fixed.Point) fixed.Point {
-	priceDiff := entry.Sub(sl).Abs()
-	pipDiff := priceDiff.Div(m.symbolInfo.PipSize)
-	riskAmount := m.currentEquity.Mul(riskPercentage.DivInt(100))
-	pipValue := m.symbolInfo.ContractSize.Mul(m.symbolInfo.PipSize)
-	positionSize := riskAmount.Div(pipDiff.Mul(pipValue))
-	return positionSize
-}
-
-func (m *Manager) calculateDrawdown() fixed.Point {
-	if m.maxEquity.IsZero() {
-		return fixed.Zero
-	}
-	return fixed.One.Sub(m.currentEquity.Div(m.maxEquity)).MulInt(100)
-}
-
-func (m *Manager) calculateRRR(entry, sl, tp fixed.Point) fixed.Point {
-	risk := entry.Sub(sl).Abs()
-	reward := tp.Sub(entry).Abs()
-	if risk.IsZero() {
-		return fixed.Zero
-	}
-	return reward.Div(risk)
-}
-
-func (m *Manager) getWinRate() fixed.Point {
-	if m.totalTrades == 0 {
-		return fixed.FromFloat64(0.5)
-	}
-	return fixed.FromInt(m.winningTrades, 0).Div(fixed.FromInt(m.totalTrades, 0))
-}
-
-func (m *Manager) getAvgWinLossRatio() fixed.Point {
-	if m.totalLossAmount.IsZero() || m.winningTrades == 0 {
-		return fixed.FromFloat64(1.5)
-	}
-
-	losingTrades := m.totalTrades - m.winningTrades
-	if losingTrades == 0 {
-		return fixed.FromFloat64(2.0)
-	}
-
-	avgWin := m.totalWinAmount.Div(fixed.FromInt(m.winningTrades, 0))
-	avgLoss := m.totalLossAmount.Div(fixed.FromInt(losingTrades, 0))
-
-	if avgLoss.IsZero() {
-		return fixed.FromFloat64(2.0)
-	}
-	return avgWin.Div(avgLoss)
-}
-
-func (m *Manager) updatePerformanceStats(position common.Position) {
-	m.totalTrades++
-
-	if position.GrossProfit.Gt(fixed.Zero) {
-		m.winningTrades++
-		m.totalWinAmount = m.totalWinAmount.Add(position.GrossProfit)
-	} else {
-		m.totalLossAmount = m.totalLossAmount.Add(position.GrossProfit.Abs())
-	}
-}
-
-func (m *Manager) createMarketOrder(signal common.Signal, tp, sl, size fixed.Point) (common.Order, error) {
-	var order common.Order
-	var err error
-
-	if signal.Entry.Gt(signal.Target) {
-		order, err = m.createSellOrder(signal.Entry, tp, sl, size)
-	} else {
-		order, err = m.createBuyOrder(signal.Entry, tp, sl, size)
-	}
-
-	if err != nil {
-		return common.Order{}, err
-	}
-
-	order.Command = common.OrderCommandPositionOpen
-	order.Type = common.OrderTypeMarket
-	order.TimeInForce = common.TimeInForceFillOrKill
-	return order, nil
-}
-
-func (m *Manager) createSellOrder(entry, tp, sl, size fixed.Point) (common.Order, error) {
-	if tp.Gte(entry) && !tp.IsZero() {
-		return common.Order{}, fmt.Errorf("target price must be less than entry price for sell order")
-	}
-	if sl.Lte(entry) {
-		return common.Order{}, fmt.Errorf("stop loss must be greater than entry price for sell order")
-	}
-
-	return common.Order{
-		Source:      riskManagerComponentName,
-		Symbol:      m.symbolInfo.SymbolName,
-		ExecutionId: utility.GetExecutionID(),
-		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   m.serverTime,
-		Side:        common.OrderSideSell,
-		Price:       entry,
-		TakeProfit:  tp,
-		StopLoss:    sl,
-		Size:        size,
-	}, nil
-}
-
-func (m *Manager) createBuyOrder(entry, tp, sl, size fixed.Point) (common.Order, error) {
-	if tp.Lte(entry) && !tp.IsZero() {
-		return common.Order{}, fmt.Errorf("target price must be greater than entry price for buy order")
-	}
-	if sl.Gte(entry) {
-		return common.Order{}, fmt.Errorf("stop loss must be less than entry price for buy order")
-	}
-
-	return common.Order{
-		Source:      riskManagerComponentName,
-		Symbol:      m.symbolInfo.SymbolName,
-		ExecutionId: utility.GetExecutionID(),
-		TraceID:     utility.CreateTraceID(),
-		TimeStamp:   m.serverTime,
-		Side:        common.OrderSideBuy,
-		Price:       entry,
-		TakeProfit:  tp,
-		StopLoss:    sl,
-		Size:        size,
-	}, nil
-}
-
-func (m *Manager) findOpenPosition(traceID utility.TraceID) int {
-	for idx, position := range m.openPositions {
-		if position.TraceID == traceID {
-			return idx
-		}
-	}
-	return -1
-}
-
-func (m *Manager) hasOpenOrdersForPosition(positionID common.PositionId) bool {
-	for _, order := range m.pendingOrders {
-		if order.PositionId == positionID {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Manager) removePendingOrder(traceID utility.TraceID) {
-	for idx, order := range m.pendingOrders {
-		if order.TraceID == traceID {
-			m.pendingOrders = append(m.pendingOrders[:idx], m.pendingOrders[idx+1:]...)
-			return
-		}
-	}
-	slog.Warn("pending order not found", slog.Uint64("traceId", traceID))
 }

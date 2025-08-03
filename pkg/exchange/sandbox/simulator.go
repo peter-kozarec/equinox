@@ -36,7 +36,7 @@ type Simulator struct {
 	router          *bus.Router
 	accountCurrency string
 
-	rateProvider          RateProvider
+	rateProvider          exchange.RateProvider
 	symbolsMap            map[string]exchange.SymbolInfo
 	commissionHandler     CommissionHandler
 	swapHandler           SwapHandler

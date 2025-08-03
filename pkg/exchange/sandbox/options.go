@@ -21,7 +21,7 @@ func WithSymbols(symbols ...exchange.SymbolInfo) Option {
 	}
 }
 
-func WithRateProvider(rateProvider RateProvider) Option {
+func WithRateProvider(rateProvider exchange.RateProvider) Option {
 	return func(s *Simulator) {
 		s.rateProvider = rateProvider
 	}

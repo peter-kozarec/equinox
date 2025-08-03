@@ -1,9 +1,13 @@
 package risk
 
-import "github.com/peter-kozarec/equinox/pkg/tools/risk/adjustment"
+import "github.com/peter-kozarec/equinox/pkg/common"
 
-func WithAdjustment(adj adjustment.DynamicAdjustment) Option {
+type AdjustmentHandler interface {
+	AdjustPosition(common.Position) (common.Order, bool)
+}
+
+func WithAdjustment(handler AdjustmentHandler) Option {
 	return func(m *Manager) {
-		m.adj = adj
+		m.adjustmentHandler = handler
 	}
 }

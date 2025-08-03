@@ -1,13 +1,20 @@
-package stoploss
+package risk
 
 import (
 	"context"
-	"fmt"
-
+	"errors"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/tools/indicators"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
+
+var (
+	ErrSLAtrNotReady = errors.New("atr for stop loss is not ready")
+)
+
+type StopLossHandler interface {
+	CalcStopLoss(common.Signal) (fixed.Point, error)
+}
 
 type AtrBasedStopLoss struct {
 	atr           *indicators.Atr
@@ -25,13 +32,13 @@ func (a *AtrBasedStopLoss) OnBar(_ context.Context, bar common.Bar) {
 	a.atr.OnBar(bar)
 }
 
-func (a *AtrBasedStopLoss) GetInitialStopLoss(signal common.Signal) (fixed.Point, error) {
+func (a *AtrBasedStopLoss) CalcStopLoss(signal common.Signal) (fixed.Point, error) {
 	if !a.atr.Ready() {
-		return fixed.Zero, fmt.Errorf("atr is not ready")
+		return fixed.Point{}, ErrSLAtrNotReady
 	}
-	atrVal := a.atr.Value()
-	if signal.Entry.Gt(signal.Target) {
-		return signal.Entry.Add(atrVal.Mul(a.atrMultiplier).Abs()), nil
+	atrValue := a.atr.Value()
+	if signal.Target.Gt(signal.Entry) {
+		return signal.Entry.Sub(atrValue.Mul(a.atrMultiplier)), nil
 	}
-	return signal.Entry.Sub(atrVal.Mul(a.atrMultiplier).Abs()), nil
+	return signal.Entry.Add(atrValue.Mul(a.atrMultiplier)), nil
 }

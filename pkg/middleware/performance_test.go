@@ -233,6 +233,46 @@ func TestMiddlewarePerformance_WithOrderAccepted(t *testing.T) {
 	}
 }
 
+func TestMiddlewarePerformance_WithOrderFilled(t *testing.T) {
+	p := NewPerformance()
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, accepted common.OrderFilled) {
+		handlerCalled = true
+	}
+
+	wrapped := p.WithOrderFilled(handler)
+	wrapped(context.Background(), common.OrderFilled{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if p.orderFilledEventCounter != 1 {
+		t.Errorf("Expected orderFilledEventCounter=1, got %d", p.orderFilledEventCounter)
+	}
+}
+
+func TestMiddlewarePerformance_WithOrderCancelled(t *testing.T) {
+	p := NewPerformance()
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, accepted common.OrderCancelled) {
+		handlerCalled = true
+	}
+
+	wrapped := p.WithOrderCancelled(handler)
+	wrapped(context.Background(), common.OrderCancelled{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if p.orderCancelledEventCounter != 1 {
+		t.Errorf("Expected orderCancelledEventCounter=1, got %d", p.orderCancelledEventCounter)
+	}
+}
+
 func TestMiddlewarePerformance_WithSignal(t *testing.T) {
 	p := NewPerformance()
 
@@ -350,6 +390,8 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 		"order":          false,
 		"orderRejected":  false,
 		"orderAccepted":  false,
+		"orderFilled":    false,
+		"orderCancelled": false,
 		"signal":         false,
 		"signalAccepted": false,
 		"signalRejected": false,
@@ -395,6 +437,14 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 		handlers["orderAccepted"] = true
 	})(context.Background(), common.OrderAccepted{})
 
+	p.WithOrderFilled(func(ctx context.Context, filled common.OrderFilled) {
+		handlers["orderFilled"] = true
+	})(context.Background(), common.OrderFilled{})
+
+	p.WithOrderCancelled(func(ctx context.Context, cancelled common.OrderCancelled) {
+		handlers["orderCancelled"] = true
+	})(context.Background(), common.OrderCancelled{})
+
 	p.WithSignal(func(ctx context.Context, signal common.Signal) {
 		handlers["signal"] = true
 	})(context.Background(), common.Signal{})
@@ -415,10 +465,10 @@ func TestMiddlewarePerformance_AllHandlers(t *testing.T) {
 
 	totalEvents := p.tickEventCounter + p.barEventCounter + p.balanceEventCounter +
 		p.equityEventCounter + p.positionOpenedEventCounter + p.positionClosedEventCounter +
-		p.positionPnLUpdatedEventCounter + p.orderEventCounter + p.orderRejectedEventCounter +
+		p.positionPnLUpdatedEventCounter + p.orderEventCounter + p.orderRejectedEventCounter + p.orderFilledEventCounter + p.orderCancelledEventCounter +
 		p.orderAcceptedEventCounter + p.signalEventCounter + p.signalAcceptedEventCounter + p.signalRejectedEventCounter
 
-	if totalEvents != 13 {
+	if totalEvents != 15 {
 		t.Errorf("Expected total events=11, got %d", totalEvents)
 	}
 }
@@ -579,7 +629,7 @@ func BenchmarkMiddlewarePerformance_WithTick(b *testing.B) {
 	}
 }
 
-func BenchmarkMiddlewarePerformance_WithAllHandlers(b *testing.B) {
+func BenchmarkMiddlewarePerformance_WithMultipleHandlers(b *testing.B) {
 	p := NewPerformance()
 
 	tickHandler := p.WithTick(func(ctx context.Context, tick common.Tick) {})

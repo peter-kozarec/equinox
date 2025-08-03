@@ -116,17 +116,21 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 	r := NewRouter(20)
 
 	handlers := map[EventId]bool{
-		TickEvent:            false,
-		BarEvent:             false,
-		EquityEvent:          false,
-		BalanceEvent:         false,
-		PositionOpenEvent:    false,
-		PositionCloseEvent:   false,
-		PositionUpdateEvent:  false,
-		OrderEvent:           false,
-		OrderAcceptanceEvent: false,
-		OrderRejectionEvent:  false,
-		SignalEvent:          false,
+		TickEvent:             false,
+		BarEvent:              false,
+		EquityEvent:           false,
+		BalanceEvent:          false,
+		PositionOpenEvent:     false,
+		PositionCloseEvent:    false,
+		PositionUpdateEvent:   false,
+		OrderEvent:            false,
+		OrderAcceptanceEvent:  false,
+		OrderRejectionEvent:   false,
+		OrderFilledEvent:      false,
+		OrderCancelledEvent:   false,
+		SignalEvent:           false,
+		SignalAcceptanceEvent: false,
+		SignalRejectionEvent:  false,
 	}
 
 	r.OnTick = func(ctx context.Context, tick common.Tick) {
@@ -159,8 +163,20 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 	r.OnOrderRejection = func(ctx context.Context, or common.OrderRejected) {
 		handlers[OrderRejectionEvent] = true
 	}
+	r.OnOrderFilled = func(ctx context.Context, filled common.OrderFilled) {
+		handlers[OrderFilledEvent] = true
+	}
+	r.OnOrderCancel = func(ctx context.Context, order common.OrderCancelled) {
+		handlers[OrderCancelledEvent] = true
+	}
 	r.OnSignal = func(ctx context.Context, sig common.Signal) {
 		handlers[SignalEvent] = true
+	}
+	r.OnSignalAcceptance = func(ctx context.Context, sa common.SignalAccepted) {
+		handlers[SignalAcceptanceEvent] = true
+	}
+	r.OnSignalRejection = func(ctx context.Context, sr common.SignalRejected) {
+		handlers[SignalRejectionEvent] = true
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -196,7 +212,19 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 	if err := r.Post(OrderRejectionEvent, common.OrderRejected{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
+	if err := r.Post(OrderFilledEvent, common.OrderFilled{}); err != nil {
+		t.Errorf("Post failed: %v", err)
+	}
+	if err := r.Post(OrderCancelledEvent, common.OrderCancelled{}); err != nil {
+		t.Errorf("Post failed: %v", err)
+	}
 	if err := r.Post(SignalEvent, common.Signal{}); err != nil {
+		t.Errorf("Post failed: %v", err)
+	}
+	if err := r.Post(SignalAcceptanceEvent, common.SignalAccepted{}); err != nil {
+		t.Errorf("Post failed: %v", err)
+	}
+	if err := r.Post(SignalRejectionEvent, common.SignalRejected{}); err != nil {
 		t.Errorf("Post failed: %v", err)
 	}
 
@@ -210,7 +238,7 @@ func TestBusRouter_AllEventTypes(t *testing.T) {
 		}
 	}
 
-	if r.dispatchCount.Load() != 11 {
+	if r.dispatchCount.Load() != 15 {
 		t.Errorf("Expected dispatchCount=11, got %d", r.dispatchCount.Load())
 	}
 }
@@ -348,7 +376,7 @@ func BenchmarkBusRouter_ConcurrentPost(b *testing.B) {
 }
 
 func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
-	r := NewRouter(b.N * 11)
+	r := NewRouter(b.N * 15)
 
 	r.OnTick = func(ctx context.Context, tick common.Tick) {}
 	r.OnBar = func(ctx context.Context, bar common.Bar) {}
@@ -360,7 +388,11 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 	r.OnOrder = func(ctx context.Context, order common.Order) {}
 	r.OnOrderAcceptance = func(ctx context.Context, oa common.OrderAccepted) {}
 	r.OnOrderRejection = func(ctx context.Context, or common.OrderRejected) {}
+	r.OnOrderFilled = func(ctx context.Context, of common.OrderFilled) {}
+	r.OnOrderCancel = func(ctx context.Context, o common.OrderCancelled) {}
 	r.OnSignal = func(ctx context.Context, sig common.Signal) {}
+	r.OnSignalAcceptance = func(ctx context.Context, sig common.SignalAccepted) {}
+	r.OnSignalRejection = func(ctx context.Context, sig common.SignalRejected) {}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errChan := r.Exec(ctx)
@@ -397,7 +429,19 @@ func BenchmarkBusRouter_AllEventTypes(b *testing.B) {
 		if err := r.Post(OrderRejectionEvent, common.OrderRejected{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
+		if err := r.Post(OrderFilledEvent, common.OrderFilled{}); err != nil {
+			b.Errorf("Post failed: %v", err)
+		}
+		if err := r.Post(OrderCancelledEvent, common.OrderCancelled{}); err != nil {
+			b.Errorf("Post failed: %v", err)
+		}
 		if err := r.Post(SignalEvent, common.Signal{}); err != nil {
+			b.Errorf("Post failed: %v", err)
+		}
+		if err := r.Post(SignalAcceptanceEvent, common.SignalAccepted{}); err != nil {
+			b.Errorf("Post failed: %v", err)
+		}
+		if err := r.Post(SignalRejectionEvent, common.SignalRejected{}); err != nil {
 			b.Errorf("Post failed: %v", err)
 		}
 	}

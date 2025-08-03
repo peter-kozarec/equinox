@@ -281,6 +281,50 @@ func TestMiddlewareMonitor_WithOrderAccepted(t *testing.T) {
 	}
 }
 
+func TestMiddlewareMonitor_WithOrderFilled(t *testing.T) {
+	buf := setupTestLogger(t)
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, filled common.OrderFilled) {
+		handlerCalled = true
+	}
+
+	m := NewMonitor(MonitorOrderFilled)
+	wrapped := m.WithOrderFilled(handler)
+
+	wrapped(context.Background(), common.OrderFilled{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if !strings.Contains(buf.String(), "order_filled") {
+		t.Error("Log entry not found")
+	}
+}
+
+func TestMiddlewareMonitor_WithOrderCancelled(t *testing.T) {
+	buf := setupTestLogger(t)
+
+	var handlerCalled bool
+	handler := func(ctx context.Context, cancelled common.OrderCancelled) {
+		handlerCalled = true
+	}
+
+	m := NewMonitor(MonitorOrderCancelled)
+	wrapped := m.WithOrderCancelled(handler)
+
+	wrapped(context.Background(), common.OrderCancelled{})
+
+	if !handlerCalled {
+		t.Error("Handler not called")
+	}
+
+	if !strings.Contains(buf.String(), "order_cancelled") {
+		t.Error("Log entry not found")
+	}
+}
+
 func TestMiddlewareMonitor_WithSignal(t *testing.T) {
 	buf := setupTestLogger(t)
 
@@ -464,6 +508,20 @@ func TestMiddlewareMonitor_MonitorAllOverride(t *testing.T) {
 			},
 		},
 		{
+			"order_filled",
+			func() {
+				h := m.WithOrderFilled(func(ctx context.Context, filled common.OrderFilled) {})
+				h(context.Background(), common.OrderFilled{})
+			},
+		},
+		{
+			"order_cancelled",
+			func() {
+				h := m.WithOrderCancelled(func(ctx context.Context, cancelled common.OrderCancelled) {})
+				h(context.Background(), common.OrderCancelled{})
+			},
+		},
+		{
 			"signal",
 			func() {
 				h := m.WithSignal(func(ctx context.Context, signal common.Signal) {})
@@ -540,7 +598,7 @@ func TestMiddlewareMonitor_FlagCombinations(t *testing.T) {
 		{
 			name:     "All flags",
 			flags:    MonitorAll,
-			expected: []string{"tick", "bar", "equity", "balance", "position_open", "position_closed", "position_update", "order", "order_rejected", "order_accepted", "signal", "signal_accepted", "signal_rejected"},
+			expected: []string{"tick", "bar", "equity", "balance", "position_open", "position_closed", "position_update", "order", "order_rejected", "order_accepted", "order_filled", "order_cancelled", "signal", "signal_accepted", "signal_rejected"},
 		},
 	}
 
@@ -560,6 +618,8 @@ func TestMiddlewareMonitor_FlagCombinations(t *testing.T) {
 			m.WithOrder(func(ctx context.Context, order common.Order) {})(ctx, common.Order{})
 			m.WithOrderRejection(func(ctx context.Context, rejected common.OrderRejected) {})(ctx, common.OrderRejected{})
 			m.WithOrderAcceptance(func(ctx context.Context, accepted common.OrderAccepted) {})(ctx, common.OrderAccepted{})
+			m.WithOrderFilled(func(ctx context.Context, filled common.OrderFilled) {})(ctx, common.OrderFilled{})
+			m.WithOrderCancelled(func(ctx context.Context, cancelled common.OrderCancelled) {})(ctx, common.OrderCancelled{})
 			m.WithSignal(func(ctx context.Context, signal common.Signal) {})(ctx, common.Signal{})
 			m.WithSignalAcceptance(func(ctx context.Context, signal common.SignalAccepted) {})(ctx, common.SignalAccepted{})
 			m.WithSignalRejection(func(ctx context.Context, signal common.SignalRejected) {})(ctx, common.SignalRejected{})

@@ -312,17 +312,6 @@ func (m *Manager) getLastTick(symbol string) (common.Tick, error) {
 	return tick, nil
 }
 
-func (m *Manager) getOpenPrice(isLong bool, symbol string) (fixed.Point, error) {
-	tick, err := m.getLastTick(symbol)
-	if err != nil {
-		return fixed.Point{}, err
-	}
-	if isLong {
-		return tick.Ask, nil
-	}
-	return tick.Bid, nil
-}
-
 func (m *Manager) getClosePrice(isLong bool, symbol string) (fixed.Point, error) {
 	tick, err := m.getLastTick(symbol)
 	if err != nil {
@@ -375,6 +364,7 @@ func (m *Manager) createOpenOrder(entry, sl, tp, size fixed.Point, symbol string
 }
 
 func (m *Manager) defaultOpenOrderHandler(entry, sl, tp, size fixed.Point, symbol string) common.Order {
+	// ToDo: Check if entry is not too far from current price, if so, rather create limit order
 	return common.Order{
 		Command:     common.OrderCommandPositionOpen,
 		Type:        common.OrderTypeMarket,

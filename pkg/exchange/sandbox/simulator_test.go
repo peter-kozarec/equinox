@@ -2789,9 +2789,7 @@ func TestSandboxSimulator_checkOrders_TimeInForce_Comprehensive(t *testing.T) {
 				tt.setup(sim)
 			}
 
-			for _, order := range tt.orders {
-				sim.openOrders = append(sim.openOrders, order)
-			}
+			sim.openOrders = append(sim.openOrders, tt.orders...)
 
 			events := map[string]int{
 				"filled":    0,

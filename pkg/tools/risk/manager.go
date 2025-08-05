@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 	"log/slog"
 	"strings"
 	"time"
@@ -12,7 +11,9 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/peter-kozarec/equinox/pkg/utility"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 const (
@@ -21,7 +22,6 @@ const (
 
 var (
 	ErrRouterIsNil  = errors.New("router is nil")
-	ErrNoSymbols    = errors.New("symbol map is empty")
 	ErrSlHandlerNil = errors.New("sl handler is nil")
 	ErrTpHandlerNil = errors.New("tp handler is nil")
 	ErrCfgInvalid   = errors.New("invalid configuration")
@@ -35,7 +35,7 @@ type Manager struct {
 	stopLossHandler   StopLossHandler
 	takeProfitHandler TakeProfitHandler
 
-	symbols      map[string]exchange.SymbolInfo
+	symbolStore  cache.SymbolStore
 	rateProvider exchange.RateProvider
 
 	adjustmentHandler             AdjustmentHandler
@@ -53,7 +53,7 @@ type Manager struct {
 	openPositions []common.Position
 }
 
-func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler, tpHandler TakeProfitHandler, options ...Option) (*Manager, error) {
+func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler, tpHandler TakeProfitHandler, symbolStore cache.SymbolStore, options ...Option) (*Manager, error) {
 	if router == nil {
 		return nil, ErrRouterIsNil
 	}
@@ -70,7 +70,7 @@ func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler
 	m := &Manager{
 		router:            router,
 		cfg:               cfg,
-		symbols:           make(map[string]exchange.SymbolInfo),
+		symbolStore:       symbolStore,
 		stopLossHandler:   slHandler,
 		takeProfitHandler: tpHandler,
 		tickCache:         make(map[string]common.Tick),
@@ -78,10 +78,6 @@ func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler
 
 	for _, option := range options {
 		option(m)
-	}
-
-	if len(m.symbols) == 0 {
-		return nil, ErrNoSymbols
 	}
 
 	return m, nil
@@ -235,9 +231,9 @@ func (m *Manager) checkForPositionAdjustment(tick common.Tick) {
 }
 
 func (m *Manager) validateSignal(signal common.Signal) error {
-	_, ok := m.symbols[strings.ToUpper(signal.Symbol)]
-	if !ok {
-		return fmt.Errorf("%s symbol is not supported: %w", signal.Symbol, errSignalValidation)
+	_, err := m.symbolStore.Get(signal.Symbol)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errSignalValidation, err)
 	}
 	for _, handler := range m.signalValidationHandlers {
 		if err := handler.ValidateSignal(signal); err != nil {
@@ -262,7 +258,7 @@ func (m *Manager) applyMultipliers(baseSize fixed.Point, signal common.Signal) (
 }
 
 func (m *Manager) calcPipDiffAndVal(entry, closePrice fixed.Point, symbol string) (fixed.Point, fixed.Point) {
-	symbolInfo := m.symbols[strings.ToUpper(symbol)]
+	symbolInfo := m.symbolStore.MustGet(symbol)
 	return closePrice.Sub(entry).Abs().Div(symbolInfo.PipSize), symbolInfo.ContractSize.Mul(symbolInfo.PipSize)
 }
 
@@ -335,7 +331,7 @@ func (m *Manager) determineOrderSide(entry, tp fixed.Point) common.OrderSide {
 }
 
 func (m *Manager) rescalePrice(price fixed.Point, symbolName string) fixed.Point {
-	return price.Rescale(m.symbols[strings.ToUpper(symbolName)].Digits)
+	return price.Rescale(m.symbolStore.MustGet(symbolName).Digits)
 }
 
 func (m *Manager) rescaleSize(size fixed.Point) fixed.Point {

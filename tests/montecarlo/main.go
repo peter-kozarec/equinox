@@ -14,30 +14,23 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/datasource"
 	"github.com/peter-kozarec/equinox/pkg/datasource/synthetic"
-	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 var (
+	symbolName      = "EURUSD"
 	barPeriod       = common.BarPeriodM1
 	accountCurrency = "USD"
 	startBalance    = fixed.FromInt(10000, 0)
 	slippage        = fixed.FromFloat64(0.00002)
 
-	symbolInfo = exchange.SymbolInfo{
-		SymbolName:    "EURUSD",
-		QuoteCurrency: "USD",
-		Class:         exchange.Forex,
-		Digits:        5,
-		PipSize:       fixed.FromFloat64(0.0001),
-		ContractSize:  fixed.FromFloat64(100_000),
-		Leverage:      fixed.FromFloat64(30),
-	}
+	symbolStore = cache.CreateSymbolTestStore()
 
 	meanReversionWindow = 60
 
@@ -64,17 +57,16 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	router := bus.NewRouter(routerCapacity)
-	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance,
+	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance, symbolStore,
 		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
-		sandbox.WithSymbols(symbolInfo),
 		sandbox.WithMaintenanceMargin(fixed.FromFloat64(20)))
 	if err != nil {
 		slog.Error("unable to create simulator", "error", err)
 		os.Exit(1)
 	}
 
-	builder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
-	generator := synthetic.NewEURUSDTickGenerator(symbolInfo.SymbolName, genRng, genDuration, genMu, genSigma)
+	builder := bar.NewBuilder(router, bar.With(symbolName, barPeriod, bar.PriceModeBid))
+	generator := synthetic.NewEURUSDTickGenerator(symbolName, genRng, genDuration, genMu, genSigma)
 
 	monitor := middleware.NewMonitor(middleware.MonitorPositionClose)
 	perf := middleware.NewPerformance()
@@ -85,7 +77,7 @@ func main() {
 	sl := risk.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
 	tp := risk.NewFixedTakeProfit()
 
-	riskManager, err := risk.NewManager(router, riskConf, sl, tp, risk.WithSymbols(symbolInfo))
+	riskManager, err := risk.NewManager(router, riskConf, sl, tp, symbolStore)
 	if err != nil {
 		slog.Error("unable to create risk manager", "error", err)
 		os.Exit(1)

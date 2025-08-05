@@ -13,10 +13,10 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/datasource"
 	"github.com/peter-kozarec/equinox/pkg/datasource/historical"
-	"github.com/peter-kozarec/equinox/pkg/exchange"
 	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
+	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
@@ -32,6 +32,7 @@ const (
 )
 
 var (
+	symbolName      = "EURUSD"
 	barPeriod       = common.BarPeriodM10
 	accountCurrency = "USD"
 	startBalance    = fixed.FromInt(10000, 0)
@@ -39,14 +40,7 @@ var (
 
 	routerCapacity = 1000
 
-	symbolInfo = exchange.SymbolInfo{
-		SymbolName:    "EURUSD",
-		QuoteCurrency: "USD",
-		Digits:        5,
-		PipSize:       fixed.FromFloat64(0.0001),
-		ContractSize:  fixed.FromFloat64(100_000),
-		Leverage:      fixed.FromFloat64(30),
-	}
+	symbolMap = cache.CreateSymbolTestStore()
 
 	riskConf = risk.Configuration{
 		MaxRiskRate:  fixed.FromFloat64(0.3),
@@ -74,16 +68,15 @@ func main() {
 
 	router := bus.NewRouter(routerCapacity)
 
-	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance,
-		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }),
-		sandbox.WithSymbols(symbolInfo))
+	simulator, err := sandbox.NewSimulator(router, accountCurrency, startBalance, symbolMap,
+		sandbox.WithSlippageHandler(func(_ common.Position) fixed.Point { return slippage }))
 	if err != nil {
 		slog.Error("unable to create simulator", "error", err)
 		os.Exit(1)
 	}
 
-	tickReader := historical.NewTickReader(src, symbolInfo.SymbolName, startTime, endTime)
-	barBuilder := bar.NewBuilder(router, bar.With(symbolInfo.SymbolName, barPeriod, bar.PriceModeBid))
+	tickReader := historical.NewTickReader(src, symbolName, startTime, endTime)
+	barBuilder := bar.NewBuilder(router, bar.With(symbolName, barPeriod, bar.PriceModeBid))
 
 	flags := middleware.MonitorPositionClose
 	monitor := middleware.NewMonitor(flags)
@@ -95,7 +88,7 @@ func main() {
 	sl := risk.NewAtrBasedStopLoss(stopLossAtrWindow, stopLossAtrMultiplier)
 	tp := risk.NewFixedTakeProfit()
 
-	riskManager, err := risk.NewManager(router, riskConf, sl, tp, risk.WithSymbols(symbolInfo))
+	riskManager, err := risk.NewManager(router, riskConf, sl, tp, symbolMap)
 	if err != nil {
 		slog.Error("unable to create risk manager", "error", err)
 		os.Exit(1)

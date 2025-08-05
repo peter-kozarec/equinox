@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,20 +28,21 @@ func (m *mockRateProvider) ExchangeRate(_, _ string, _ time.Time) (fixed.Point, 
 func createTestSimulator(t *testing.T) (*Simulator, *bus.Router) {
 	router := bus.NewRouter(1000)
 
-	eurUsd := exchange.SymbolInfo{
-		SymbolName:    "EURUSD",
-		QuoteCurrency: "USD",
-		ContractSize:  fixed.FromInt(100000, 0),
-		Leverage:      fixed.FromInt(100, 0),
-	}
-	gbpUsd := exchange.SymbolInfo{
-		SymbolName:    "GBPUSD",
-		QuoteCurrency: "USD",
-		ContractSize:  fixed.FromInt(100000, 0),
-		Leverage:      fixed.FromInt(100, 0),
-	}
+	symbolMap := cache.CreateSymbolStore([]exchange.SymbolInfo{
+		{
+			SymbolName:    "EURUSD",
+			QuoteCurrency: "USD",
+			ContractSize:  fixed.FromInt(100000, 0),
+			Leverage:      fixed.FromInt(100, 0),
+		},
+		{
+			SymbolName:    "GBPUSD",
+			QuoteCurrency: "USD",
+			ContractSize:  fixed.FromInt(100000, 0),
+			Leverage:      fixed.FromInt(100, 0),
+		}}...)
 
-	sim, err := NewSimulator(router, "USD", fixed.FromInt(10000, 0), WithSymbols(eurUsd, gbpUsd))
+	sim, err := NewSimulator(router, "USD", fixed.FromInt(10000, 0), symbolMap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -970,7 +972,7 @@ func TestSandboxSimulator_validateOrder(t *testing.T) {
 				Command:     common.OrderCommandPositionOpen,
 				TimeInForce: common.TimeInForceImmediateOrCancel,
 			},
-			expectedError: "symbol info for symbol UNKNOWN is not supported",
+			expectedError: "unable to validate position open order",
 		},
 		{
 			name: "close order without position ID",
@@ -1691,7 +1693,7 @@ func TestSandboxSimulator_validateTick(t *testing.T) {
 				Ask:       fixed.FromFloat64(110.02),
 				TimeStamp: time.Now(),
 			},
-			expectedError: "tick with symbol USDJPY is not present in the symbols map",
+			expectedError: "tick validation failed",
 		},
 		{
 			name: "tick with mixed case symbol",
@@ -2434,6 +2436,7 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 		router        *bus.Router
 		currency      string
 		startBalance  fixed.Point
+		symbolStore   cache.SymbolStore
 		options       []Option
 		expectedError string
 	}{
@@ -2442,14 +2445,14 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 			router:       bus.NewRouter(1000),
 			currency:     "USD",
 			startBalance: fixed.FromFloat64(10000),
-			options: []Option{
-				WithSymbols(exchange.SymbolInfo{
+			symbolStore: cache.CreateSymbolStore(
+				[]exchange.SymbolInfo{{
 					SymbolName:    "EURUSD",
 					QuoteCurrency: "USD",
 					ContractSize:  fixed.FromInt(100000, 0),
 					Leverage:      fixed.FromInt(100, 0),
-				}),
-			},
+				}}...),
+			options:       []Option{},
 			expectedError: "",
 		},
 		{
@@ -2481,40 +2484,18 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 			expectedError: "start balance is invalid",
 		},
 		{
-			name:          "empty symbols map",
-			router:        bus.NewRouter(1000),
-			currency:      "USD",
-			startBalance:  fixed.FromFloat64(10000),
-			options:       []Option{},
-			expectedError: "symbol map is empty",
-		},
-		{
-			name:         "symbol with zero leverage",
-			router:       bus.NewRouter(1000),
-			currency:     "USD",
-			startBalance: fixed.FromFloat64(10000),
-			options: []Option{
-				WithSymbols(exchange.SymbolInfo{
-					SymbolName:    "EURUSD",
-					QuoteCurrency: "USD",
-					ContractSize:  fixed.FromInt(100000, 0),
-					Leverage:      fixed.Zero,
-				}),
-			},
-			expectedError: "invalid leverage",
-		},
-		{
 			name:         "with all options",
 			router:       bus.NewRouter(1000),
 			currency:     "USD",
 			startBalance: fixed.FromFloat64(10000),
-			options: []Option{
-				WithSymbols(exchange.SymbolInfo{
+			symbolStore: cache.CreateSymbolStore(
+				[]exchange.SymbolInfo{{
 					SymbolName:    "EURUSD",
 					QuoteCurrency: "USD",
 					ContractSize:  fixed.FromInt(100000, 0),
 					Leverage:      fixed.FromInt(100, 0),
-				}),
+				}}...),
+			options: []Option{
 				WithRateProvider(&mockRateProvider{
 					rate:          fixed.One,
 					conversionFee: fixed.Zero,
@@ -2536,7 +2517,7 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sim, err := NewSimulator(tt.router, tt.currency, tt.startBalance, tt.options...)
+			sim, err := NewSimulator(tt.router, tt.currency, tt.startBalance, tt.symbolStore, tt.options...)
 
 			if tt.expectedError != "" {
 				require.Error(t, err)

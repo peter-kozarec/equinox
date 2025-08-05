@@ -11,6 +11,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -28,8 +29,6 @@ var (
 	ErrRouterIsNil         = errors.New("router is nil")
 	ErrAccCurrencyNotSet   = errors.New("account currency not set")
 	ErrStartBalanceInvalid = errors.New("start balance is invalid")
-	ErrSymbolMapIsEmpty    = errors.New("symbol map is empty")
-	ErrInvalidLeverage     = errors.New("invalid leverage")
 )
 
 type Simulator struct {
@@ -37,7 +36,7 @@ type Simulator struct {
 	accountCurrency string
 
 	rateProvider          exchange.RateProvider
-	symbolsMap            map[string]exchange.SymbolInfo
+	symbolStore           cache.SymbolStore
 	commissionHandler     CommissionHandler
 	swapHandler           SwapHandler
 	slippageHandler       SlippageHandler
@@ -56,7 +55,7 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, options ...Option) (*Simulator, error) {
+func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, symbolStore cache.SymbolStore, options ...Option) (*Simulator, error) {
 	if router == nil {
 		return nil, ErrRouterIsNil
 	}
@@ -70,7 +69,7 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed
 	s := &Simulator{
 		router:                router,
 		accountCurrency:       accountCurrency,
-		symbolsMap:            make(map[string]exchange.SymbolInfo),
+		symbolStore:           symbolStore,
 		maintenanceMarginRate: minMaintenanceMarginRate,
 		equity:                startBalance,
 		balance:               startBalance,
@@ -80,16 +79,6 @@ func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed
 
 	for _, option := range options {
 		option(s)
-	}
-
-	if len(s.symbolsMap) == 0 {
-		return nil, ErrSymbolMapIsEmpty
-	}
-
-	for k, v := range s.symbolsMap {
-		if v.Leverage.IsZero() {
-			return nil, fmt.Errorf("invalid symbol info for %s: %w", k, ErrInvalidLeverage)
-		}
 	}
 
 	return s, nil
@@ -681,13 +670,11 @@ func (s *Simulator) shouldClosePosition(position common.Position, tick common.Ti
 }
 
 func (s *Simulator) calcPositionProfits(position *common.Position, closePrice fixed.Point) {
-	symbolInfo, ok := s.symbolsMap[strings.ToUpper(position.Symbol)]
-	if !ok {
-		panic(fmt.Sprintf("symbol %s not found", position.Symbol))
-	}
+	symbolInfo := s.symbolStore.MustGet(position.Symbol)
 
 	exchangeRate := fixed.One
 	conversionFeeRate := fixed.Zero
+
 	if s.rateProvider != nil {
 		exchangeRate, conversionFeeRate, _ = s.rateProvider.ExchangeRate(s.accountCurrency, symbolInfo.QuoteCurrency, s.simulationTime)
 	}
@@ -806,9 +793,9 @@ func (s *Simulator) validateMarketOrder(order common.Order) error {
 }
 
 func (s *Simulator) validatePositionOpenOrder(order common.Order) error {
-	symbolInfo, ok := s.symbolsMap[strings.ToUpper(order.Symbol)]
-	if !ok {
-		return fmt.Errorf("symbol info for symbol %s is not supported", order.Symbol)
+	symbolInfo, err := s.symbolStore.Get(order.Symbol)
+	if err != nil {
+		return fmt.Errorf("order validation failed: %w", err)
 	}
 
 	exchangeRate := fixed.One
@@ -895,9 +882,9 @@ func (s *Simulator) validateStopLossAndTakeProfit(order common.Order) error {
 }
 
 func (s *Simulator) validateTick(tick common.Tick) error {
-	_, ok := s.symbolsMap[strings.ToUpper(tick.Symbol)]
-	if !ok {
-		return fmt.Errorf("tick with symbol %s is not present in the symbols map", tick.Symbol)
+	_, err := s.symbolStore.Get(tick.Symbol)
+	if err != nil {
+		return fmt.Errorf("tick validation failed: %w", err)
 	}
 	return nil
 }

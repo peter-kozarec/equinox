@@ -1,22 +1,12 @@
 package risk
 
 import (
-	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"strings"
-
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
 type Option func(*Manager)
-
-func WithSymbols(symbols ...exchange.SymbolInfo) Option {
-	return func(m *Manager) {
-		for _, symbol := range symbols {
-			m.symbols[strings.ToUpper(symbol.SymbolName)] = symbol
-		}
-	}
-}
 
 type SignalValidationHandler interface {
 	ValidateSignal(common.Signal) error

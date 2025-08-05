@@ -1,9 +1,10 @@
 package common
 
 import (
+	"time"
+
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
-	"time"
 )
 
 type Equity struct {

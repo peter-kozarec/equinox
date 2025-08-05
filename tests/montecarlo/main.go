@@ -68,7 +68,7 @@ func main() {
 	builder := bar.NewBuilder(router, bar.With(symbolName, barPeriod, bar.PriceModeBid))
 	generator := synthetic.NewEURUSDTickGenerator(symbolName, genRng, genDuration, genMu, genSigma)
 
-	monitor := middleware.NewMonitor(middleware.MonitorPositionClose)
+	monitor := middleware.NewMonitor(middleware.MonitorAll)
 	perf := middleware.NewPerformance()
 
 	audit := metrics.NewAudit()
@@ -110,6 +110,7 @@ func main() {
 	}
 
 	simulator.CloseAllOpenPositions()
+	_ = router.DrainEvents(context.Background())
 
 	perf.PrintStatistics()
 	router.GetStatistics().Print()

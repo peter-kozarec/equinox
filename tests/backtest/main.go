@@ -121,6 +121,7 @@ func main() {
 	}
 
 	simulator.CloseAllOpenPositions()
+	_ = router.DrainEvents(context.Background())
 
 	perf.PrintStatistics()
 	router.GetStatistics().Print()

@@ -16,9 +16,9 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/exchange/sandbox"
 	"github.com/peter-kozarec/equinox/pkg/middleware"
 	"github.com/peter-kozarec/equinox/pkg/tools/bar"
-	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/peter-kozarec/equinox/pkg/tools/metrics"
 	"github.com/peter-kozarec/equinox/pkg/tools/risk"
+	"github.com/peter-kozarec/equinox/pkg/tools/store"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
 
@@ -40,7 +40,7 @@ var (
 
 	routerCapacity = 1000
 
-	symbolMap = cache.CreateSymbolTestStore()
+	symbolMap = store.CreateSymbolTestStore()
 
 	riskConf = risk.Configuration{
 		MaxRiskRate:  fixed.FromFloat64(0.3),

@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/peter-kozarec/equinox/pkg/tools/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
+	"github.com/peter-kozarec/equinox/pkg/tools/store"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -28,7 +28,7 @@ func (m *mockRateProvider) ExchangeRate(_, _ string, _ time.Time) (fixed.Point, 
 func createTestSimulator(t *testing.T) (*Simulator, *bus.Router) {
 	router := bus.NewRouter(1000)
 
-	symbolMap := cache.CreateSymbolStore([]exchange.SymbolInfo{
+	symbolMap := store.CreateSymbolStore([]exchange.SymbolInfo{
 		{
 			SymbolName:    "EURUSD",
 			QuoteCurrency: "USD",
@@ -2436,7 +2436,7 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 		router        *bus.Router
 		currency      string
 		startBalance  fixed.Point
-		symbolStore   cache.SymbolStore
+		symbolStore   store.SymbolStore
 		options       []Option
 		expectedError string
 	}{
@@ -2445,7 +2445,7 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 			router:       bus.NewRouter(1000),
 			currency:     "USD",
 			startBalance: fixed.FromFloat64(10000),
-			symbolStore: cache.CreateSymbolStore(
+			symbolStore: store.CreateSymbolStore(
 				[]exchange.SymbolInfo{{
 					SymbolName:    "EURUSD",
 					QuoteCurrency: "USD",
@@ -2488,7 +2488,7 @@ func TestSandboxSimulator_NewSimulator(t *testing.T) {
 			router:       bus.NewRouter(1000),
 			currency:     "USD",
 			startBalance: fixed.FromFloat64(10000),
-			symbolStore: cache.CreateSymbolStore(
+			symbolStore: store.CreateSymbolStore(
 				[]exchange.SymbolInfo{{
 					SymbolName:    "EURUSD",
 					QuoteCurrency: "USD",

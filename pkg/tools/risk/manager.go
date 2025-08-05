@@ -11,7 +11,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
-	"github.com/peter-kozarec/equinox/pkg/tools/cache"
+	"github.com/peter-kozarec/equinox/pkg/tools/store"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -35,7 +35,7 @@ type Manager struct {
 	stopLossHandler   StopLossHandler
 	takeProfitHandler TakeProfitHandler
 
-	symbolStore  cache.SymbolStore
+	symbolStore  store.SymbolStore
 	rateProvider exchange.RateProvider
 
 	adjustmentHandler             AdjustmentHandler
@@ -53,7 +53,7 @@ type Manager struct {
 	openPositions []common.Position
 }
 
-func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler, tpHandler TakeProfitHandler, symbolStore cache.SymbolStore, options ...Option) (*Manager, error) {
+func NewManager(router *bus.Router, cfg Configuration, slHandler StopLossHandler, tpHandler TakeProfitHandler, symbolStore store.SymbolStore, options ...Option) (*Manager, error) {
 	if router == nil {
 		return nil, ErrRouterIsNil
 	}

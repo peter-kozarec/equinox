@@ -11,7 +11,7 @@ import (
 	"github.com/peter-kozarec/equinox/pkg/bus"
 	"github.com/peter-kozarec/equinox/pkg/common"
 	"github.com/peter-kozarec/equinox/pkg/exchange"
-	"github.com/peter-kozarec/equinox/pkg/tools/cache"
+	"github.com/peter-kozarec/equinox/pkg/tools/store"
 	"github.com/peter-kozarec/equinox/pkg/utility"
 	"github.com/peter-kozarec/equinox/pkg/utility/fixed"
 )
@@ -36,7 +36,7 @@ type Simulator struct {
 	accountCurrency string
 
 	rateProvider          exchange.RateProvider
-	symbolStore           cache.SymbolStore
+	symbolStore           store.SymbolStore
 	commissionHandler     CommissionHandler
 	swapHandler           SwapHandler
 	slippageHandler       SlippageHandler
@@ -55,7 +55,7 @@ type Simulator struct {
 	openOrders        []*common.Order
 }
 
-func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, symbolStore cache.SymbolStore, options ...Option) (*Simulator, error) {
+func NewSimulator(router *bus.Router, accountCurrency string, startBalance fixed.Point, symbolStore store.SymbolStore, options ...Option) (*Simulator, error) {
 	if router == nil {
 		return nil, ErrRouterIsNil
 	}
